@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Media read permissions (tiered by Android version) -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"
+        android:minSdkVersion="33" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"
+        android:minSdkVersion="33" />
+
+    <!-- Foreground service for copy operations -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"
+        android:minSdkVersion="34" />
+
+    <!-- Keep CPU alive during large copies -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- Progress notifications -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"
+        android:minSdkVersion="33" />
+
+    <application
+        android:name=".PhotoSyncApp"
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.PhotoSync">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Background scan worker (declared for WorkManager) -->
+        <provider
+            android:name="androidx.work.impl.WorkManagerInitializer"
+            android:authorities="${applicationId}.workmanager-init"
+            android:exported="false"
+            tools:node="remove"
+            xmlns:tools="http://schemas.android.com/tools" />
+
+        <!-- Foreground copy service -->
+        <service
+            android:name=".service.CopyService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+    </application>
+
+</manifest>
