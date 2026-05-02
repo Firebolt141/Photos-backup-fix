@@ -56,18 +56,21 @@ class CopyService : Service() {
             }
 
             scope.launch {
-                SyncRepository(applicationContext).copyPending(
-                    fromMs = fromMs,
-                    toMs   = toMs,
-                ) { done, total, name, speedMBps ->
-                    val p = CopyProgress(done, total, name, speedMBps)
-                    copyProgress.value = p
-                    notifManager.notify(NOTIF_ID, buildNotif(
-                        if (name.isNotEmpty()) "Copying: $name" else "Done",
-                        done, total
-                    ))
+                try {
+                    SyncRepository(applicationContext).copyPending(
+                        fromMs = fromMs,
+                        toMs   = toMs,
+                    ) { done, total, name, speedMBps ->
+                        val p = CopyProgress(done, total, name, speedMBps)
+                        copyProgress.value = p
+                        notifManager.notify(NOTIF_ID, buildNotif(
+                            if (name.isNotEmpty()) "Copying: $name" else "Done",
+                            done, total
+                        ))
+                    }
+                } finally {
+                    stopSelf()
                 }
-                stopSelf()
             }
         }
         return START_NOT_STICKY

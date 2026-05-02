@@ -29,7 +29,8 @@ class SyncRepository(private val context: Context) {
     // ── scan ─────────────────────────────────────────────────────────────
 
     suspend fun scanMedia(): Int = withContext(Dispatchers.IO) {
-        val newItems = mutableListOf<QueueItem>()
+        val existingIds = dao.getAllMediaIds().toHashSet()
+        val newItems    = mutableListOf<QueueItem>()
 
         val projection = arrayOf(
             MediaStore.MediaColumns._ID,
@@ -57,7 +58,7 @@ class SyncRepository(private val context: Context) {
 
                 while (cursor.moveToNext()) {
                     val mediaId = cursor.getLong(idCol)
-                    if (dao.findByMediaId(mediaId) != null) continue
+                    if (mediaId in existingIds) continue
 
                     val mimeType  = cursor.getString(mimeCol) ?: continue
                     val path      = cursor.getString(dataCol) ?: continue
@@ -155,10 +156,16 @@ class SyncRepository(private val context: Context) {
             ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, item.mediaId)
         }
 
-        return context.contentResolver.openOutputStream(destFile.uri)?.use { out ->
-            context.contentResolver.openInputStream(srcUri)?.use { inp ->
-                inp.copyTo(out)
-            } ?: throw IOException("Cannot open source: ${item.displayName}")
-        } ?: throw IOException("Cannot open destination: ${item.displayName}")
+        return try {
+            context.contentResolver.openOutputStream(destFile.uri)?.use { out ->
+                context.contentResolver.openInputStream(srcUri)?.use { inp ->
+                    inp.copyTo(out)
+                } ?: throw IOException("Cannot open source: ${item.displayName}")
+            } ?: throw IOException("Cannot open destination: ${item.displayName}")
+        } catch (e: Exception) {
+            // Remove the incomplete destination file so the next sync can retry
+            destFile.delete()
+            throw e
+        }
     }
 }
