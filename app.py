@@ -17,6 +17,7 @@ import shutil
 import subprocess
 import threading
 import platform
+import time
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from datetime import datetime, timezone
@@ -348,13 +349,17 @@ class Processor:
 
         self.dst.mkdir(parents=True, exist_ok=True)
 
+        t_start = time.monotonic()
+
         for i, src_file in enumerate(files):
             if self._stop.is_set():
                 self.on_log('warn', 'Processing stopped by user.')
                 break
 
-            self.on_progress(i + 1, self.stats.total)
+            elapsed = time.monotonic() - t_start
+            fps = (i + 1) / elapsed if elapsed > 0.5 else 0.0
             rel = src_file.relative_to(self.src)
+            self.on_progress(i + 1, self.stats.total, str(rel), fps)
             self.on_log('file', f'[{i+1}/{self.stats.total}]  {rel}')
 
             # Resolve metadata first so the date is available for path routing
@@ -653,11 +658,15 @@ class App(tk.Tk):
 
     def _build_progress(self):
         inner = self._card_frame(self, pady=(0, 10))
+
+        row_top = tk.Frame(inner, bg=C['card'])
+        row_top.pack(fill='x', pady=(0, 4))
         self._prog_label = tk.Label(
-            inner, text='Ready — select folders and press Start',
+            row_top, text='Ready — select folders and press Start',
             font=(_UI, 9), fg=C['muted'], bg=C['card'],
+            anchor='w',
         )
-        self._prog_label.pack(anchor='w', pady=(0, 6))
+        self._prog_label.pack(side='left', fill='x', expand=True)
 
         style = ttk.Style()
         style.theme_use('clam')
@@ -670,6 +679,13 @@ class App(tk.Tk):
             mode='determinate',
         )
         self._progress.pack(fill='x')
+
+        self._prog_file = tk.Label(
+            inner, text='',
+            font=(_MONO, 8), fg=C['muted'], bg=C['card'],
+            anchor='w',
+        )
+        self._prog_file.pack(anchor='w', pady=(4, 0))
 
     def _build_log(self):
         wrapper = tk.Frame(self, bg=C['bg'])
@@ -712,13 +728,17 @@ class App(tk.Tk):
             self._log.configure(state='disabled')
         self.after(0, _do)
 
-    def _update_progress(self, current: int, total: int):
+    def _update_progress(self, current: int, total: int,
+                         current_file: str = '', fps: float = 0.0):
         def _do():
             pct = int(current / total * 100) if total else 0
             self._progress['value'] = pct
+            speed = f'  ·  {fps:.1f} files/s' if fps > 0.1 else ''
             self._prog_label.config(
-                text=f'Processing {current} of {total}  ({pct}%)'
+                text=f'Processing {current} of {total}  ({pct}%){speed}'
             )
+            name = Path(current_file).name if current_file else ''
+            self._prog_file.config(text=name if name else '')
         self.after(0, _do)
 
     def _update_stats(self, stats: Stats):
@@ -735,6 +755,7 @@ class App(tk.Tk):
             self._btn_stop.config(state='disabled')
             if ok:
                 self._prog_label.config(text='Done ✔')
+                self._prog_file.config(text='')
         self.after(0, _do)
 
     # ── Button handlers ───────────────────────────────────────────────────
@@ -770,6 +791,7 @@ class App(tk.Tk):
         self._stat_nojson.set(0)
         self._stat_errors.set(0)
         self._prog_label.config(text='Starting…')
+        self._prog_file.config(text='')
         self._btn_start.config(state='disabled')
         self._btn_stop.config(state='normal')
 
