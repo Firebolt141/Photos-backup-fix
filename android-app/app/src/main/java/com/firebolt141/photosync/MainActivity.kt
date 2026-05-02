@@ -27,12 +27,14 @@ class MainActivity : ComponentActivity() {
                 NavHost(navController = nav, startDestination = "home") {
                     composable("home") {
                         HomeScreen(
-                            state           = state,
-                            onScan          = vm::startScan,
-                            onCopy          = vm::startCopy,
-                            onDriveSelected = vm::onDriveSelected,
-                            onForgetDrive   = vm::forgetDrive,
-                            onViewQueue     = { nav.navigate("queue") },
+                            state               = state,
+                            onScan              = vm::startScan,
+                            onCopy              = vm::startCopy,
+                            onDriveSelected     = vm::onDriveSelected,
+                            onForgetDrive       = vm::forgetDrive,
+                            onViewQueue         = { nav.navigate("queue") },
+                            onDateRangeSelected = vm::setDateRange,
+                            onClearDateRange    = vm::clearDateRange,
                         )
                     }
                     composable("queue") {
