@@ -121,7 +121,9 @@ def parse_meta(json_path: Path) -> Meta:
         for key in ('photoTakenTime', 'creationTime'):
             t = data.get(key)
             if t and 'timestamp' in t:
-                meta.timestamp = int(t['timestamp'])
+                ts = int(t['timestamp'])
+                if ts > 0:           # guard against Unix epoch 0 (missing/null)
+                    meta.timestamp = ts
                 break
 
         # GPS: prefer geoDataExif (actual EXIF values), fall back to geoData
@@ -147,36 +149,84 @@ def parse_meta(json_path: Path) -> Meta:
 
 def build_exiftool_args(target: Path, meta: Meta) -> List[str]:
     """Build the exiftool argument list to stamp *meta* onto *target*."""
+    is_video = target.suffix.lower() in VIDEO_EXTS
+
     args = ['exiftool', '-overwrite_original', '-m', '-q']
 
-    if meta.timestamp:
-        dt = datetime.fromtimestamp(meta.timestamp, tz=timezone.utc)
-        s  = dt.strftime('%Y:%m:%d %H:%M:%S')
-        # EXIF date tags (images)
-        for tag in ('DateTimeOriginal', 'CreateDate', 'ModifyDate'):
-            args.append(f'-{tag}={s}')
-        # QuickTime/MP4 date tags (videos)
-        for tag in ('TrackCreateDate', 'TrackModifyDate',
-                    'MediaCreateDate', 'MediaModifyDate'):
-            args.append(f'-{tag}={s}')
+    # Windows: UTF-8 charset prevents filename mangling for paths with
+    # non-ASCII characters (accented letters, CJK, etc.).
+    if _SYS == 'Windows':
+        args += ['-charset', 'filename=UTF8']
+
+    # Required for QuickTime/MOV/MP4 files larger than 4 GB
+    if is_video:
+        args += ['-api', 'LargeFileSupport=1']
+
+    if meta.timestamp and meta.timestamp > 0:
+        dt  = datetime.fromtimestamp(meta.timestamp, tz=timezone.utc)
+        s   = dt.strftime('%Y:%m:%d %H:%M:%S')      # plain UTC string
+        s_z = f'{s}+00:00'                            # with explicit UTC offset
+
+        if is_video:
+            # QuickTime integer-format date fields.  We write the UTC time
+            # string directly and do NOT use -api QuickTimeUTC: without that
+            # flag ExifTool stores the value verbatim (no local-time shift),
+            # which is exactly what we want since our input is already UTC.
+            for tag in ('CreateDate', 'ModifyDate',
+                        'TrackCreateDate', 'TrackModifyDate',
+                        'MediaCreateDate', 'MediaModifyDate'):
+                args.append(f'-{tag}={s}')
+            # Keys:CreationDate is the string-format tag read by Apple Photos
+            # and QuickTime Player.  It supports an explicit timezone suffix.
+            args.append(f'-Keys:CreationDate={s_z}')
+        else:
+            # EXIF image date fields
+            for tag in ('DateTimeOriginal', 'CreateDate', 'ModifyDate'):
+                args.append(f'-{tag}={s}')
+            # OffsetTimeOriginal (EXIF 2.31+) tells timezone-aware apps that
+            # the stored time is UTC.  Without it, apps that respect offsets
+            # (Google Photos, Windows Photos, Lightroom) may shift the displayed
+            # time to the user's local timezone using an assumed offset.
+            args += [
+                '-OffsetTimeOriginal=+00:00',
+                '-OffsetTime=+00:00',
+                '-OffsetTimeDigitized=+00:00',
+            ]
 
     if meta.latitude is not None and meta.longitude is not None:
-        lat_ref = 'N' if meta.latitude  >= 0 else 'S'
-        lon_ref = 'E' if meta.longitude >= 0 else 'W'
-        args += [
-            f'-GPSLatitude={abs(meta.latitude)}',
-            f'-GPSLatitudeRef={lat_ref}',
-            f'-GPSLongitude={abs(meta.longitude)}',
-            f'-GPSLongitudeRef={lon_ref}',
-        ]
+        if is_video:
+            # QuickTime GPS: ExifTool infers N/S/E/W from the sign of the
+            # value. Passing abs+Ref is ignored — Ref must come from the sign.
+            args += [
+                f'-GPSLatitude={meta.latitude}',
+                f'-GPSLongitude={meta.longitude}',
+            ]
+        else:
+            # EXIF GPS: absolute value + explicit Ref tag (standard EXIF format)
+            lat_ref = 'N' if meta.latitude  >= 0 else 'S'
+            lon_ref = 'E' if meta.longitude >= 0 else 'W'
+            args += [
+                f'-GPSLatitude={abs(meta.latitude)}',
+                f'-GPSLatitudeRef={lat_ref}',
+                f'-GPSLongitude={abs(meta.longitude)}',
+                f'-GPSLongitudeRef={lon_ref}',
+            ]
+
         if meta.altitude is not None:
             alt_ref = '0' if meta.altitude >= 0 else '1'
             args += [
                 f'-GPSAltitude={abs(meta.altitude)}',
                 f'-GPSAltitudeRef={alt_ref}',
             ]
+        # GPS timestamps are always UTC per the NMEA spec
+        if meta.timestamp and meta.timestamp > 0:
+            dt = datetime.fromtimestamp(meta.timestamp, tz=timezone.utc)
+            args += [
+                f'-GPSDateStamp={dt.strftime("%Y:%m:%d")}',
+                f'-GPSTimeStamp={dt.strftime("%H:%M:%S")}',
+            ]
 
-    if meta.description:
+    if meta.description and not is_video:
         args += [
             f'-Description={meta.description}',
             f'-ImageDescription={meta.description}',
@@ -209,13 +259,19 @@ class Processor:
 
     # ── helpers ──
 
-    def _check_exiftool(self) -> bool:
+    def _check_exiftool(self) -> Optional[str]:
+        """Return the ExifTool version string, or None if not found."""
         try:
-            r = subprocess.run(['exiftool', '-ver'],
-                               capture_output=True, timeout=10)
-            return r.returncode == 0
+            r = subprocess.run(
+                ['exiftool', '-ver'],
+                capture_output=True, timeout=10,
+                encoding='utf-8', errors='replace',
+            )
+            if r.returncode == 0:
+                return r.stdout.strip()
         except (FileNotFoundError, subprocess.TimeoutExpired):
-            return False
+            pass
+        return None
 
     def _target(self, src_file: Path) -> Path:
         if self.preserve_structure:
@@ -225,7 +281,8 @@ class Processor:
     # ── main entry ──
 
     def run(self):
-        if not self._check_exiftool():
+        ver = self._check_exiftool()
+        if ver is None:
             self.on_log('error', 'ExifTool not found. Please install it first:')
             self.on_log('error', '  Linux : sudo apt install libimage-exiftool-perl')
             self.on_log('error', '  macOS : brew install exiftool')
@@ -233,6 +290,7 @@ class Processor:
             self.on_done(False)
             return
 
+        self.on_log('info', f'ExifTool v{ver}')
         self.on_log('info', f'Scanning source: {self.src}')
         files = sorted(
             p for p in self.src.rglob('*')
@@ -271,8 +329,17 @@ class Processor:
                 shutil.copy2(src_file, dst_file)
                 args = build_exiftool_args(dst_file, meta)
                 try:
-                    r = subprocess.run(args, capture_output=True,
-                                       text=True, timeout=60)
+                    kw: dict = dict(
+                        capture_output=True,
+                        text=True,
+                        encoding='utf-8',
+                        errors='replace',
+                        timeout=120,
+                    )
+                    # Prevent a console window from flashing on Windows
+                    if _SYS == 'Windows':
+                        kw['creationflags'] = subprocess.CREATE_NO_WINDOW
+                    r = subprocess.run(args, **kw)
                     if r.returncode == 0:
                         parts = []
                         if meta.timestamp:
@@ -291,7 +358,7 @@ class Processor:
                         self.on_log('error', f'  ✗ ExifTool: {err}')
                         self.stats.errors += 1
                 except subprocess.TimeoutExpired:
-                    self.on_log('error', '  ✗ ExifTool timed out')
+                    self.on_log('error', '  ✗ ExifTool timed out (file may be very large)')
                     self.stats.errors += 1
 
             else:
