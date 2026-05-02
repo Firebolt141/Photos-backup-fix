@@ -147,6 +147,26 @@ def parse_meta(json_path: Path) -> Meta:
     return meta
 
 
+# Matches common camera filename date patterns: PXL_20210115_, IMG-20210115-, etc.
+_DATE_IN_NAME = re.compile(r'(?<!\d)(\d{4})[_\-]?(\d{2})[_\-]?(\d{2})(?!\d)')
+
+
+def _ts_from_filename(name: str) -> Optional[int]:
+    """Return a UTC noon timestamp inferred from a date embedded in *name*.
+    Returns None if no recognisable date pattern is found.  Uses noon so that
+    UTC-offset conversions don't silently roll the date back by one day."""
+    m = _DATE_IN_NAME.search(name)
+    if m:
+        try:
+            y, mo, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+            if 2000 <= y <= 2040 and 1 <= mo <= 12 and 1 <= d <= 31:
+                return int(datetime(y, mo, d, 12, 0, 0,
+                                    tzinfo=timezone.utc).timestamp())
+        except ValueError:
+            pass
+    return None
+
+
 def build_exiftool_args(target: Path, meta: Meta) -> List[str]:
     """Build the exiftool argument list to stamp *meta* onto *target*."""
     is_video = target.suffix.lower() in VIDEO_EXTS
@@ -241,18 +261,18 @@ def build_exiftool_args(target: Path, meta: Meta) -> List[str]:
 class Processor:
     def __init__(self, src: str, dst: str,
                  copy_unmatched: bool,
-                 preserve_structure: bool,
+                 output_mode: str,       # 'date' | 'preserve' | 'flat'
                  on_log, on_progress, on_stats, on_done):
         self.src = Path(src)
         self.dst = Path(dst)
-        self.copy_unmatched     = copy_unmatched
-        self.preserve_structure = preserve_structure
-        self.on_log       = on_log
-        self.on_progress  = on_progress
-        self.on_stats     = on_stats
-        self.on_done      = on_done
-        self.stats        = Stats()
-        self._stop        = threading.Event()
+        self.copy_unmatched = copy_unmatched
+        self.output_mode    = output_mode
+        self.on_log         = on_log
+        self.on_progress    = on_progress
+        self.on_stats       = on_stats
+        self.on_done        = on_done
+        self.stats          = Stats()
+        self._stop          = threading.Event()
 
     def stop(self):
         self._stop.set()
@@ -273,10 +293,28 @@ class Processor:
             pass
         return None
 
-    def _target(self, src_file: Path) -> Path:
-        if self.preserve_structure:
+    def _unique(self, path: Path) -> Path:
+        """Return *path* unchanged if it doesn't exist, else append _1, _2 …"""
+        if not path.exists():
+            return path
+        for i in range(1, 9999):
+            candidate = path.parent / f'{path.stem}_{i}{path.suffix}'
+            if not candidate.exists():
+                return candidate
+        return path
+
+    def _target(self, src_file: Path, ts: Optional[int] = None) -> Path:
+        if self.output_mode == 'date':
+            if ts and ts > 0:
+                dt  = datetime.fromtimestamp(ts, tz=timezone.utc)
+                sub = Path(dt.strftime('%Y')) / dt.strftime('%m') / dt.strftime('%d')
+            else:
+                sub = Path('no-date')
+            return self._unique(self.dst / sub / src_file.name)
+        if self.output_mode == 'preserve':
             return self.dst / src_file.relative_to(self.src)
-        return self.dst / src_file.name
+        # flat
+        return self._unique(self.dst / src_file.name)
 
     # ── main entry ──
 
@@ -319,13 +357,15 @@ class Processor:
             rel = src_file.relative_to(self.src)
             self.on_log('file', f'[{i+1}/{self.stats.total}]  {rel}')
 
-            dst_file = self._target(src_file)
+            # Resolve metadata first so the date is available for path routing
+            json_path = find_json(src_file)
+            meta      = parse_meta(json_path) if json_path else Meta()
+            eff_ts    = meta.timestamp or _ts_from_filename(src_file.name)
+
+            dst_file = self._target(src_file, eff_ts)
             dst_file.parent.mkdir(parents=True, exist_ok=True)
 
-            json_path = find_json(src_file)
-
             if json_path:
-                meta = parse_meta(json_path)
                 shutil.copy2(src_file, dst_file)
                 args = build_exiftool_args(dst_file, meta)
                 try:
@@ -365,9 +405,11 @@ class Processor:
                 self.stats.no_json += 1
                 if self.copy_unmatched:
                     shutil.copy2(src_file, dst_file)
-                    self.on_log('warn', '  ! No JSON sidecar found — copied as-is')
+                    hint = f' → {dst_file.relative_to(self.dst)}' \
+                           if self.output_mode == 'date' else ''
+                    self.on_log('warn', f'  ! No JSON sidecar — copied as-is{hint}')
                 else:
-                    self.on_log('warn', '  ! No JSON sidecar found — skipped')
+                    self.on_log('warn', '  ! No JSON sidecar — skipped')
                     self.stats.skipped += 1
 
             self.on_stats(self.stats)
@@ -533,22 +575,39 @@ class App(tk.Tk):
     def _build_options(self):
         inner = self._card_frame(self)
         self._section_label(inner, 'Options')
-        row = tk.Frame(inner, bg=C['card'])
-        row.pack(fill='x')
-        self._copy_unmatched    = tk.BooleanVar(value=True)
-        self._preserve_structure = tk.BooleanVar(value=True)
-        options = [
-            ('Copy files that have no matching JSON sidecar (unchanged)',
-             self._copy_unmatched),
-            ('Preserve folder structure in output',
-             self._preserve_structure),
+
+        # ── unmatched files ──
+        self._copy_unmatched = tk.BooleanVar(value=True)
+        tk.Checkbutton(
+            inner,
+            text='Copy files that have no matching JSON sidecar (unchanged)',
+            variable=self._copy_unmatched,
+            font=(_UI, 9), fg=C['muted'], bg=C['card'],
+            activebackground=C['card'], selectcolor=C['bg'],
+        ).pack(anchor='w', pady=(0, 10))
+
+        # ── output organisation ──
+        tk.Label(inner, text='Output folder organisation:',
+                 font=(_UI, 9, 'bold'), fg=C['text'],
+                 bg=C['card']).pack(anchor='w', pady=(0, 4))
+
+        self._output_mode = tk.StringVar(value='date')
+        modes = [
+            ('date',
+             'Organise by date  —  output / 2021 / 01 / 15 / photo.jpg  '
+             '(recommended)'),
+            ('preserve',
+             'Preserve original folder structure'),
+            ('flat',
+             'Flat  —  all files in one folder'),
         ]
-        for text, var in options:
-            tk.Checkbutton(
-                row, text=text, variable=var,
+        for value, label in modes:
+            tk.Radiobutton(
+                inner, text=label, value=value,
+                variable=self._output_mode,
                 font=(_UI, 9), fg=C['muted'], bg=C['card'],
                 activebackground=C['card'], selectcolor=C['bg'],
-            ).pack(side='left', padx=(0, 28))
+            ).pack(anchor='w')
 
     def _build_controls(self):
         inner = self._card_frame(self, pady=(0, 10))
@@ -717,7 +776,7 @@ class App(tk.Tk):
         self._processor = Processor(
             src=src, dst=dst,
             copy_unmatched=self._copy_unmatched.get(),
-            preserve_structure=self._preserve_structure.get(),
+            output_mode=self._output_mode.get(),
             on_log=self._log_msg,
             on_progress=self._update_progress,
             on_stats=self._update_stats,
