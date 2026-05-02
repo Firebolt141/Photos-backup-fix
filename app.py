@@ -371,7 +371,14 @@ class Processor:
             dst_file.parent.mkdir(parents=True, exist_ok=True)
 
             if json_path:
-                shutil.copy2(src_file, dst_file)
+                try:
+                    shutil.copy2(src_file, dst_file)
+                except Exception as e:
+                    dst_file.unlink(missing_ok=True)
+                    self.on_log('error', f'  ✗ Copy failed: {e}')
+                    self.stats.errors += 1
+                    self.on_stats(self.stats)
+                    continue
                 args = build_exiftool_args(dst_file, meta)
                 try:
                     kw: dict = dict(

@@ -17,6 +17,9 @@ interface QueueDao {
     @Query("SELECT COUNT(*) FROM queue WHERE status = 'COPIED'")
     fun observeCopiedCount(): Flow<Int>
 
+    @Query("SELECT mediaId FROM queue")
+    suspend fun getAllMediaIds(): List<Long>
+
     @Query("SELECT * FROM queue WHERE mediaId = :mediaId LIMIT 1")
     suspend fun findByMediaId(mediaId: Long): QueueItem?
 
