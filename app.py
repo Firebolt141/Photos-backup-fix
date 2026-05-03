@@ -265,6 +265,21 @@ def build_exiftool_args(target: Path, meta: Meta) -> List[str]:
     return args
 
 
+def _check_exiftool() -> Optional[str]:
+    """Return the ExifTool version string, or None if not found."""
+    try:
+        r = subprocess.run(
+            ['exiftool', '-ver'],
+            capture_output=True, timeout=10,
+            encoding='utf-8', errors='replace',
+        )
+        if r.returncode == 0:
+            return r.stdout.strip()
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+    return None
+
+
 # ── Processor ─────────────────────────────────────────────────────────────────
 
 # ── Duplicate detection helpers ───────────────────────────────────────────────
@@ -403,18 +418,7 @@ class Processor:
     # ── helpers ──
 
     def _check_exiftool(self) -> Optional[str]:
-        """Return the ExifTool version string, or None if not found."""
-        try:
-            r = subprocess.run(
-                ['exiftool', '-ver'],
-                capture_output=True, timeout=10,
-                encoding='utf-8', errors='replace',
-            )
-            if r.returncode == 0:
-                return r.stdout.strip()
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            pass
-        return None
+        return _check_exiftool()
 
     def _unique(self, path: Path) -> Path:
         """Return *path* unchanged if it doesn't exist, else append _1, _2 …"""
@@ -817,6 +821,7 @@ class App(tk.Tk):
         self._processor: Optional[Processor] = None
         self._thread:    Optional[threading.Thread] = None
         self._build_ui()
+        self.after(200, self._startup_check)
 
     # ── Layout builders ───────────────────────────────────────────────────
 
@@ -1061,6 +1066,23 @@ class App(tk.Tk):
                 self._prog_label.config(text='Done ✔')
                 self._prog_file.config(text='')
         self.after(0, _do)
+
+    # ── Startup ───────────────────────────────────────────────────────────
+
+    def _startup_check(self):
+        def _run():
+            ver = _check_exiftool()
+            if ver:
+                self._log_msg('ok', f'ExifTool v{ver} — ready.')
+            else:
+                self._log_msg('error', 'ExifTool not found — install it before processing:')
+                if _SYS == 'Windows':
+                    self._log_msg('error', '  Windows : download from https://exiftool.org')
+                elif _SYS == 'Darwin':
+                    self._log_msg('error', '  macOS   : brew install exiftool')
+                else:
+                    self._log_msg('error', '  Linux   : sudo apt install libimage-exiftool-perl')
+        threading.Thread(target=_run, daemon=True).start()
 
     # ── Button handlers ───────────────────────────────────────────────────
 

@@ -180,24 +180,64 @@ Write-Host ''
 Write-Host '  Setup complete.  Starting the app...' -ForegroundColor Green
 Write-Host ''
 
-# Run python.exe (not pythonw.exe) so PowerShell waits for the GUI to close.
-# pythonw.exe would return immediately, causing this console to close
-# while the app is still running (or before the user sees an error).
-$pySource = (Get-Command $python -ErrorAction SilentlyContinue)
-if ($pySource -and ($pySource.Source -imatch '\\pythonw\.exe$')) {
-    $pyConsole = $pySource.Source -ireplace '\\pythonw\.exe$', '\python.exe'
-    if (Test-Path $pyConsole) { $python = $pyConsole }
+# Resolve to an absolute path so Start-Process can locate the executable.
+# Prefer python.exe over pythonw.exe: pythonw is a GUI-subsystem binary that
+# detaches from the console immediately, so '& pythonw' returns at once and
+# $LASTEXITCODE is never set correctly.
+$pyResolved = $python
+try {
+    $info = Get-Command $python -ErrorAction Stop
+    $pyResolved = $info.Source
+    if ($pyResolved -imatch '\\pythonw\.exe$') {
+        $alt = $pyResolved -ireplace '\\pythonw\.exe$', '\python.exe'
+        if (Test-Path $alt) { $pyResolved = $alt }
+    }
+} catch { }
+
+# Use Start-Process -Wait instead of '& python' so PowerShell blocks until the
+# GUI exits regardless of whether the Python binary uses the console or GUI
+# subsystem.  -NoNewWindow keeps everything in the same terminal.
+# stderr is captured to a temp file so crash tracebacks can be shown even
+# when the window never appears.
+$stderrFile  = [System.IO.Path]::GetTempFileName()
+$appExitCode = 0
+
+try {
+    $proc = Start-Process `
+        -FilePath              $pyResolved `
+        -ArgumentList          "`"$AppScript`"" `
+        -NoNewWindow           `
+        -Wait                  `
+        -PassThru              `
+        -RedirectStandardError $stderrFile
+    $appExitCode = $proc.ExitCode
+} catch {
+    Write-Fail "Could not launch the app: $_"
+    $appExitCode = 1
 }
 
-& $python $AppScript
-
-if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) {
+if ($appExitCode -ne 0) {
     Write-Host ''
-    Write-Fail "The app exited with an error (code $LASTEXITCODE)."
+    Write-Fail "The app exited with an error (exit code $appExitCode)."
+
+    if (Test-Path $stderrFile) {
+        $errText = (Get-Content $stderrFile -Raw).Trim()
+        if ($errText) {
+            Write-Host ''
+            Write-Host '  Error output:' -ForegroundColor Yellow
+            $errText.Split("`n") | ForEach-Object {
+                Write-Host "    $_" -ForegroundColor Red
+            }
+        }
+    }
+
     Write-Host ''
     Write-Host '  To see the full error, open a Command Prompt and run:' -ForegroundColor Yellow
     Write-Host "      python `"$AppScript`"" -ForegroundColor Yellow
     Write-Host ''
+    Remove-Item $stderrFile -Force -ErrorAction SilentlyContinue
     Read-Host 'Press Enter to exit'
-    exit $LASTEXITCODE
+    exit $appExitCode
 }
+
+Remove-Item $stderrFile -Force -ErrorAction SilentlyContinue
