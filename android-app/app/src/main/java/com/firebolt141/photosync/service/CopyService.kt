@@ -24,6 +24,7 @@ class CopyService : Service() {
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private lateinit var notifManager: NotificationManager
+    private var copyJob: Job? = null
 
     companion object {
         const val CHANNEL_ID    = "copy_progress"
@@ -45,6 +46,8 @@ class CopyService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_START) {
+            if (copyJob?.isActive == true) return START_NOT_STICKY
+
             val fromMs = intent.getLongExtra(EXTRA_FROM_MS, 0L)
             val toMs   = intent.getLongExtra(EXTRA_TO_MS,   0L)
 
@@ -55,7 +58,7 @@ class CopyService : Service() {
                 startForeground(NOTIF_ID, initial)
             }
 
-            scope.launch {
+            copyJob = scope.launch {
                 try {
                     SyncRepository(applicationContext).copyPending(
                         fromMs = fromMs,
