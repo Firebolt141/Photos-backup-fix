@@ -36,18 +36,18 @@ object DateExtractor {
     } catch (_: DateTimeParseException) { null }
 
     private fun parseMediaDate(s: String): Long? = try {
-        // MediaMetadataRetriever returns "20210115T120000.000Z"
         val cleaned = s.replace(Regex("\\.\\d+Z?$"), "").replace("T", "")
-        // cleaned = "20210115120000"
-        if (cleaned.length < 8) return null
-        val year  = cleaned.substring(0, 4).toInt()
-        val month = cleaned.substring(4, 6).toInt()
-        val day   = cleaned.substring(6, 8).toInt()
-        val hour  = if (cleaned.length >= 10) cleaned.substring(8, 10).toInt() else 0
-        val min   = if (cleaned.length >= 12) cleaned.substring(10, 12).toInt() else 0
-        val sec   = if (cleaned.length >= 14) cleaned.substring(12, 14).toInt() else 0
-        LocalDateTime.of(year, month, day, hour, min, sec)
-            .toInstant(ZoneOffset.UTC)
-            .toEpochMilli()
+        if (cleaned.length < 8) null
+        else {
+            val year  = cleaned.substring(0, 4).toInt()
+            val month = cleaned.substring(4, 6).toInt()
+            val day   = cleaned.substring(6, 8).toInt()
+            val hour  = if (cleaned.length >= 10) cleaned.substring(8, 10).toInt() else 0
+            val min   = if (cleaned.length >= 12) cleaned.substring(10, 12).toInt() else 0
+            val sec   = if (cleaned.length >= 14) cleaned.substring(12, 14).toInt() else 0
+            LocalDateTime.of(year, month, day, hour, min, sec)
+                .toInstant(ZoneOffset.UTC)
+                .toEpochMilli()
+        }
     } catch (_: Exception) { null }
 }
