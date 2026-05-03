@@ -4,16 +4,18 @@ Fixes broken dates, times, and GPS locations on photos and videos exported from 
 
 When you download a Google Takeout archive, every media file comes with a `.json` sidecar containing the original metadata. Most upload tools ignore these sidecars, so ten years of photos end up stamped with today's date. This tool reads those JSON files and writes the correct metadata back into each file using **ExifTool**.
 
+The UI runs entirely in your **browser** — no Electron, no cloud, no account needed. All processing happens locally on your Windows machine.
+
 ---
 
 ## Quick start (Windows)
 
 1. Download the latest release zip from the [Releases](../../releases) page and extract it anywhere.
 2. Double-click **`Start.bat`**.
-3. The setup script will automatically download ExifTool and verify Python — no manual installs needed.
-4. Once setup completes the app opens. Select your source and output folders and press **Start Processing**.
+3. The setup script automatically downloads ExifTool, verifies Python, and installs Flask — no manual steps needed.
+4. Your browser opens at `http://127.0.0.1:5000`. Select your source and output folders and press **Start Processing**.
 
-> **First run only:** `Start.bat` downloads the ExifTool portable build (~5 MB) into a local `tools\` folder. Subsequent launches skip this step and open the app in a few seconds.
+> **First run only:** `Start.bat` downloads the ExifTool portable build (~5 MB) into a local `tools\` folder and runs `pip install flask`. Subsequent launches skip these steps and open the browser in a few seconds.
 
 ---
 
@@ -32,37 +34,18 @@ The `OffsetTimeOriginal=+00:00` tag is the critical one most tools miss — with
 
 ---
 
-## Screenshots
+## Browser UI
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│ 📷  Google Takeout EXIF Restoration                         │
-│ Restores original dates, times & GPS from JSON sidecars     │
-├─────────────────────────────────────────────────────────────┤
-│ Folders                                                     │
-│  Source  [ C:\Takeout\Google Photos      ] [ Browse… ]      │
-│  Output  [ D:\Photos-fixed               ] [ Browse… ]      │
-│                                                             │
-│ Options                                                     │
-│  ☑ Copy files with no matching JSON (unchanged)             │
-│  Output folder organisation:                                │
-│  ◉ Organise by date  — output / 2021 / 01 / 15 / photo.jpg  │
-│  ○ Preserve original folder structure                       │
-│  ○ Flat — all files in one folder                           │
-│                                                             │
-│  [ ▶ Start Processing ]  [ ■ Stop ]  [ 📂 Open Output ]     │
-├──────────┬──────────┬──────────┬──────────────────────────-─┤
-│  1 247   │  1 198   │    31    │     18                      │
-│  TOTAL   │  FIXED   │ NO JSON  │   ERRORS                    │
-├─────────────────────────────────────────────────────────────┤
-│ Processing 1198 of 1247  (96%)  ████████████████░░          │
-├─────────────────────────────────────────────────────────────┤
-│ [info]  ExifTool v12.76                                     │
-│ [info]  Found 1247 media files                              │
-│ [ok  ]  ✓  2021-01-15 14:32 UTC  |  GPS 37.4219, -122.0840 │
-│ [warn]  !  No JSON sidecar — copied as-is                   │
-└─────────────────────────────────────────────────────────────┘
-```
+The app runs as a local web server and opens in your default browser. All features of the original desktop app are available:
+
+- **Real-time progress** — animated bar, files/sec speed, current filename
+- **Live log** — color-coded by severity (info / ok / warn / error), auto-scrolling
+- **Animated stats** — Total · Fixed · No JSON · Errors, counts animate as files are processed
+- **Native folder picker** — Browse buttons open the Windows folder dialog
+- **Duplicate scanner** — optional pre-scan identifies copies across multiple Takeout exports; a review modal lets you skip or keep them
+- **Open Output** — opens the output folder in Windows Explorer when done
+
+The server binds to `127.0.0.1` only — it is not reachable from other devices on your network.
 
 ---
 
@@ -106,27 +89,45 @@ For files without a JSON sidecar the tool tries to extract the date from the fil
 
 ### Requirements
 
-- **Python 3.7+** — [python.org/downloads](https://python.org/downloads)  
+- **Python 3.7+** — [python.org/downloads](https://python.org/downloads)
   *(tick "Add Python to PATH" during setup)*
-- **ExifTool** — [exiftool.org](https://exiftool.org)  
+- **ExifTool** — [exiftool.org](https://exiftool.org)
   *(Windows: download the executable zip, rename `exiftool(-k).exe` → `exiftool.exe`, place on PATH)*
-
-No Python packages to install — the app uses only the standard library.
+- **Flask** — `pip install flask`
 
 ### Run
 
 ```bat
-python app.py
+python web_app.py
 ```
 
-Or on Linux/macOS:
+The server starts and opens your browser automatically. Press `Ctrl+C` in the terminal to stop it.
+
+On Linux/macOS:
 
 ```bash
 # Install ExifTool
 sudo apt install libimage-exiftool-perl   # Debian/Ubuntu
 brew install exiftool                      # macOS
 
-python3 app.py
+pip install flask
+python3 web_app.py
+```
+
+---
+
+## Project layout
+
+```
+Photos-backup-fix/
+├── web_app.py          ← primary entry point (Flask web server)
+├── core.py             ← all processing logic (no GUI deps)
+├── templates/
+│   └── index.html      ← browser UI (HTML + CSS + JS, no build tools)
+├── app.py              ← legacy tkinter desktop UI (kept for reference)
+├── Start.bat           ← Windows double-click launcher
+├── setup.ps1           ← PowerShell setup + launcher script
+└── install_exiftool.sh ← Linux/macOS ExifTool installer helper
 ```
 
 ---
@@ -152,6 +153,10 @@ All matching and writing is done locally — no data leaves your machine.
 ## Troubleshooting
 
 **"ExifTool not found"** — Run `Start.bat` which downloads it automatically, or install it manually from [exiftool.org](https://exiftool.org).
+
+**Browser doesn't open automatically** — Navigate to `http://127.0.0.1:5000` manually. Check the terminal window for any error output.
+
+**Port 5000 already in use** — The server will automatically pick the next free port and print the URL in the terminal.
 
 **Some files still show wrong dates after upload** — Google Photos caches metadata on upload. Try removing and re-adding the photos, or wait 24 h for the index to refresh.
 

@@ -6,7 +6,8 @@
 .DESCRIPTION
     1. Checks for ExifTool; downloads the portable Windows build if missing.
     2. Checks for Python 3.7+; installs via winget if missing.
-    3. Launches app.py.
+    3. Installs Flask (pip install flask) if not already present.
+    4. Launches web_app.py and opens the browser UI at http://127.0.0.1:5000
 
     Run via Start.bat (which sets -ExecutionPolicy Bypass automatically).
 #>
@@ -18,7 +19,7 @@ $ErrorActionPreference = 'Stop'
 $AppDir    = $PSScriptRoot
 $ToolsDir  = Join-Path $AppDir 'tools'
 $ExifExe   = Join-Path $ToolsDir 'exiftool.exe'
-$AppScript = Join-Path $AppDir  'app.py'
+$AppScript = Join-Path $AppDir  'web_app.py'
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -32,7 +33,7 @@ function Write-Header {
 }
 
 function Write-Step([int]$n, [string]$msg) {
-    Write-Host "  [$n/2] $msg" -ForegroundColor Cyan
+    Write-Host "  [$n/3] $msg" -ForegroundColor Cyan
 }
 
 function Write-OK([string]$msg) {
@@ -175,29 +176,98 @@ if (-not $python) {
     exit 1
 }
 
+# ── Step 3: Flask ─────────────────────────────────────────────────────────────
+Write-Step 3 'Flask (web UI)'
+
+$flaskOk = $false
+try {
+    $flaskCheck = & $python -c "import flask; print(flask.__version__)" 2>&1
+    if ($LASTEXITCODE -eq 0 -and $flaskCheck -match '[\d.]+') {
+        Write-OK "Flask $flaskCheck already installed"
+        $flaskOk = $true
+    }
+} catch { }
+
+if (-not $flaskOk) {
+    Write-Warn 'Flask not found — installing via pip...'
+    try {
+        & $python -m pip install flask --quiet --disable-pip-version-check --ignore-installed 2>&1 | Out-Null
+        $flaskVer = & $python -c "import flask; print(flask.__version__)" 2>&1
+        Write-OK "Flask $flaskVer installed"
+    } catch {
+        Write-Fail "pip install flask failed: $_"
+        Write-Host '  Try running:  python -m pip install flask' -ForegroundColor Yellow
+        Read-Host 'Press Enter to exit'
+        exit 1
+    }
+}
+
 # ── Launch ────────────────────────────────────────────────────────────────────
 Write-Host ''
-Write-Host '  Setup complete.  Starting the app...' -ForegroundColor Green
+Write-Host '  Setup complete.  Launching web UI...' -ForegroundColor Green
+Write-Host '  The browser will open automatically at http://127.0.0.1:5000' -ForegroundColor DarkGray
+Write-Host '  Press Ctrl+C here to stop the server.' -ForegroundColor DarkGray
 Write-Host ''
 
-# Run python.exe (not pythonw.exe) so PowerShell waits for the GUI to close.
-# pythonw.exe would return immediately, causing this console to close
-# while the app is still running (or before the user sees an error).
-$pySource = (Get-Command $python -ErrorAction SilentlyContinue)
-if ($pySource -and ($pySource.Source -imatch '\\pythonw\.exe$')) {
-    $pyConsole = $pySource.Source -ireplace '\\pythonw\.exe$', '\python.exe'
-    if (Test-Path $pyConsole) { $python = $pyConsole }
+# Resolve to an absolute path so Start-Process can locate the executable.
+# Prefer python.exe over pythonw.exe: pythonw is a GUI-subsystem binary that
+# detaches from the console immediately, so '& pythonw' returns at once and
+# $LASTEXITCODE is never set correctly.
+$pyResolved = $python
+try {
+    $info = Get-Command $python -ErrorAction Stop
+    $pyResolved = $info.Source
+    if ($pyResolved -imatch '\\pythonw\.exe$') {
+        $alt = $pyResolved -ireplace '\\pythonw\.exe$', '\python.exe'
+        if (Test-Path $alt) { $pyResolved = $alt }
+    }
+} catch { }
+
+# Use Start-Process -Wait instead of '& python' so PowerShell blocks until the
+# GUI exits regardless of whether the Python binary uses the console or GUI
+# subsystem.  -NoNewWindow keeps everything in the same terminal.
+# stderr is captured to a temp file so crash tracebacks can be shown even
+# when the window never appears.
+$stderrFile  = [System.IO.Path]::GetTempFileName()
+$appExitCode = 0
+
+try {
+    $proc = Start-Process `
+        -FilePath              $pyResolved `
+        -ArgumentList          "`"$AppScript`"" `
+        -NoNewWindow           `
+        -Wait                  `
+        -PassThru              `
+        -RedirectStandardError $stderrFile
+    $appExitCode = $proc.ExitCode
+} catch {
+    Write-Fail "Could not launch the app: $_"
+    $appExitCode = 1
 }
 
-& $python $AppScript
-
-if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) {
+if ($appExitCode -ne 0) {
     Write-Host ''
-    Write-Fail "The app exited with an error (code $LASTEXITCODE)."
+    Write-Fail "The app exited with an error (exit code $appExitCode)."
+
+    if (Test-Path $stderrFile) {
+        $errText = (Get-Content $stderrFile -Raw).Trim()
+        if ($errText) {
+            Write-Host ''
+            Write-Host '  Error output:' -ForegroundColor Yellow
+            $errText.Split("`n") | ForEach-Object {
+                Write-Host "    $_" -ForegroundColor Red
+            }
+        }
+    }
+
     Write-Host ''
     Write-Host '  To see the full error, open a Command Prompt and run:' -ForegroundColor Yellow
-    Write-Host "      python `"$AppScript`"" -ForegroundColor Yellow
+    Write-Host "      python `"$AppScript`""  -ForegroundColor Yellow
+    Write-Host '  Make sure Flask is installed:  python -m pip install flask' -ForegroundColor Yellow
     Write-Host ''
+    Remove-Item $stderrFile -Force -ErrorAction SilentlyContinue
     Read-Host 'Press Enter to exit'
-    exit $LASTEXITCODE
+    exit $appExitCode
 }
+
+Remove-Item $stderrFile -Force -ErrorAction SilentlyContinue
