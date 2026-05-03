@@ -180,4 +180,24 @@ Write-Host ''
 Write-Host '  Setup complete.  Starting the app...' -ForegroundColor Green
 Write-Host ''
 
+# Run python.exe (not pythonw.exe) so PowerShell waits for the GUI to close.
+# pythonw.exe would return immediately, causing this console to close
+# while the app is still running (or before the user sees an error).
+$pySource = (Get-Command $python -ErrorAction SilentlyContinue)
+if ($pySource -and ($pySource.Source -imatch '\\pythonw\.exe$')) {
+    $pyConsole = $pySource.Source -ireplace '\\pythonw\.exe$', '\python.exe'
+    if (Test-Path $pyConsole) { $python = $pyConsole }
+}
+
 & $python $AppScript
+
+if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) {
+    Write-Host ''
+    Write-Fail "The app exited with an error (code $LASTEXITCODE)."
+    Write-Host ''
+    Write-Host '  To see the full error, open a Command Prompt and run:' -ForegroundColor Yellow
+    Write-Host "      python `"$AppScript`"" -ForegroundColor Yellow
+    Write-Host ''
+    Read-Host 'Press Enter to exit'
+    exit $LASTEXITCODE
+}
