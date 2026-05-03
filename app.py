@@ -18,6 +18,7 @@ import subprocess
 import threading
 import platform
 import time
+from hashlib import md5
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from datetime import datetime, timezone
@@ -58,6 +59,15 @@ class Meta:
     longitude: Optional[float] = None
     altitude: Optional[float] = None
     description: str = ''
+
+
+@dataclass
+class DupMatch:
+    """One duplicate pair found within the source folder."""
+    file_a:     Path   # first copy encountered (kept when deduplicating)
+    file_b:     Path   # second copy encountered (skipped when deduplicating)
+    size:       int    # shared file size in bytes
+    confidence: str    # 'exact' (same MD5) | 'strong' (same name+size)
 
 
 # ── Core helpers ──────────────────────────────────────────────────────────────
@@ -259,11 +269,123 @@ def build_exiftool_args(target: Path, meta: Meta) -> List[str]:
 
 # ── Processor ─────────────────────────────────────────────────────────────────
 
+# ── Duplicate detection helpers ───────────────────────────────────────────────
+
+_HASH_CHUNK = 65536   # 64 KB read buffer
+
+
+def _file_hash(path: Path) -> str:
+    h = md5()
+    try:
+        with path.open('rb') as f:
+            while chunk := f.read(_HASH_CHUNK):
+                h.update(chunk)
+    except OSError:
+        pass
+    return h.hexdigest()
+
+
+def _fmt_size(n: int) -> str:
+    for unit in ('B', 'KB', 'MB', 'GB', 'TB'):
+        if n < 1024 or unit == 'TB':
+            return f'{n:.1f} {unit}' if unit != 'B' else f'{n} B'
+        n //= 1024
+    return f'{n} B'
+
+
+def _brief_date(path: Path) -> str:
+    """Return a YYYY-MM-DD string extracted from the filename, or ''."""
+    ts = _ts_from_filename(path.name)
+    if ts:
+        return datetime.fromtimestamp(ts, tz=timezone.utc).strftime('%Y-%m-%d')
+    return ''
+
+
+def find_duplicates(
+    src_a: Path,
+    src_b: Path,
+    on_progress=None,
+) -> List['DupMatch']:
+    """Find duplicate media files between (or within) two source folders.
+
+    Matching tiers, in order of priority:
+      'strong' — same filename (case-insensitive) and same file size
+      'exact'  — same MD5 hash (checked when sizes match but names differ)
+
+    When *src_a* == *src_b*, duplicates are found within the single folder
+    and each pair is reported only once.
+    """
+    same_folder = src_a.resolve() == src_b.resolve()
+
+    files_a = sorted(
+        p for p in src_a.rglob('*')
+        if p.is_file() and p.suffix.lower() in ALL_MEDIA
+    )
+    files_b = files_a if same_folder else sorted(
+        p for p in src_b.rglob('*')
+        if p.is_file() and p.suffix.lower() in ALL_MEDIA
+    )
+
+    # Build fast lookup indices over src_a
+    name_size_a: dict[tuple[str, int], Path] = {}
+    size_a: dict[int, List[Path]] = {}
+    hash_cache: dict[Path, str] = {}
+
+    for p in files_a:
+        try:
+            sz = p.stat().st_size
+        except OSError:
+            continue
+        name_size_a[(p.name.lower(), sz)] = p
+        size_a.setdefault(sz, []).append(p)
+
+    results: List[DupMatch] = []
+    # Track matched B paths so we never report the same B file twice
+    matched_b: set[Path] = set()
+    total_b = len(files_b)
+
+    for idx, p_b in enumerate(files_b):
+        if on_progress:
+            on_progress(idx + 1, total_b)
+        if p_b in matched_b:
+            continue
+        try:
+            sz = p_b.stat().st_size
+        except OSError:
+            continue
+
+        # ── Tier 1: same name (case-insensitive) + same size ─────────────
+        key = (p_b.name.lower(), sz)
+        if key in name_size_a:
+            p_a = name_size_a[key]
+            if p_a != p_b:          # skip self (within-folder scan)
+                matched_b.add(p_b)
+                results.append(DupMatch(p_a, p_b, sz, 'strong'))
+                continue
+
+        # ── Tier 2: same size → compare MD5 ─────────────────────────────
+        candidates = [p for p in size_a.get(sz, []) if p != p_b]
+        if candidates and sz > 1024:   # skip tiny (<1 KB) files
+            h_b = _file_hash(p_b)
+            for p_a in candidates:
+                if p_a in matched_b:
+                    continue
+                if p_a not in hash_cache:
+                    hash_cache[p_a] = _file_hash(p_a)
+                if hash_cache[p_a] == h_b:
+                    matched_b.add(p_b)
+                    results.append(DupMatch(p_a, p_b, sz, 'exact'))
+                    break
+
+    return results
+
+
 class Processor:
     def __init__(self, src: str, dst: str,
                  copy_unmatched: bool,
                  output_mode: str,       # 'date' | 'preserve' | 'flat'
-                 on_log, on_progress, on_stats, on_done):
+                 on_log, on_progress, on_stats, on_done,
+                 skip_files: frozenset = frozenset()):
         self.src = Path(src)
         self.dst = Path(dst)
         self.copy_unmatched = copy_unmatched
@@ -272,6 +394,7 @@ class Processor:
         self.on_progress    = on_progress
         self.on_stats       = on_stats
         self.on_done        = on_done
+        self.skip_files     = skip_files
         self.stats          = Stats()
         self._stop          = threading.Event()
 
@@ -337,6 +460,14 @@ class Processor:
             # skip anything already inside the output folder
             and not str(p).startswith(str(self.dst))
         )
+
+        if self.skip_files:
+            n_before = len(files)
+            files = [p for p in files if p not in self.skip_files]
+            n_skipped = n_before - len(files)
+            if n_skipped:
+                self.on_log('warn',
+                    f'Excluding {n_skipped} file(s) skipped per duplicate-review choices.')
 
         self.stats.total = len(files)
         self.on_log('info', f'Found {self.stats.total} media file(s)')
@@ -520,6 +651,155 @@ class StatCard(tk.Frame):
         self._var.set(str(v))
 
 
+# ── Duplicate review window ───────────────────────────────────────────────────
+
+class DuplicateReviewWindow(tk.Toplevel):
+    """Modal window showing duplicates found inside the source folder.
+
+    After the user clicks one of the two action buttons, the ``action``
+    property is either ``'skip_dupes'`` or ``'keep_all'``.  ``None``
+    means the dialog was cancelled.
+    """
+
+    def __init__(self, parent, matches: List[DupMatch], src_root: Path):
+        super().__init__(parent)
+        n = len(matches)
+        self.title(f'Duplicates Found — {n} pair{"s" if n != 1 else ""}')
+        self.geometry('860x540')
+        self.minsize(640, 400)
+        self.configure(bg=C['bg'])
+        self.transient(parent)
+        self.grab_set()
+        self.resizable(True, True)
+
+        self._matches   = matches
+        self._src_root  = src_root
+        self._action: Optional[str] = None   # 'skip_dupes' | 'keep_all'
+
+        self._build_ui()
+        self._populate()
+
+        self.protocol('WM_DELETE_WINDOW', self._on_cancel)
+        self.update_idletasks()
+        px, py = parent.winfo_x(), parent.winfo_y()
+        pw, ph = parent.winfo_width(), parent.winfo_height()
+        w,  h  = self.winfo_width(), self.winfo_height()
+        self.geometry(f'+{px + (pw - w) // 2}+{py + (ph - h) // 2}')
+        self.wait_window()
+
+    @property
+    def action(self) -> Optional[str]:
+        return self._action
+
+    def _build_ui(self):
+        n_exact  = sum(1 for m in self._matches if m.confidence == 'exact')
+        n_strong = len(self._matches) - n_exact
+
+        hdr = tk.Frame(self, bg='#BF360C')
+        hdr.pack(fill='x')
+        tk.Label(hdr, text='\U0001f50d  Duplicate Files Found',
+                 font=(_UI, 12, 'bold'), fg='white', bg='#BF360C'
+                 ).pack(side='left', padx=18, pady=12)
+        tk.Label(hdr,
+                 text=f'{len(self._matches)} pair(s)  ·  '
+                      f'{n_exact} identical content (MD5)  ·  '
+                      f'{n_strong} same name + size',
+                 font=(_UI, 9), fg='#FFCCBC', bg='#BF360C'
+                 ).pack(side='left', pady=12)
+
+        # Info bar
+        info_card = tk.Frame(self, bg=C['card'],
+                             highlightbackground=C['border'], highlightthickness=1)
+        info_card.pack(fill='x', padx=14, pady=(12, 0))
+        tk.Label(
+            info_card,
+            text='These files were found more than once inside your source folder '
+                 '(e.g. across two different Takeout exports).\n'
+                 '"Skip Duplicates" keeps Copy 1 and skips Copy 2 for every pair.  '
+                 '"Keep All Copies" processes every file as normal.',
+            font=(_UI, 9), fg=C['muted'], bg=C['card'],
+            justify='left', wraplength=820,
+        ).pack(padx=14, pady=10, anchor='w')
+
+        # Treeview — read-only, informational
+        tree_wrap = tk.Frame(self, bg=C['bg'])
+        tree_wrap.pack(fill='both', expand=True, padx=14, pady=(10, 0))
+
+        cols = ('copy1', 'copy2', 'size', 'match')
+        self._tree = ttk.Treeview(tree_wrap, columns=cols,
+                                  show='headings', selectmode='browse')
+        col_specs = [
+            ('copy1', 'Copy 1 — kept',                  310, 'w'),
+            ('copy2', 'Copy 2 — skipped if dedup',      310, 'w'),
+            ('size',  'Size',                             80, 'e'),
+            ('match', 'Match',                            90, 'center'),
+        ]
+        for cid, head, w, anc in col_specs:
+            self._tree.heading(cid, text=head)
+            self._tree.column(cid, width=w, minwidth=60, anchor=anc)
+
+        vsb = ttk.Scrollbar(tree_wrap, orient='vertical', command=self._tree.yview)
+        self._tree.configure(yscrollcommand=vsb.set)
+        vsb.pack(side='right', fill='y')
+        self._tree.pack(fill='both', expand=True)
+
+        self._tree.tag_configure('exact',  background='#FFF3E0')
+        self._tree.tag_configure('strong', background='#F3E5F5')
+
+        # Action buttons
+        btn_bar = tk.Frame(self, bg=C['bg'])
+        btn_bar.pack(fill='x', padx=14, pady=12)
+        tk.Button(
+            btn_bar, text='✓  Skip Duplicates  (keep Copy 1 only)',
+            command=self._on_skip,
+            bg=C['success'], fg='white', relief='flat',
+            font=(_UI, 10, 'bold'), padx=20, pady=9,
+            activebackground='#145C2C', activeforeground='white',
+            cursor='hand2',
+        ).pack(side='left', padx=(0, 10))
+        tk.Button(
+            btn_bar, text='Keep All Copies',
+            command=self._on_keep_all,
+            bg=C['primary'], fg='white', relief='flat',
+            font=(_UI, 10, 'bold'), padx=20, pady=9,
+            activebackground='#1557B0', activeforeground='white',
+            cursor='hand2',
+        ).pack(side='left', padx=(0, 10))
+        tk.Button(
+            btn_bar, text='✕  Cancel',
+            command=self._on_cancel,
+            bg=C['bg'], fg=C['error'], relief='solid', bd=1,
+            font=(_UI, 10), padx=16, pady=9, cursor='hand2',
+        ).pack(side='left')
+
+    def _populate(self):
+        for m in self._matches:
+            try:
+                a_rel = str(m.file_a.relative_to(self._src_root))
+            except ValueError:
+                a_rel = m.file_a.name
+            try:
+                b_rel = str(m.file_b.relative_to(self._src_root))
+            except ValueError:
+                b_rel = m.file_b.name
+            conf = '✓✓ exact' if m.confidence == 'exact' else '✓ strong'
+            self._tree.insert('', 'end',
+                              values=(a_rel, b_rel, _fmt_size(m.size), conf),
+                              tags=(m.confidence,))
+
+    def _on_skip(self):
+        self._action = 'skip_dupes'
+        self.destroy()
+
+    def _on_keep_all(self):
+        self._action = 'keep_all'
+        self.destroy()
+
+    def _on_cancel(self):
+        self._action = None
+        self.destroy()
+
+
 # ── Main window ───────────────────────────────────────────────────────────────
 
 class App(tk.Tk):
@@ -578,11 +858,12 @@ class App(tk.Tk):
         self._src_row.pack(fill='x', pady=(0, 8))
         self._dst_row = FolderRow(inner, 'Output')
         self._dst_row.pack(fill='x')
-        tk.Label(inner,
-                 text='Source: your unzipped Google Takeout folder.  '
-                      'Output: where fixed copies will be saved.',
-                 font=(_UI, 8), fg=C['muted'], bg=C['card']
-                 ).pack(anchor='w', pady=(8, 0))
+        tk.Label(
+            inner,
+            text='Source: a folder containing one or more unzipped Google Takeout exports.  '
+                 'Output: where fixed copies will be saved.',
+            font=(_UI, 8), fg=C['muted'], bg=C['card'],
+        ).pack(anchor='w', pady=(8, 0))
 
     def _build_options(self):
         inner = self._card_frame(self)
@@ -620,6 +901,18 @@ class App(tk.Tk):
                 font=(_UI, 9), fg=C['muted'], bg=C['card'],
                 activebackground=C['card'], selectcolor=C['bg'],
             ).pack(anchor='w')
+
+        # ── duplicate detection ──
+        tk.Frame(inner, bg=C['border'], height=1).pack(fill='x', pady=(14, 0))
+        self._check_dupes = tk.BooleanVar(value=False)
+        tk.Checkbutton(
+            inner,
+            text='Scan for duplicate files before processing  '
+                 '(recommended when the source contains multiple Takeout exports)',
+            variable=self._check_dupes,
+            font=(_UI, 9), fg=C['muted'], bg=C['card'],
+            activebackground=C['card'], selectcolor=C['bg'],
+        ).pack(anchor='w', pady=(8, 0))
 
     def _build_controls(self):
         inner = self._card_frame(self, pady=(0, 10))
@@ -780,15 +1073,23 @@ class App(tk.Tk):
                                  'Please select an output folder.')
             return
         if not Path(src).is_dir():
-            messagebox.showerror('Invalid Source',
-                                 f'Folder not found:\n{src}')
+            messagebox.showerror('Invalid Source', f'Folder not found:\n{src}')
             return
         if Path(src).resolve() == Path(dst).resolve():
             messagebox.showerror('Same Folder',
                                  'Source and output folders must be different.')
             return
 
-        # Reset UI
+        if self._check_dupes.get():
+            self._reset_ui(enable_stop=False)
+            self._run_dedup_scan(src, dst)
+        else:
+            self._reset_ui()
+            self._start_processing(src, dst, frozenset())
+
+    # ── UI helpers ────────────────────────────────────────────────────────
+
+    def _reset_ui(self, enable_stop: bool = True):
         self._log.configure(state='normal')
         self._log.delete('1.0', 'end')
         self._log.configure(state='disabled')
@@ -800,8 +1101,11 @@ class App(tk.Tk):
         self._prog_label.config(text='Starting…')
         self._prog_file.config(text='')
         self._btn_start.config(state='disabled')
-        self._btn_stop.config(state='normal')
+        self._btn_stop.config(state='normal' if enable_stop else 'disabled')
 
+    # ── Processing helpers ────────────────────────────────────────────────
+
+    def _start_processing(self, src: str, dst: str, skip: frozenset):
         self._processor = Processor(
             src=src, dst=dst,
             copy_unmatched=self._copy_unmatched.get(),
@@ -810,11 +1114,77 @@ class App(tk.Tk):
             on_progress=self._update_progress,
             on_stats=self._update_stats,
             on_done=self._on_done,
+            skip_files=skip,
         )
-        self._thread = threading.Thread(
-            target=self._processor.run, daemon=True
-        )
+        self._thread = threading.Thread(target=self._processor.run, daemon=True)
         self._thread.start()
+
+    def _run_dedup_scan(self, src: str, dst: str):
+        self._progress.configure(mode='indeterminate')
+        self._progress.start(15)
+        self._prog_label.config(text='Scanning for duplicate files…')
+
+        def _on_scan_progress(current: int, total: int):
+            def _do():
+                try:
+                    self._progress.stop()
+                except Exception:
+                    pass
+                self._progress.configure(mode='determinate')
+                pct = int(current / total * 100) if total else 0
+                self._progress['value'] = pct
+                self._prog_label.config(
+                    text=f'Scanning for duplicates: {current} / {total}  ({pct} %)'
+                )
+            self.after(0, _do)
+
+        def _worker():
+            src_path = Path(src)
+            matches  = find_duplicates(src_path, src_path, _on_scan_progress)
+            self.after(0, lambda: self._on_dedup_scan_done(matches, src, dst))
+
+        self._thread = threading.Thread(target=_worker, daemon=True)
+        self._thread.start()
+
+    def _on_dedup_scan_done(self, matches: List[DupMatch], src: str, dst: str):
+        try:
+            self._progress.stop()
+        except Exception:
+            pass
+        self._progress.configure(mode='determinate')
+        self._progress['value'] = 0
+
+        if not matches:
+            self._log_msg('info', 'No duplicates found — proceeding with processing.')
+            self._prog_label.config(text='No duplicates found.')
+            self._reset_ui()
+            self._start_processing(src, dst, frozenset())
+            return
+
+        self._log_msg('info',
+            f'Found {len(matches)} duplicate pair(s). Opening review window…')
+        self._prog_label.config(
+            text=f'{len(matches)} duplicate pair(s) found — review required.')
+
+        win = DuplicateReviewWindow(self, matches, Path(src))
+
+        if win.action is None:
+            self._log_msg('warn', 'Duplicate review cancelled — processing aborted.')
+            self._btn_start.config(state='normal')
+            self._btn_stop.config(state='disabled')
+            self._prog_label.config(text='Cancelled.')
+            return
+
+        if win.action == 'skip_dupes':
+            skip = frozenset(m.file_b for m in matches)
+            self._log_msg('info',
+                f'Skipping {len(skip)} duplicate file(s) per review choice.')
+        else:
+            skip = frozenset()
+            self._log_msg('info', 'Keeping all copies — processing entire source.')
+
+        self._reset_ui()
+        self._start_processing(src, dst, skip)
 
     def _on_stop(self):
         if self._processor:
