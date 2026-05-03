@@ -1,4 +1,4 @@
-#Requires -Version 3.0
+#Requires -Version 5.1
 <#
 .SYNOPSIS
     One-shot setup and launcher for the Google Takeout EXIF Restoration Tool.

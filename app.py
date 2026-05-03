@@ -469,21 +469,6 @@ class App(tk.Tk):
 
     # ── Button handlers ───────────────────────────────────────────────────
 
-    def _startup_check(self):
-        def _run():
-            ver = _check_exiftool()
-            if ver:
-                self._log_msg('ok', f'ExifTool v{ver} — ready.')
-            else:
-                self._log_msg('error', 'ExifTool not found — install it before processing:')
-                if _SYS == 'Windows':
-                    self._log_msg('error', '  Windows : download from https://exiftool.org')
-                elif _SYS == 'Darwin':
-                    self._log_msg('error', '  macOS   : brew install exiftool')
-                else:
-                    self._log_msg('error', '  Linux   : sudo apt install libimage-exiftool-perl')
-        threading.Thread(target=_run, daemon=True).start()
-
     def _on_start(self):
         src = self._src_row.get()
         dst = self._dst_row.get()
@@ -596,7 +581,6 @@ class App(tk.Tk):
         self._btn_stop.config(state='disabled')
 
     def _on_open_output(self):
-        import os, subprocess
         dst = self._dst_row.get()
         if dst and Path(dst).is_dir():
             if _SYS == 'Windows':

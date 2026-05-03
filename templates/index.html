@@ -834,9 +834,9 @@ input:checked ~ .toggle::after    { transform: translateX(16px); }
       </table>
     </div>
     <div class="modal-foot">
-      <button class="btn btn-primary" onclick="decideDupes('skip_dupes')">✓ Skip Duplicates</button>
-      <button class="btn btn-secondary" onclick="decideDupes('keep_all')">Keep All Copies</button>
-      <button class="btn btn-secondary modal-foot .btn-secondary" onclick="decideDupes(null)">✕ Cancel</button>
+      <button class="btn btn-primary"   id="btn-dup-skip"   onclick="decideDupes('skip_dupes')">✓ Skip Duplicates</button>
+      <button class="btn btn-secondary" id="btn-dup-keep"   onclick="decideDupes('keep_all')">Keep All Copies</button>
+      <button class="btn btn-secondary" id="btn-dup-cancel" onclick="decideDupes(null)">✕ Cancel</button>
     </div>
   </div>
 </div>
@@ -967,23 +967,29 @@ function shortPath(p) {
 // ── Stats ──────────────────────────────────────────────────────────────────
 
 function updateStats(ev) {
-  animateCounter('s-total',  counters.total,  ev.total,     () => { counters.total  = ev.total;  });
-  animateCounter('s-fixed',  counters.fixed,  ev.processed, () => { counters.fixed  = ev.processed; });
-  animateCounter('s-nojson', counters.noJson, ev.no_json,   () => { counters.noJson = ev.no_json; });
-  animateCounter('s-errors', counters.errors, ev.errors,    () => { counters.errors = ev.errors; });
+  // Snapshot previous values before updating so animations start from the right base
+  const prev = { ...counters };
+  counters.total  = ev.total;
+  counters.fixed  = ev.processed;
+  counters.noJson = ev.no_json;
+  counters.errors = ev.errors;
+
+  animateCounter('s-total',  prev.total,  counters.total);
+  animateCounter('s-fixed',  prev.fixed,  counters.fixed);
+  animateCounter('s-nojson', prev.noJson, counters.noJson);
+  animateCounter('s-errors', prev.errors, counters.errors);
 }
 
-function animateCounter(id, from, to, onDone) {
+function animateCounter(id, from, to) {
   if (from === to) return;
   const el  = document.getElementById(id);
   const dur = 300;
   const t0  = performance.now();
   const tick = (now) => {
-    const t  = Math.min(1, (now - t0) / dur);
-    const v  = Math.round(from + (to - from) * easeOut(t));
-    el.textContent = v.toLocaleString();
+    const t = Math.min(1, (now - t0) / dur);
+    el.textContent = Math.round(from + (to - from) * easeOut(t)).toLocaleString();
     if (t < 1) requestAnimationFrame(tick);
-    else { onDone(); el.textContent = to.toLocaleString(); }
+    else el.textContent = to.toLocaleString();
   };
   requestAnimationFrame(tick);
 }
@@ -1150,6 +1156,10 @@ function onDuplicatesFound(ev) {
 }
 
 async function decideDupes(action) {
+  // Disable all three buttons immediately to prevent double-sends
+  ['btn-dup-skip', 'btn-dup-keep', 'btn-dup-cancel'].forEach(id => {
+    document.getElementById(id).disabled = true;
+  });
   document.getElementById('dup-modal').classList.remove('open');
   if (!action) {
     // User cancelled — stop the pending worker
