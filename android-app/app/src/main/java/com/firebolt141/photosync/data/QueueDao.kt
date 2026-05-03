@@ -8,10 +8,10 @@ interface QueueDao {
     @Query("SELECT * FROM queue ORDER BY COALESCE(dateTaken, dateAdded) DESC")
     fun observeAll(): Flow<List<QueueItem>>
 
-    @Query("SELECT * FROM queue WHERE status = 'PENDING' ORDER BY COALESCE(dateTaken, dateAdded) ASC")
+    @Query("SELECT * FROM queue WHERE status IN ('PENDING', 'FAILED') ORDER BY COALESCE(dateTaken, dateAdded) ASC")
     suspend fun getPending(): List<QueueItem>
 
-    @Query("SELECT COUNT(*) FROM queue WHERE status = 'PENDING'")
+    @Query("SELECT COUNT(*) FROM queue WHERE status IN ('PENDING', 'FAILED')")
     fun observePendingCount(): Flow<Int>
 
     @Query("SELECT COUNT(*) FROM queue WHERE status = 'COPIED'")
