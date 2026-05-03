@@ -30,11 +30,12 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
+      - name: Accept Android SDK licences
+        run: yes | sdkmanager --licenses 2>/dev/null || true
+
       - name: Build debug APK
         run: gradle :app:assembleDebug
         working-directory: android-app
-        env:
-          ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
 
       - name: Upload debug APK artifact
         uses: actions/upload-artifact@v4
