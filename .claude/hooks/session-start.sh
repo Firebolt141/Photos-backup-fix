@@ -21,6 +21,15 @@ else
   echo "[session-start] ExifTool $(exiftool -ver) already installed."
 fi
 
+# ── Flask ─────────────────────────────────────────────────────────────────────
+# Required by web_app.py (the browser UI entry point).
+if ! python3 -c "import flask" &>/dev/null; then
+  echo "[session-start] Installing Flask..."
+  python3 -m pip install flask --quiet --disable-pip-version-check --ignore-installed
+else
+  echo "[session-start] Flask $(python3 -c 'import flask; print(flask.__version__)') already installed."
+fi
+
 # ── Python sanity check ───────────────────────────────────────────────────────
 # app.py requires Python 3.7+; no third-party packages needed.
 # tkinter is a GUI library not available in headless server environments —
