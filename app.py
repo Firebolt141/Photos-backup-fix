@@ -26,6 +26,7 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Optional, List
 
+_SYS = platform.system()
 
 # ── Media extensions ──────────────────────────────────────────────────────────
 
@@ -88,10 +89,7 @@ def find_json(media: Path) -> Optional[Path]:
     full = f"{name}{ext}"
     if len(full) > 46:
         trunc = full[:46]
-        candidates += [
-            media.parent / f"{trunc}.json",
-            media.parent / f"{name[:46]}.json",
-        ]
+        candidates.append(media.parent / f"{trunc}.json")
 
     # Numbered duplicates: foo(1).jpg → foo.jpg(1).json  or  foo(1).json
     m = re.match(r'^(.+)\((\d+)\)$', name)
@@ -286,10 +284,11 @@ def _file_hash(path: Path) -> str:
 
 
 def _fmt_size(n: int) -> str:
+    v = float(n)
     for unit in ('B', 'KB', 'MB', 'GB', 'TB'):
-        if n < 1024 or unit == 'TB':
-            return f'{n:.1f} {unit}' if unit != 'B' else f'{n} B'
-        n //= 1024
+        if v < 1024 or unit == 'TB':
+            return f'{n} B' if unit == 'B' else f'{v:.1f} {unit}'
+        v /= 1024
     return f'{n} B'
 
 
@@ -547,7 +546,14 @@ class Processor:
             else:
                 self.stats.no_json += 1
                 if self.copy_unmatched:
-                    shutil.copy2(src_file, dst_file)
+                    try:
+                        shutil.copy2(src_file, dst_file)
+                    except Exception as e:
+                        dst_file.unlink(missing_ok=True)
+                        self.on_log('error', f'  ✗ Copy failed: {e}')
+                        self.stats.errors += 1
+                        self.on_stats(self.stats)
+                        continue
                     hint = f' → {dst_file.relative_to(self.dst)}' \
                            if self.output_mode == 'date' else ''
                     self.on_log('warn', f'  ! No JSON sidecar — copied as-is{hint}')
@@ -570,8 +576,6 @@ class Processor:
 
 
 # ── GUI helpers ───────────────────────────────────────────────────────────────
-
-_SYS = platform.system()
 
 # Cross-platform font stacks
 _UI   = 'Segoe UI'   if _SYS == 'Windows' else ('SF Pro Text'    if _SYS == 'Darwin' else 'Ubuntu')
