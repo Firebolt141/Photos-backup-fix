@@ -22,13 +22,13 @@
         android:minSdkVersion="33" />
 
     <application
-        android:name=".PhotoSyncApp"
+        android:name=".UbertragApp"
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher"
         android:supportsRtl="true"
-        android:theme="@style/Theme.PhotoSync">
+        android:theme="@style/Theme.Ubertrag">
 
         <activity
             android:name=".MainActivity"

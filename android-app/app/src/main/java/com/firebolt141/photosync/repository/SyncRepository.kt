@@ -1,16 +1,16 @@
-package com.firebolt141.photosync.repository
+package com.firebolt141.ubertrag.repository
 
 import android.content.ContentUris
 import android.content.Context
 import android.net.Uri
 import android.provider.MediaStore
 import androidx.documentfile.provider.DocumentFile
-import com.firebolt141.photosync.data.AppDatabase
-import com.firebolt141.photosync.data.CopyStatus
-import com.firebolt141.photosync.data.Prefs
-import com.firebolt141.photosync.data.QueueItem
-import com.firebolt141.photosync.util.DateExtractor
-import com.firebolt141.photosync.util.StorageHelper
+import com.firebolt141.ubertrag.data.AppDatabase
+import com.firebolt141.ubertrag.data.CopyStatus
+import com.firebolt141.ubertrag.data.Prefs
+import com.firebolt141.ubertrag.data.QueueItem
+import com.firebolt141.ubertrag.util.DateExtractor
+import com.firebolt141.ubertrag.util.StorageHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext

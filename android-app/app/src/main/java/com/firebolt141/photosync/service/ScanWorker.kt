@@ -1,9 +1,9 @@
-package com.firebolt141.photosync.service
+package com.firebolt141.ubertrag.service
 
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import com.firebolt141.photosync.repository.SyncRepository
+import com.firebolt141.ubertrag.repository.SyncRepository
 
 class ScanWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
     override suspend fun doWork(): Result = try {

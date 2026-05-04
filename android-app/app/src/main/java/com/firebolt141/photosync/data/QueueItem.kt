@@ -1,4 +1,4 @@
-package com.firebolt141.photosync.data
+package com.firebolt141.ubertrag.data
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey

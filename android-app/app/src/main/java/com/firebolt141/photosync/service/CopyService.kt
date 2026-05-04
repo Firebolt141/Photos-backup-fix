@@ -1,4 +1,4 @@
-package com.firebolt141.photosync.service
+package com.firebolt141.ubertrag.service
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -8,9 +8,9 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
-import com.firebolt141.photosync.R
-import com.firebolt141.photosync.repository.CopySummary
-import com.firebolt141.photosync.repository.SyncRepository
+import com.firebolt141.ubertrag.R
+import com.firebolt141.ubertrag.repository.CopySummary
+import com.firebolt141.ubertrag.repository.SyncRepository
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 
@@ -95,7 +95,7 @@ class CopyService : Service() {
     private fun buildProgressNotif(text: String, done: Int, total: Int) =
         NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle("Photo Sync")
+            .setContentTitle("Übertrag")
             .setContentText(text)
             .apply {
                 if (total > 0) setProgress(total, done, false)

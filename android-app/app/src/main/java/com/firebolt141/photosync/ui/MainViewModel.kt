@@ -1,17 +1,17 @@
-package com.firebolt141.photosync.ui
+package com.firebolt141.ubertrag.ui
 
 import android.app.Application
 import android.content.Intent
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.firebolt141.photosync.data.CopyStatus
-import com.firebolt141.photosync.data.Prefs
-import com.firebolt141.photosync.data.QueueItem
-import com.firebolt141.photosync.repository.SyncRepository
-import com.firebolt141.photosync.service.CopyProgress
-import com.firebolt141.photosync.service.CopyService
-import com.firebolt141.photosync.util.StorageHelper
+import com.firebolt141.ubertrag.data.CopyStatus
+import com.firebolt141.ubertrag.data.Prefs
+import com.firebolt141.ubertrag.data.QueueItem
+import com.firebolt141.ubertrag.repository.SyncRepository
+import com.firebolt141.ubertrag.service.CopyProgress
+import com.firebolt141.ubertrag.service.CopyService
+import com.firebolt141.ubertrag.util.StorageHelper
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 

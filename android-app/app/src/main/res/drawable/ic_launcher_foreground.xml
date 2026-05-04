@@ -4,14 +4,33 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Camera lens outline with copy arrow — represents photo backup -->
+
+    <!-- Mountain body -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M54,28 C39.6,28 28,39.6 28,54 C28,68.4 39.6,80 54,80
-                          C68.4,80 80,68.4 80,54 C80,39.6 68.4,28 54,28z
-                          M54,72 C44,72 36,64 36,54 C36,44 44,36 54,36
-                          C64,36 72,44 72,54 C72,64 64,72 54,72z" />
+        android:fillColor="#40916C"
+        android:pathData="M54,26 L16,80 L92,80 Z" />
+
+    <!-- Snow cap -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M46,46 L46,62 L66,54z" />
+        android:fillColor="#D8F3DC"
+        android:pathData="M54,26 L42,52 L66,52 Z" />
+
+    <!-- Arc over the peak (orange stroke) -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#F5A623"
+        android:strokeWidth="6"
+        android:strokeLineCap="round"
+        android:pathData="M22,72 Q54,8 88,72" />
+
+    <!-- Arrowhead at arc end: triangle pointing up, rotated 152° CW to match arc tangent -->
+    <group
+        android:pivotX="88"
+        android:pivotY="72"
+        android:rotation="152">
+        <path
+            android:fillColor="#F5A623"
+            android:pathData="M88,62 L81,74 L95,74 Z" />
+    </group>
+
 </vector>

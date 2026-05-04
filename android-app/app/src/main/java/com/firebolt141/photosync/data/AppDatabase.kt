@@ -1,4 +1,4 @@
-package com.firebolt141.photosync.data
+package com.firebolt141.ubertrag.data
 
 import android.content.Context
 import androidx.room.*
@@ -20,7 +20,7 @@ abstract class AppDatabase : RoomDatabase() {
             INSTANCE ?: Room.databaseBuilder(
                 context.applicationContext,
                 AppDatabase::class.java,
-                "photosync.db"
+                "ubertrag.db"
             ).build().also { INSTANCE = it }
         }
     }

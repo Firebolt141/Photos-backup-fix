@@ -1,4 +1,4 @@
-package com.firebolt141.photosync.ui.theme
+package com.firebolt141.ubertrag.ui.theme
 
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -11,7 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 
 @Composable
-fun PhotoSyncTheme(
+fun UbertragTheme(
     dark: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit,
 ) {

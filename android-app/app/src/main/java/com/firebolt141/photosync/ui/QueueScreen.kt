@@ -1,4 +1,4 @@
-package com.firebolt141.photosync.ui
+package com.firebolt141.ubertrag.ui
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.layout.*
@@ -15,8 +15,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.firebolt141.photosync.data.CopyStatus
-import com.firebolt141.photosync.data.QueueItem
+import com.firebolt141.ubertrag.data.CopyStatus
+import com.firebolt141.ubertrag.data.QueueItem
 import java.text.SimpleDateFormat
 import java.util.*
 

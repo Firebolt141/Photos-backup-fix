@@ -1,4 +1,4 @@
-package com.firebolt141.photosync.util
+package com.firebolt141.ubertrag.util
 
 import android.content.Context
 import android.content.Intent
