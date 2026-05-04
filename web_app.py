@@ -69,12 +69,11 @@ def api_start():
     global _running, _processor, _decision_value
     data = request.get_json(force=True)
 
-    src           = (data.get('src') or '').strip()
-    dst           = (data.get('dst') or '').strip()
-    copy_unmatched = bool(data.get('copy_unmatched', True))
-    output_mode   = data.get('output_mode', 'date')
-    check_dupes   = bool(data.get('check_dupes', False))
-    skip_raw      = data.get('skip_files', [])
+    src         = (data.get('src') or '').strip()
+    dst         = (data.get('dst') or '').strip()
+    output_mode = data.get('output_mode', 'date')
+    check_dupes = bool(data.get('check_dupes', False))
+    skip_raw    = data.get('skip_files', [])
 
     if not src or not Path(src).is_dir():
         return jsonify({'error': 'Source folder not found.'}), 400
@@ -125,7 +124,7 @@ def api_start():
 
             proc = Processor(
                 src=src, dst=dst,
-                copy_unmatched=copy_unmatched,
+                copy_unmatched=True,   # always copy every source file
                 output_mode=output_mode,
                 on_log=lambda lvl, txt: _push({'type': 'log', 'level': lvl, 'text': txt}),
                 on_progress=lambda cur, tot, f, fps: _push(
@@ -138,6 +137,7 @@ def api_start():
                 ),
                 on_done=lambda ok: _push({'type': 'done', 'ok': ok,
                                           'report': str(Path(dst) / '_processing_report.json')}),
+                on_file_result=lambda r: _push({'type': 'file_result', 'record': r}),
                 skip_files=eff_skip,
             )
             _processor = proc
