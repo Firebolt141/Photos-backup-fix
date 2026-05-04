@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace   = "com.firebolt141.photosync"
+    namespace   = "com.firebolt141.ubertrag"
     compileSdk  = 35
 
     defaultConfig {
-        applicationId   = "com.firebolt141.photosync"
+        applicationId   = "com.firebolt141.ubertrag"
         minSdk          = 26
         targetSdk       = 35
         versionCode     = 1

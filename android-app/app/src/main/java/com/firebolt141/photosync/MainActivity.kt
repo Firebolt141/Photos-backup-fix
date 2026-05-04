@@ -1,4 +1,4 @@
-package com.firebolt141.photosync
+package com.firebolt141.ubertrag
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -9,17 +9,17 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.firebolt141.photosync.ui.HomeScreen
-import com.firebolt141.photosync.ui.MainViewModel
-import com.firebolt141.photosync.ui.QueueScreen
-import com.firebolt141.photosync.ui.theme.PhotoSyncTheme
+import com.firebolt141.ubertrag.ui.HomeScreen
+import com.firebolt141.ubertrag.ui.MainViewModel
+import com.firebolt141.ubertrag.ui.QueueScreen
+import com.firebolt141.ubertrag.ui.theme.UbertragTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            PhotoSyncTheme {
+            UbertragTheme {
                 val nav   = rememberNavController()
                 val vm: MainViewModel = viewModel()
                 val state = vm.state.collectAsStateWithLifecycle().value

@@ -1,4 +1,4 @@
-package com.firebolt141.photosync.ui
+package com.firebolt141.ubertrag.ui
 
 import android.Manifest
 import android.net.Uri
@@ -23,7 +23,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.firebolt141.photosync.service.CopyProgress
+import com.firebolt141.ubertrag.service.CopyProgress
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -77,7 +77,7 @@ fun HomeScreen(
                 title = {
                     Column {
                         Text(
-                            "Photo Sync",
+                            "Übertrag",
                             style      = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                         )

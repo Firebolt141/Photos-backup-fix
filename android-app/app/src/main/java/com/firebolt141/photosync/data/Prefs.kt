@@ -1,4 +1,4 @@
-package com.firebolt141.photosync.data
+package com.firebolt141.ubertrag.data
 
 import android.content.Context
 import androidx.datastore.preferences.core.edit
@@ -8,7 +8,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
-private val Context.dataStore by preferencesDataStore(name = "photosync_prefs")
+private val Context.dataStore by preferencesDataStore(name = "ubertrag_prefs")
 
 class Prefs(private val context: Context) {
     companion object {
