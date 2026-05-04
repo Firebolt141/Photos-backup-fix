@@ -45,6 +45,16 @@ class Stats:
 
 
 @dataclass
+class FileRecord:
+    file:   str         # relative source path
+    status: str         # 'fixed' | 'no_json_copied' | 'no_json_skipped' | 'error'
+    dest:   str = ''    # relative output path (empty if not written)
+    date:   str = ''    # date written (fixed files only)
+    gps:    str = ''    # GPS coords (fixed files only)
+    error:  str = ''    # error description (error files only)
+
+
+@dataclass
 class Meta:
     timestamp: Optional[int] = None
     latitude: Optional[float] = None
@@ -351,6 +361,7 @@ class Processor:
         self.on_done        = on_done
         self.skip_files     = skip_files
         self.stats          = Stats()
+        self.records:  List[FileRecord] = []
         self._stop          = threading.Event()
 
     def stop(self):
@@ -433,13 +444,22 @@ class Processor:
             dst_file = self._target(src_file, eff_ts)
             dst_file.parent.mkdir(parents=True, exist_ok=True)
 
+            rel_src = str(rel)
+            rel_dst = ''
+            try:
+                rel_dst = str(dst_file.relative_to(self.dst))
+            except ValueError:
+                rel_dst = dst_file.name
+
             if json_path:
                 try:
                     shutil.copy2(src_file, dst_file)
                 except Exception as e:
                     dst_file.unlink(missing_ok=True)
-                    self.on_log('error', f'  ✗ Copy failed: {e}')
+                    msg = f'Copy failed: {e}'
+                    self.on_log('error', f'  ✗ {msg}')
                     self.stats.errors += 1
+                    self.records.append(FileRecord(rel_src, 'error', error=msg))
                     self.on_stats(self.stats)
                     continue
 
@@ -454,21 +474,37 @@ class Processor:
                     r = subprocess.run(args, **kw)
                     if r.returncode == 0:
                         parts = []
+                        date_str = ''
+                        gps_str  = ''
                         if meta.timestamp:
                             dt = datetime.fromtimestamp(meta.timestamp, tz=timezone.utc)
-                            parts.append(dt.strftime('%Y-%m-%d %H:%M UTC'))
+                            date_str = dt.strftime('%Y-%m-%d %H:%M UTC')
+                            parts.append(date_str)
                         if meta.latitude is not None:
+                            gps_str = f'{meta.latitude:.6f}, {meta.longitude:.6f}'
                             parts.append(f'GPS {meta.latitude:.4f}, {meta.longitude:.4f}')
                         suffix = ('  ' + '  |  '.join(parts)) if parts else ''
                         self.on_log('ok', f'  ✓{suffix}')
                         self.stats.processed += 1
+                        self.records.append(FileRecord(
+                            rel_src, 'fixed', dest=rel_dst,
+                            date=date_str, gps=gps_str,
+                        ))
                     else:
                         err = (r.stderr or r.stdout).strip()[:140]
                         self.on_log('error', f'  ✗ ExifTool: {err}')
                         self.stats.errors += 1
+                        self.records.append(FileRecord(
+                            rel_src, 'error', dest=rel_dst,
+                            error=f'ExifTool: {err}',
+                        ))
                 except subprocess.TimeoutExpired:
-                    self.on_log('error', '  ✗ ExifTool timed out (file may be very large)')
+                    msg = 'ExifTool timed out (file may be very large)'
+                    self.on_log('error', f'  ✗ {msg}')
                     self.stats.errors += 1
+                    self.records.append(FileRecord(
+                        rel_src, 'error', dest=rel_dst, error=msg,
+                    ))
             else:
                 self.stats.no_json += 1
                 if self.copy_unmatched:
@@ -476,18 +512,24 @@ class Processor:
                         shutil.copy2(src_file, dst_file)
                     except Exception as e:
                         dst_file.unlink(missing_ok=True)
-                        self.on_log('error', f'  ✗ Copy failed: {e}')
+                        msg = f'Copy failed: {e}'
+                        self.on_log('error', f'  ✗ {msg}')
                         self.stats.errors += 1
+                        self.records.append(FileRecord(rel_src, 'error', error=msg))
                         self.on_stats(self.stats)
                         continue
                     hint = (f' → {dst_file.relative_to(self.dst)}'
                             if self.output_mode == 'date' else '')
                     self.on_log('warn', f'  ! No JSON sidecar — copied as-is{hint}')
+                    self.records.append(FileRecord(rel_src, 'no_json_copied', dest=rel_dst))
                 else:
                     self.on_log('warn', '  ! No JSON sidecar — skipped')
                     self.stats.skipped += 1
+                    self.records.append(FileRecord(rel_src, 'no_json_skipped'))
 
             self.on_stats(self.stats)
+
+        self._write_report()
 
         sep = '─' * 55
         self.on_log('info', sep)
@@ -499,3 +541,29 @@ class Processor:
             f'Skipped: {self.stats.skipped}'
         )
         self.on_done(True)
+
+    def _write_report(self):
+        report = {
+            'generated': datetime.now(tz=timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+            'source':  str(self.src),
+            'output':  str(self.dst),
+            'summary': {
+                'total':     self.stats.total,
+                'fixed':     self.stats.processed,
+                'no_json':   self.stats.no_json,
+                'errors':    self.stats.errors,
+                'skipped':   self.stats.skipped,
+            },
+            'records': [
+                {k: v for k, v in r.__dict__.items() if v != ''}
+                for r in self.records
+            ],
+        }
+        try:
+            report_path = self.dst / '_processing_report.json'
+            report_path.write_text(
+                json.dumps(report, indent=2, ensure_ascii=False),
+                encoding='utf-8',
+            )
+        except Exception:
+            pass

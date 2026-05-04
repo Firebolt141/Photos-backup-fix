@@ -95,6 +95,8 @@ output/
 
 If two files from different source folders land on the same date with the same filename, the second one is automatically renamed `photo_1.jpg`, `photo_2.jpg`, etc.
 
+A `_processing_report.json` file is written to the output folder when processing finishes. It lists every file with its outcome (`fixed`, `no_json_copied`, `no_json_skipped`, `error`), the destination path, the date/GPS written (for fixed files), and the error message (for error files). Open it in any text editor or JSON viewer to audit what happened.
+
 For files without a JSON sidecar the tool tries to extract the date from the filename itself (e.g. `PXL_20210115_120000.jpg`, `IMG-20210115-WA0000.jpg`). If that also fails the file goes to `no-date/`.
 
 ---

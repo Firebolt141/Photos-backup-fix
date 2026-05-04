@@ -1117,6 +1117,9 @@ function onDone(ev) {
     document.getElementById('prog-file').textContent  = '';
     document.getElementById('prog-speed').textContent = '';
     toast('Processing complete!', 'success');
+    if (ev.report) {
+      appendLog('info', `Report saved → ${ev.report}`);
+    }
   } else {
     fill.className = 'progress-fill';
     document.getElementById('prog-label').textContent = 'Stopped or error — check the log';
