@@ -181,7 +181,7 @@ Write-Step 3 'Flask (web UI)'
 
 $flaskOk = $false
 try {
-    $flaskCheck = & $python -c "import flask; print(flask.__version__)" 2>&1
+    $flaskCheck = & $python -c "import importlib.metadata; print(importlib.metadata.version('flask'))" 2>&1
     if ($LASTEXITCODE -eq 0 -and $flaskCheck -match '[\d.]+') {
         Write-OK "Flask $flaskCheck already installed"
         $flaskOk = $true
@@ -191,8 +191,8 @@ try {
 if (-not $flaskOk) {
     Write-Warn 'Flask not found — installing via pip...'
     try {
-        & $python -m pip install flask --quiet --disable-pip-version-check --ignore-installed 2>&1 | Out-Null
-        $flaskVer = & $python -c "import flask; print(flask.__version__)" 2>&1
+        & $python -m pip install flask --quiet --disable-pip-version-check 2>&1 | Out-Null
+        $flaskVer = & $python -c "import importlib.metadata; print(importlib.metadata.version('flask'))" 2>&1
         Write-OK "Flask $flaskVer installed"
     } catch {
         Write-Fail "pip install flask failed: $_"
