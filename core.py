@@ -350,22 +350,29 @@ class Processor:
                  copy_unmatched: bool,
                  output_mode: str,
                  on_log, on_progress, on_stats, on_done,
-                 skip_files: frozenset = frozenset()):
+                 skip_files: frozenset = frozenset(),
+                 on_file_result=None):
         self.src = Path(src)
         self.dst = Path(dst)
-        self.copy_unmatched = copy_unmatched
-        self.output_mode    = output_mode
-        self.on_log         = on_log
-        self.on_progress    = on_progress
-        self.on_stats       = on_stats
-        self.on_done        = on_done
-        self.skip_files     = skip_files
-        self.stats          = Stats()
-        self.records:  List[FileRecord] = []
-        self._stop          = threading.Event()
+        self.copy_unmatched  = copy_unmatched
+        self.output_mode     = output_mode
+        self.on_log          = on_log
+        self.on_progress     = on_progress
+        self.on_stats        = on_stats
+        self.on_done         = on_done
+        self.skip_files      = skip_files
+        self.on_file_result  = on_file_result
+        self.stats           = Stats()
+        self.records: List[FileRecord] = []
+        self._stop           = threading.Event()
 
     def stop(self):
         self._stop.set()
+
+    def _record(self, rec: FileRecord) -> None:
+        self.records.append(rec)
+        if self.on_file_result:
+            self.on_file_result({k: v for k, v in rec.__dict__.items() if v != ''})
 
     def _unique(self, path: Path) -> Path:
         if not path.exists():
@@ -459,7 +466,7 @@ class Processor:
                     msg = f'Copy failed: {e}'
                     self.on_log('error', f'  ✗ {msg}')
                     self.stats.errors += 1
-                    self.records.append(FileRecord(rel_src, 'error', error=msg))
+                    self._record(FileRecord(rel_src, 'error', error=msg))
                     self.on_stats(self.stats)
                     continue
 
@@ -486,7 +493,7 @@ class Processor:
                         suffix = ('  ' + '  |  '.join(parts)) if parts else ''
                         self.on_log('ok', f'  ✓{suffix}')
                         self.stats.processed += 1
-                        self.records.append(FileRecord(
+                        self._record(FileRecord(
                             rel_src, 'fixed', dest=rel_dst,
                             date=date_str, gps=gps_str,
                         ))
@@ -494,7 +501,7 @@ class Processor:
                         err = (r.stderr or r.stdout).strip()[:140]
                         self.on_log('error', f'  ✗ ExifTool: {err}')
                         self.stats.errors += 1
-                        self.records.append(FileRecord(
+                        self._record(FileRecord(
                             rel_src, 'error', dest=rel_dst,
                             error=f'ExifTool: {err}',
                         ))
@@ -502,30 +509,25 @@ class Processor:
                     msg = 'ExifTool timed out (file may be very large)'
                     self.on_log('error', f'  ✗ {msg}')
                     self.stats.errors += 1
-                    self.records.append(FileRecord(
-                        rel_src, 'error', dest=rel_dst, error=msg,
-                    ))
+                    self._record(FileRecord(rel_src, 'error', dest=rel_dst, error=msg))
             else:
+                # Always copy files with no JSON sidecar so every source file
+                # has a corresponding output file regardless of metadata status.
                 self.stats.no_json += 1
-                if self.copy_unmatched:
-                    try:
-                        shutil.copy2(src_file, dst_file)
-                    except Exception as e:
-                        dst_file.unlink(missing_ok=True)
-                        msg = f'Copy failed: {e}'
-                        self.on_log('error', f'  ✗ {msg}')
-                        self.stats.errors += 1
-                        self.records.append(FileRecord(rel_src, 'error', error=msg))
-                        self.on_stats(self.stats)
-                        continue
-                    hint = (f' → {dst_file.relative_to(self.dst)}'
-                            if self.output_mode == 'date' else '')
-                    self.on_log('warn', f'  ! No JSON sidecar — copied as-is{hint}')
-                    self.records.append(FileRecord(rel_src, 'no_json_copied', dest=rel_dst))
-                else:
-                    self.on_log('warn', '  ! No JSON sidecar — skipped')
-                    self.stats.skipped += 1
-                    self.records.append(FileRecord(rel_src, 'no_json_skipped'))
+                try:
+                    shutil.copy2(src_file, dst_file)
+                except Exception as e:
+                    dst_file.unlink(missing_ok=True)
+                    msg = f'Copy failed: {e}'
+                    self.on_log('error', f'  ✗ {msg}')
+                    self.stats.errors += 1
+                    self._record(FileRecord(rel_src, 'error', error=msg))
+                    self.on_stats(self.stats)
+                    continue
+                hint = (f' → {dst_file.relative_to(self.dst)}'
+                        if self.output_mode == 'date' else '')
+                self.on_log('warn', f'  ! No JSON sidecar — copied as-is{hint}')
+                self._record(FileRecord(rel_src, 'no_json_copied', dest=rel_dst))
 
             self.on_stats(self.stats)
 

@@ -340,7 +340,19 @@ input:checked ~ .toggle::after    { transform: translateX(16px); }
   text-align: center;
   position: relative;
   overflow: hidden;
-  transition: transform .2s;
+  transition: transform .2s, box-shadow .2s;
+  cursor: pointer;
+  user-select: none;
+}
+.stat-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(0,0,0,.35);
+}
+.stat-hint {
+  font-size: .62rem;
+  color: var(--muted);
+  margin-top: 4px;
+  letter-spacing: .04em;
 }
 .stat-card::before {
   content: '';
@@ -714,17 +726,6 @@ input:checked ~ .toggle::after    { transform: translateX(16px); }
     <div class="card">
       <div class="card-title">Options</div>
 
-      <label class="option-row">
-        <input type="checkbox" id="opt-unmatched" checked>
-        <span class="toggle"></span>
-        <div>
-          <div class="option-label">Copy files without a JSON sidecar</div>
-          <div class="option-sub">Screenshots, downloads, etc. are copied unchanged</div>
-        </div>
-      </label>
-
-      <div class="divider"></div>
-
       <div class="option-label" style="margin-bottom:8px">Output organisation</div>
       <div class="radio-pill">
         <input type="radio" name="mode" id="mode-date" value="date" checked>
@@ -769,21 +770,25 @@ input:checked ~ .toggle::after    { transform: translateX(16px); }
 
     <!-- Stats -->
     <div class="stats-row">
-      <div class="stat-card blue">
+      <div class="stat-card blue" onclick="showRecords('all')">
         <div class="stat-value" id="s-total">0</div>
         <div class="stat-label">Total</div>
+        <div class="stat-hint">click to view all</div>
       </div>
-      <div class="stat-card green">
+      <div class="stat-card green" onclick="showRecords('fixed')">
         <div class="stat-value" id="s-fixed">0</div>
         <div class="stat-label">Fixed</div>
+        <div class="stat-hint">click to view</div>
       </div>
-      <div class="stat-card amber">
+      <div class="stat-card amber" onclick="showRecords('no_json')">
         <div class="stat-value" id="s-nojson">0</div>
         <div class="stat-label">No JSON</div>
+        <div class="stat-hint">click to view</div>
       </div>
-      <div class="stat-card red">
+      <div class="stat-card red" onclick="showRecords('errors')">
         <div class="stat-value" id="s-errors">0</div>
         <div class="stat-label">Errors</div>
+        <div class="stat-hint">click to view</div>
       </div>
     </div>
 
@@ -868,6 +873,41 @@ input:checked ~ .toggle::after    { transform: translateX(16px); }
 <!-- Toast area -->
 <div class="toast-area" id="toasts"></div>
 
+<!-- File records modal -->
+<div class="modal-backdrop" id="records-modal">
+  <div class="modal" style="max-width:1100px">
+    <div class="modal-head">
+      <div class="modal-icon" id="records-icon">📋</div>
+      <div>
+        <div class="modal-title" id="records-title">File Records</div>
+        <div class="modal-sub" id="records-sub"></div>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div class="modal-info" id="records-empty" style="display:none">
+        No records yet — run processing first, then click a stat card.
+      </div>
+      <table class="dup-table" id="records-table">
+        <thead>
+          <tr>
+            <th>Source File</th>
+            <th>Output Path</th>
+            <th>Date Written</th>
+            <th>GPS</th>
+            <th>Status / Note</th>
+          </tr>
+        </thead>
+        <tbody id="records-tbody"></tbody>
+      </table>
+    </div>
+    <div class="modal-foot">
+      <span id="records-count" style="color:var(--muted);font-size:.82rem"></span>
+      <button class="btn btn-secondary" onclick="copyRecordsTsv()" style="margin-left:12px">Copy as TSV</button>
+      <button class="btn btn-secondary" id="btn-records-close" onclick="closeRecords()">Close</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -878,7 +918,8 @@ const state = {
   es:         null,
 };
 
-const counters = { total: 0, fixed: 0, noJson: 0, errors: 0 };
+const counters   = { total: 0, fixed: 0, noJson: 0, errors: 0 };
+const allRecords = [];   // accumulates file_result events
 
 // ── Init ───────────────────────────────────────────────────────────────────
 
@@ -996,6 +1037,7 @@ function handleEvent(ev) {
     case 'scan_start':       onScanStart(); break;
     case 'scan_progress':    onScanProgress(ev); break;
     case 'duplicates_found': onDuplicatesFound(ev); break;
+    case 'file_result':      allRecords.push(ev.record); break;
   }
 }
 
@@ -1148,9 +1190,8 @@ async function startProcessing() {
   const body = {
     src,
     dst,
-    copy_unmatched: document.getElementById('opt-unmatched').checked,
-    output_mode:    document.querySelector('input[name=mode]:checked').value,
-    check_dupes:    document.getElementById('opt-dupes').checked,
+    output_mode: document.querySelector('input[name=mode]:checked').value,
+    check_dupes: document.getElementById('opt-dupes').checked,
   };
 
   try {
@@ -1197,6 +1238,7 @@ function resetUI() {
     document.getElementById(id).textContent = '0';
   });
   Object.keys(counters).forEach(k => { counters[k] = 0; });
+  allRecords.length = 0;
 }
 
 // ── Browse ─────────────────────────────────────────────────────────────────
@@ -1294,6 +1336,84 @@ async function decideDupes(action) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action }),
   });
+}
+
+// ── File records panel ─────────────────────────────────────────────────────
+
+function showRecords(filter) {
+  const cfg = {
+    all:     { title: 'All Files',                  icon: '📋', test: () => true },
+    fixed:   { title: 'Fixed Files',                icon: '✅', test: r => r.status === 'fixed' },
+    no_json: { title: 'No JSON Sidecar',            icon: '⚠️', test: r => r.status && r.status.startsWith('no_json') },
+    errors:  { title: 'Errors',                     icon: '❌', test: r => r.status === 'error' },
+  };
+  const { title, icon, test } = cfg[filter] || cfg.all;
+  const filtered = allRecords.filter(test);
+
+  document.getElementById('records-title').textContent = title;
+  document.getElementById('records-icon').textContent  = icon;
+
+  const tbody = document.getElementById('records-tbody');
+  const empty = document.getElementById('records-empty');
+  const count = document.getElementById('records-count');
+
+  if (allRecords.length === 0) {
+    tbody.innerHTML    = '';
+    empty.style.display = '';
+    count.textContent  = '';
+  } else {
+    empty.style.display = 'none';
+    count.textContent   = `${filtered.length.toLocaleString()} of ${allRecords.length.toLocaleString()} file${allRecords.length !== 1 ? 's' : ''}`;
+    tbody.innerHTML = '';
+    filtered.forEach(r => {
+      const tr  = document.createElement('tr');
+      let statusCell;
+      if (r.status === 'fixed') {
+        statusCell = '<span class="badge-exact">✓ Metadata written</span>';
+      } else if (r.status === 'error') {
+        statusCell = `<span class="log-error" title="${escHtml(r.error || '')}">✗ ${escHtml((r.error || 'Error').substring(0, 80))}</span>`;
+      } else {
+        statusCell = '<span class="log-warn">! Copied, no metadata</span>';
+      }
+      tr.innerHTML = `
+        <td title="${escHtml(r.file)}" style="max-width:260px">${escHtml(r.file)}</td>
+        <td title="${escHtml(r.dest || '')}" style="max-width:220px">${escHtml(r.dest || '—')}</td>
+        <td style="white-space:nowrap">${escHtml(r.date || '—')}</td>
+        <td style="white-space:nowrap">${escHtml(r.gps  || '—')}</td>
+        <td>${statusCell}</td>`;
+      tbody.appendChild(tr);
+    });
+  }
+
+  document.getElementById('records-sub').textContent =
+    allRecords.length === 0 ? 'Run processing first' : `${filtered.length.toLocaleString()} file${filtered.length !== 1 ? 's' : ''}`;
+
+  document.getElementById('records-modal').classList.add('open');
+}
+
+function closeRecords() {
+  document.getElementById('records-modal').classList.remove('open');
+}
+
+async function copyRecordsTsv() {
+  const rows  = document.querySelectorAll('#records-tbody tr');
+  const lines = ['Source File\tOutput Path\tDate Written\tGPS\tStatus'];
+  rows.forEach(tr => {
+    const cells = Array.from(tr.querySelectorAll('td')).map(td => td.textContent.trim());
+    lines.push(cells.join('\t'));
+  });
+  try {
+    await navigator.clipboard.writeText(lines.join('\n'));
+    toast('Records copied as tab-separated text.', 'success');
+  } catch(e) {
+    toast('Clipboard not available.', 'error');
+  }
+}
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 // ── Toast ──────────────────────────────────────────────────────────────────
