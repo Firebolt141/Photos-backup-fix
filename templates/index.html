@@ -105,6 +105,21 @@ header::before {
   0%,100% { opacity: 1; transform: scale(1); }
   50%      { opacity: .5; transform: scale(.8); }
 }
+.conn-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: .78rem;
+  font-weight: 600;
+  background: rgba(255,255,255,.12);
+  border: 1px solid rgba(255,255,255,.18);
+  color: rgba(255,255,255,.8);
+  backdrop-filter: blur(8px);
+}
+.conn-badge.live         { background: rgba(34,197,94,.2);  border-color: rgba(34,197,94,.4);  color: #86efac; }
+.conn-badge.reconnecting { background: rgba(245,158,11,.2); border-color: rgba(245,158,11,.4); color: #fcd34d; }
 
 /* ── Main layout ───────────────────────────────────────────────────────────── */
 .main {
@@ -415,7 +430,8 @@ input:checked ~ .toggle::after    { transform: translateX(16px); }
   white-space: nowrap;
   max-width: 70%;
 }
-.progress-speed {
+.progress-speed,
+.progress-eta {
   font-size: .75rem;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
@@ -573,7 +589,7 @@ input:checked ~ .toggle::after    { transform: translateX(16px); }
   gap: 10px;
   align-items: center;
 }
-.modal-foot .btn-secondary { margin-left: auto; }
+#btn-dup-cancel { margin-left: auto; }
 
 /* ── Scan overlay ──────────────────────────────────────────────────────────── */
 .scan-overlay {
@@ -666,6 +682,10 @@ input:checked ~ .toggle::after    { transform: translateX(16px); }
   <div id="exiftool-badge">
     <span class="badge-dot"></span>
     <span id="exiftool-label">Checking ExifTool…</span>
+  </div>
+  <div id="conn-badge" class="conn-badge">
+    <span class="badge-dot"></span>
+    <span id="conn-label">Connecting…</span>
   </div>
 </header>
 
@@ -778,6 +798,7 @@ input:checked ~ .toggle::after    { transform: translateX(16px); }
       </div>
       <div class="progress-meta">
         <span class="progress-file" id="prog-file"></span>
+        <span class="progress-eta" id="prog-eta"></span>
         <span class="progress-speed" id="prog-speed"></span>
       </div>
     </div>
@@ -786,7 +807,10 @@ input:checked ~ .toggle::after    { transform: translateX(16px); }
     <div class="card log-card">
       <div class="log-header">
         <span class="card-title" style="margin:0">Activity Log</span>
-        <button class="btn-clear" onclick="clearLog()">Clear</button>
+        <div style="display:flex;gap:6px">
+          <button class="btn-clear" onclick="copyLog()">Copy</button>
+          <button class="btn-clear" onclick="clearLog()">Clear</button>
+        </div>
       </div>
       <div class="log-scroll" id="log">
         <div class="log-line log-empty">Waiting to start…</div>
@@ -851,17 +875,31 @@ const state = {
   running:    false,
   total:      0,
   autoScroll: true,
-  es:         null,   // EventSource
+  es:         null,
 };
 
-// Stat counters
 const counters = { total: 0, fixed: 0, noJson: 0, errors: 0 };
 
 // ── Init ───────────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Restore last-used paths
+  const savedSrc = localStorage.getItem('exif_src');
+  const savedDst = localStorage.getItem('exif_dst');
+  if (savedSrc) document.getElementById('src').value = savedSrc;
+  if (savedDst) document.getElementById('dst').value = savedDst;
+
+  // Persist paths on change
+  document.getElementById('src').addEventListener('input', () => {
+    localStorage.setItem('exif_src', document.getElementById('src').value);
+  });
+  document.getElementById('dst').addEventListener('input', () => {
+    localStorage.setItem('exif_dst', document.getElementById('dst').value);
+  });
+
   checkExifTool();
   connectSSE();
+  syncStatus();
 
   // Pause auto-scroll when user scrolls up
   const log = document.getElementById('log');
@@ -869,7 +907,36 @@ document.addEventListener('DOMContentLoaded', () => {
     const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
     state.autoScroll = atBottom;
   });
+
+  // Keyboard shortcuts: Enter to start (when focused on an input), Escape to stop
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey && !state.running) {
+      const active = document.activeElement;
+      if (active && active.tagName === 'INPUT' && active.type === 'text') {
+        const src = document.getElementById('src').value.trim();
+        const dst = document.getElementById('dst').value.trim();
+        if (src && dst) startProcessing();
+      }
+    }
+    if (e.key === 'Escape' && state.running) {
+      stopProcessing();
+    }
+  });
 });
+
+// ── Status sync (recover UI on page refresh mid-run) ───────────────────────
+
+async function syncStatus() {
+  try {
+    const r = await fetch('/api/status');
+    const d = await r.json();
+    if (d.running) {
+      state.running = true;
+      setRunning(true);
+      document.getElementById('prog-label').textContent = 'Processing… (reconnected)';
+    }
+  } catch(e) { /* ignore */ }
+}
 
 // ── ExifTool badge ─────────────────────────────────────────────────────────
 
@@ -898,13 +965,26 @@ async function checkExifTool() {
 function connectSSE() {
   if (state.es) { state.es.close(); }
   state.es = new EventSource('/api/stream');
+  state.es.onopen = () => setConnBadge(true);
   state.es.onmessage = (e) => {
     try { handleEvent(JSON.parse(e.data)); } catch(err) { console.error(err); }
   };
   state.es.onerror = () => {
-    // Reconnect silently after 2 s
+    setConnBadge(false);
     setTimeout(connectSSE, 2000);
   };
+}
+
+function setConnBadge(live) {
+  const badge = document.getElementById('conn-badge');
+  const label = document.getElementById('conn-label');
+  if (live) {
+    badge.className = 'conn-badge live';
+    label.textContent = 'Live';
+  } else {
+    badge.className = 'conn-badge reconnecting';
+    label.textContent = 'Reconnecting…';
+  }
 }
 
 function handleEvent(ev) {
@@ -923,7 +1003,6 @@ function handleEvent(ev) {
 
 function appendLog(level, text) {
   const log = document.getElementById('log');
-  // Remove placeholder
   const empty = log.querySelector('.log-empty');
   if (empty) empty.remove();
 
@@ -943,6 +1022,19 @@ function clearLog() {
   state.autoScroll = true;
 }
 
+async function copyLog() {
+  const log = document.getElementById('log');
+  const text = Array.from(log.querySelectorAll('.log-line'))
+    .map(el => el.textContent)
+    .join('\n');
+  try {
+    await navigator.clipboard.writeText(text);
+    toast('Log copied to clipboard.', 'success');
+  } catch(e) {
+    toast('Clipboard not available.', 'error');
+  }
+}
+
 // ── Progress ───────────────────────────────────────────────────────────────
 
 function updateProgress(ev) {
@@ -957,6 +1049,19 @@ function updateProgress(ev) {
   document.getElementById('prog-file').textContent = ev.file ? shortPath(ev.file) : '';
   document.getElementById('prog-speed').textContent =
     ev.fps > 0.05 ? `${ev.fps.toFixed(1)} files/s` : '';
+
+  if (ev.fps > 0.05 && ev.total > ev.current) {
+    document.getElementById('prog-eta').textContent =
+      'ETA ' + fmtEta((ev.total - ev.current) / ev.fps);
+  } else {
+    document.getElementById('prog-eta').textContent = '';
+  }
+}
+
+function fmtEta(secs) {
+  if (secs < 60)   return `${Math.ceil(secs)}s`;
+  if (secs < 3600) return `${Math.floor(secs / 60)}m ${Math.ceil(secs % 60)}s`;
+  return `${Math.floor(secs / 3600)}h ${Math.floor((secs % 3600) / 60)}m`;
 }
 
 function shortPath(p) {
@@ -967,7 +1072,6 @@ function shortPath(p) {
 // ── Stats ──────────────────────────────────────────────────────────────────
 
 function updateStats(ev) {
-  // Snapshot previous values before updating so animations start from the right base
   const prev = { ...counters };
   counters.total  = ev.total;
   counters.fixed  = ev.processed;
@@ -1002,6 +1106,7 @@ function onDone(ev) {
   state.running = false;
   setRunning(false);
 
+  document.getElementById('prog-eta').textContent = '';
   const fill = document.getElementById('prog-fill');
   if (ev.ok) {
     fill.style.width    = '100%';
@@ -1028,6 +1133,10 @@ async function startProcessing() {
   if (!src) { toast('Please enter a source folder.', 'error'); return; }
   if (!dst) { toast('Please enter an output folder.', 'error'); return; }
   if (src === dst) { toast('Source and output must be different.', 'error'); return; }
+
+  // Persist on explicit start
+  localStorage.setItem('exif_src', src);
+  localStorage.setItem('exif_dst', dst);
 
   resetUI();
   state.running = true;
@@ -1075,11 +1184,12 @@ function resetUI() {
   const fill = document.getElementById('prog-fill');
   fill.style.width = '0%';
   fill.className   = 'progress-fill';
-  document.getElementById('top-bar').style.width   = '0%';
+  document.getElementById('top-bar').style.width    = '0%';
   document.getElementById('prog-label').textContent = 'Starting…';
   document.getElementById('prog-pct').textContent   = '';
   document.getElementById('prog-file').textContent  = '';
   document.getElementById('prog-speed').textContent = '';
+  document.getElementById('prog-eta').textContent   = '';
   ['s-total','s-fixed','s-nojson','s-errors'].forEach(id => {
     document.getElementById(id).textContent = '0';
   });
@@ -1094,6 +1204,7 @@ async function browse(field) {
     const d = await r.json();
     if (d.path) {
       document.getElementById(field).value = d.path;
+      localStorage.setItem('exif_' + field, d.path);
     }
   } catch(e) {
     toast('Browse dialog unavailable.', 'error');
@@ -1123,11 +1234,13 @@ function onScanProgress(ev) {
     `${ev.current.toLocaleString()} / ${ev.total.toLocaleString()} files (${pct}%)`;
 }
 
-let _pendingMatches = null;
-
 function onDuplicatesFound(ev) {
   document.getElementById('scan-overlay').classList.remove('open');
-  _pendingMatches = ev.matches;
+
+  // Re-enable buttons (may have been disabled in a previous run this session)
+  ['btn-dup-skip', 'btn-dup-keep', 'btn-dup-cancel'].forEach(id => {
+    document.getElementById(id).disabled = false;
+  });
 
   document.getElementById('dup-title').textContent =
     `${ev.count} Duplicate Pair${ev.count !== 1 ? 's' : ''} Found`;
@@ -1156,13 +1269,11 @@ function onDuplicatesFound(ev) {
 }
 
 async function decideDupes(action) {
-  // Disable all three buttons immediately to prevent double-sends
   ['btn-dup-skip', 'btn-dup-keep', 'btn-dup-cancel'].forEach(id => {
     document.getElementById(id).disabled = true;
   });
   document.getElementById('dup-modal').classList.remove('open');
   if (!action) {
-    // User cancelled — stop the pending worker
     await fetch('/api/decide', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

@@ -168,6 +168,11 @@ def api_stop():
     return jsonify({'ok': True})
 
 
+@app.route('/api/status')
+def api_status():
+    return jsonify({'running': _running})
+
+
 @app.route('/api/open-output', methods=['POST'])
 def api_open_output():
     dst = (request.get_json(force=True).get('path') or '').strip()
