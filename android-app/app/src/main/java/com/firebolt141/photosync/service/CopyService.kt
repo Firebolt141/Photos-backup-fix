@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.firebolt141.photosync.R
+import com.firebolt141.photosync.repository.CopySummary
 import com.firebolt141.photosync.repository.SyncRepository
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,11 +28,12 @@ class CopyService : Service() {
     private var copyJob: Job? = null
 
     companion object {
-        const val CHANNEL_ID    = "copy_progress"
-        const val NOTIF_ID      = 1
-        const val ACTION_START  = "START_COPY"
-        const val EXTRA_FROM_MS = "from_ms"
-        const val EXTRA_TO_MS   = "to_ms"
+        const val CHANNEL_ID     = "copy_progress"
+        const val NOTIF_ID       = 1
+        const val NOTIF_SUMMARY  = 2
+        const val ACTION_START   = "START_COPY"
+        const val EXTRA_FROM_MS  = "from_ms"
+        const val EXTRA_TO_MS    = "to_ms"
 
         val copyProgress = MutableStateFlow<CopyProgress?>(null)
     }
@@ -51,7 +53,7 @@ class CopyService : Service() {
             val fromMs = intent.getLongExtra(EXTRA_FROM_MS, 0L)
             val toMs   = intent.getLongExtra(EXTRA_TO_MS,   0L)
 
-            val initial = buildNotif("Starting copy…", 0, 0)
+            val initial = buildProgressNotif("Starting copy…", 0, 0)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 startForeground(NOTIF_ID, initial, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
             } else {
@@ -60,16 +62,19 @@ class CopyService : Service() {
 
             copyJob = scope.launch {
                 try {
-                    SyncRepository(applicationContext).copyPending(
+                    val summary = SyncRepository(applicationContext).copyPending(
                         fromMs = fromMs,
                         toMs   = toMs,
                     ) { done, total, name, speedMBps ->
                         val p = CopyProgress(done, total, name, speedMBps)
                         copyProgress.value = p
-                        notifManager.notify(NOTIF_ID, buildNotif(
+                        notifManager.notify(NOTIF_ID, buildProgressNotif(
                             if (name.isNotEmpty()) "Copying: $name" else "Done",
                             done, total
                         ))
+                    }
+                    if (summary.copied + summary.skipped + summary.failed > 0) {
+                        showSummaryNotification(summary)
                     }
                 } finally {
                     stopSelf()
@@ -87,7 +92,7 @@ class CopyService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    private fun buildNotif(text: String, done: Int, total: Int) =
+    private fun buildProgressNotif(text: String, done: Int, total: Int) =
         NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle("Photo Sync")
@@ -98,4 +103,20 @@ class CopyService : Service() {
             }
             .setOngoing(true)
             .build()
+
+    private fun showSummaryNotification(summary: CopySummary) {
+        val parts = mutableListOf("${summary.copied} copied")
+        if (summary.skipped > 0) parts += "${summary.skipped} skipped (already on drive)"
+        if (summary.failed  > 0) parts += "${summary.failed} failed"
+        notifManager.notify(
+            NOTIF_SUMMARY,
+            NotificationCompat.Builder(this, CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_launcher_foreground)
+                .setContentTitle("Sync complete")
+                .setContentText(parts.joinToString(" · "))
+                .setStyle(NotificationCompat.BigTextStyle().bigText(parts.joinToString("\n")))
+                .setAutoCancel(true)
+                .build()
+        )
+    }
 }

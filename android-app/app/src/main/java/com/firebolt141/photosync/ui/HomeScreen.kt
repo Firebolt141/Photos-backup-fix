@@ -38,6 +38,7 @@ fun HomeScreen(
     onViewQueue: () -> Unit,
     onDateRangeSelected: (fromMs: Long, toMs: Long) -> Unit,
     onClearDateRange: () -> Unit,
+    onRetryFailed: () -> Unit,
 ) {
     var showDatePicker by remember { mutableStateOf(false) }
 
@@ -113,7 +114,7 @@ fun HomeScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
 
-            // ── Stats row ────────────────────────────────────────────────
+            // ── Stats rows ───────────────────────────────────────────────
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -132,6 +133,27 @@ fun HomeScreen(
                     icon     = Icons.Default.CheckCircle,
                     color    = MaterialTheme.colorScheme.primaryContainer,
                     onColor  = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                StatCard(
+                    label    = "Skipped",
+                    value    = state.skippedCount,
+                    icon     = Icons.Default.RemoveCircle,
+                    color    = MaterialTheme.colorScheme.tertiaryContainer,
+                    onColor  = MaterialTheme.colorScheme.onTertiaryContainer,
+                    modifier = Modifier.weight(1f),
+                )
+                StatCard(
+                    label    = "Failed",
+                    value    = state.failedCount,
+                    icon     = Icons.Default.ErrorOutline,
+                    color    = MaterialTheme.colorScheme.errorContainer,
+                    onColor  = MaterialTheme.colorScheme.onErrorContainer,
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -258,6 +280,18 @@ fun HomeScreen(
                     Icon(Icons.Default.ContentCopy, null, Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
                     Text("Copy")
+                }
+            }
+
+            if (state.failedCount > 0) {
+                OutlinedButton(
+                    onClick  = onRetryFailed,
+                    enabled  = !isBusy,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.Default.Refresh, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Retry ${state.failedCount} failed file${if (state.failedCount == 1) "" else "s"}")
                 }
             }
 

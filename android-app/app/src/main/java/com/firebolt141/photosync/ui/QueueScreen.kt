@@ -20,22 +20,29 @@ import com.firebolt141.photosync.data.QueueItem
 import java.text.SimpleDateFormat
 import java.util.*
 
-private enum class Filter { All, Pending, Copied, Failed }
+private enum class Filter { All, Pending, Copied, Skipped, Failed }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QueueScreen(
     items: List<QueueItem>,
     onBack: () -> Unit,
+    onClearCopied: () -> Unit,
 ) {
     var filter by remember { mutableStateOf(Filter.All) }
+    var showClearDialog by remember { mutableStateOf(false) }
 
     val visible = when (filter) {
         Filter.All     -> items
         Filter.Pending -> items.filter { it.status == CopyStatus.PENDING }
         Filter.Copied  -> items.filter { it.status == CopyStatus.COPIED  }
-        Filter.Failed  -> items.filter { it.status == CopyStatus.FAILED || it.status == CopyStatus.SKIPPED }
+        Filter.Skipped -> items.filter { it.status == CopyStatus.SKIPPED }
+        Filter.Failed  -> items.filter { it.status == CopyStatus.FAILED  }
     }
+
+    val copiedCount  = items.count { it.status == CopyStatus.COPIED  }
+    val skippedCount = items.count { it.status == CopyStatus.SKIPPED }
+    val failedCount  = items.count { it.status == CopyStatus.FAILED  }
 
     Scaffold(
         topBar = {
@@ -52,6 +59,13 @@ fun QueueScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
+                actions = {
+                    if (copiedCount > 0) {
+                        IconButton(onClick = { showClearDialog = true }) {
+                            Icon(Icons.Default.DeleteSweep, contentDescription = "Clear copied")
+                        }
+                    }
+                },
             )
         }
     ) { pad ->
@@ -61,14 +75,29 @@ fun QueueScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Filter.entries.forEach { f ->
+                    val badge: String? = when (f) {
+                        Filter.Skipped -> if (skippedCount > 0) "$skippedCount" else null
+                        Filter.Failed  -> if (failedCount  > 0) "$failedCount"  else null
+                        else           -> null
+                    }
                     FilterChip(
                         selected = filter == f,
                         onClick  = { filter = f },
-                        label    = { Text(f.name) },
+                        label    = {
+                            if (badge != null) {
+                                Row(verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text(f.name)
+                                    Badge { Text(badge) }
+                                }
+                            } else {
+                                Text(f.name)
+                            }
+                        },
                         leadingIcon = if (filter == f) ({
                             Icon(Icons.Default.Check, null, Modifier.size(FilterChipDefaults.IconSize))
                         }) else null,
@@ -105,6 +134,21 @@ fun QueueScreen(
             }
         }
     }
+
+    if (showClearDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearDialog = false },
+            icon    = { Icon(Icons.Default.DeleteSweep, null) },
+            title   = { Text("Clear copied files?") },
+            text    = { Text("Remove $copiedCount copied item${if (copiedCount == 1) "" else "s"} from the queue. This does not delete any files from your phone or drive.") },
+            confirmButton = {
+                TextButton(onClick = { onClearCopied(); showClearDialog = false }) { Text("Clear") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearDialog = false }) { Text("Cancel") }
+            },
+        )
+    }
 }
 
 @Composable
@@ -128,14 +172,44 @@ private fun QueueRow(item: QueueItem) {
         supportingContent = {
             Column {
                 Text(dateStr, style = MaterialTheme.typography.bodySmall)
-                if (item.status == CopyStatus.FAILED && item.errorMsg != null) {
-                    Text(
-                        item.errorMsg,
-                        style    = MaterialTheme.typography.bodySmall,
-                        color    = MaterialTheme.colorScheme.error,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                when (item.status) {
+                    CopyStatus.SKIPPED -> {
+                        Text(
+                            "Already on drive — skipped",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.tertiary,
+                        )
+                        if (item.absolutePath.isNotBlank()) {
+                            Text(
+                                item.absolutePath,
+                                style    = MaterialTheme.typography.bodySmall,
+                                color    = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                    CopyStatus.FAILED -> {
+                        if (item.errorMsg != null) {
+                            Text(
+                                item.errorMsg,
+                                style    = MaterialTheme.typography.bodySmall,
+                                color    = MaterialTheme.colorScheme.error,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        if (item.absolutePath.isNotBlank()) {
+                            Text(
+                                item.absolutePath,
+                                style    = MaterialTheme.typography.bodySmall,
+                                color    = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                    else -> { /* nothing extra */ }
                 }
             }
         },

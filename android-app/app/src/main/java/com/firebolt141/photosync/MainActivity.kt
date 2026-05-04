@@ -35,12 +35,14 @@ class MainActivity : ComponentActivity() {
                             onViewQueue         = { nav.navigate("queue") },
                             onDateRangeSelected = vm::setDateRange,
                             onClearDateRange    = vm::clearDateRange,
+                            onRetryFailed       = vm::retryFailed,
                         )
                     }
                     composable("queue") {
                         QueueScreen(
-                            items  = state.queue,
-                            onBack = { nav.popBackStack() },
+                            items         = state.queue,
+                            onBack        = { nav.popBackStack() },
+                            onClearCopied = vm::clearCopied,
                         )
                     }
                 }

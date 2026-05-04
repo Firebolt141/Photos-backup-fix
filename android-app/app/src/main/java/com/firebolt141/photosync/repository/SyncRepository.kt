@@ -16,6 +16,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import java.io.IOException
 
+data class CopySummary(val copied: Int, val skipped: Int, val failed: Int)
+
 class SyncRepository(private val context: Context) {
 
     private val db    = AppDatabase.get(context)
@@ -103,11 +105,12 @@ class SyncRepository(private val context: Context) {
         fromMs: Long = 0L,
         toMs: Long = 0L,
         onProgress: suspend (done: Int, total: Int, currentName: String, speedMBps: Double) -> Unit,
-    ) = withContext(Dispatchers.IO) {
-        val driveUriStr = prefs.driveUri.first() ?: return@withContext
-        if (!StorageHelper.isDriveMounted(context, driveUriStr)) return@withContext
+    ): CopySummary = withContext(Dispatchers.IO) {
+        val driveUriStr = prefs.driveUri.first() ?: return@withContext CopySummary(0, 0, 0)
+        if (!StorageHelper.isDriveMounted(context, driveUriStr)) return@withContext CopySummary(0, 0, 0)
 
-        val root = DocumentFile.fromTreeUri(context, Uri.parse(driveUriStr)) ?: return@withContext
+        val root = DocumentFile.fromTreeUri(context, Uri.parse(driveUriStr))
+            ?: return@withContext CopySummary(0, 0, 0)
 
         val effectiveTo = if (toMs > 0) toMs else Long.MAX_VALUE
         val pending = dao.getPending().let { all ->
@@ -121,30 +124,38 @@ class SyncRepository(private val context: Context) {
         val startMs    = System.currentTimeMillis()
         var totalBytes = 0L
         var done       = 0
+        var copied     = 0
+        var skipped    = 0
+        var failed     = 0
 
         for (item in pending) {
             onProgress(done, pending.size, item.displayName, calcSpeed(totalBytes, startMs))
             try {
-                totalBytes += copyItem(item, root)
-                dao.updateStatus(item.id, CopyStatus.COPIED)
+                val bytes = copyItem(item, root)
+                if (bytes != null) {
+                    totalBytes += bytes
+                    dao.updateStatus(item.id, CopyStatus.COPIED)
+                    copied++
+                } else {
+                    dao.updateStatus(item.id, CopyStatus.SKIPPED)
+                    skipped++
+                }
             } catch (e: Exception) {
                 dao.updateStatusAndError(item.id, CopyStatus.FAILED, e.message)
+                failed++
             }
             done++
         }
         onProgress(done, pending.size, "", calcSpeed(totalBytes, startMs))
+        CopySummary(copied, skipped, failed)
     }
 
-    private fun calcSpeed(bytes: Long, startMs: Long): Double {
-        val elapsed = (System.currentTimeMillis() - startMs) / 1000.0
-        return if (elapsed > 0.5) bytes / 1_048_576.0 / elapsed else 0.0
-    }
-
-    private fun copyItem(item: QueueItem, root: DocumentFile): Long {
+    // Returns bytes written, or null if the file already exists at the destination (skip).
+    private fun copyItem(item: QueueItem, root: DocumentFile): Long? {
         val destDir = StorageHelper.resolveDestDir(root, item.dateTaken)
             ?: throw IOException("Failed to create destination directory")
 
-        if (destDir.findFile(item.displayName) != null) return 0L
+        if (destDir.findFile(item.displayName) != null) return null   // already there → skip
 
         val mimeType = item.mimeType.takeIf { it.isNotBlank() } ?: "application/octet-stream"
         val destFile = destDir.createFile(mimeType, item.displayName)
@@ -163,9 +174,16 @@ class SyncRepository(private val context: Context) {
                 } ?: throw IOException("Cannot open source: ${item.displayName}")
             } ?: throw IOException("Cannot open destination: ${item.displayName}")
         } catch (e: Exception) {
-            // Remove the incomplete destination file so the next sync can retry
             destFile.delete()
             throw e
         }
     }
+
+    private fun calcSpeed(bytes: Long, startMs: Long): Double {
+        val elapsed = (System.currentTimeMillis() - startMs) / 1000.0
+        return if (elapsed > 0.5) bytes / 1_048_576.0 / elapsed else 0.0
+    }
+
+    suspend fun retryFailed()  = withContext(Dispatchers.IO) { dao.resetFailed() }
+    suspend fun clearCopied()  = withContext(Dispatchers.IO) { dao.clearCopied() }
 }
