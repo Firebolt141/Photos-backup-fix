@@ -19,6 +19,8 @@ data class UiState(
     val queue: List<QueueItem>  = emptyList(),
     val pendingCount: Int       = 0,
     val copiedCount: Int        = 0,
+    val skippedCount: Int       = 0,
+    val failedCount: Int        = 0,
     val driveUri: String?       = null,
     val driveConnected: Boolean = false,
     val scanning: Boolean       = false,
@@ -55,6 +57,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             queue          = filtered,
             pendingCount   = filtered.count { it.status == CopyStatus.PENDING },
             copiedCount    = filtered.count { it.status == CopyStatus.COPIED },
+            skippedCount   = filtered.count { it.status == CopyStatus.SKIPPED },
+            failedCount    = filtered.count { it.status == CopyStatus.FAILED },
             driveUri       = driveUri,
             driveConnected = StorageHelper.isDriveMounted(getApplication(), driveUri),
             scanning       = scanning,
@@ -98,5 +102,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun clearDateRange() {
         viewModelScope.launch { prefs.clearDateRange() }
+    }
+
+    fun retryFailed() {
+        viewModelScope.launch { repo.retryFailed() }
+    }
+
+    fun clearCopied() {
+        viewModelScope.launch { repo.clearCopied() }
     }
 }

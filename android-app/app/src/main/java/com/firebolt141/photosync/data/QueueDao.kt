@@ -17,6 +17,12 @@ interface QueueDao {
     @Query("SELECT COUNT(*) FROM queue WHERE status = 'COPIED'")
     fun observeCopiedCount(): Flow<Int>
 
+    @Query("SELECT COUNT(*) FROM queue WHERE status = 'SKIPPED'")
+    fun observeSkippedCount(): Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM queue WHERE status = 'FAILED'")
+    fun observeFailedCount(): Flow<Int>
+
     @Query("SELECT mediaId FROM queue")
     suspend fun getAllMediaIds(): List<Long>
 
@@ -34,4 +40,10 @@ interface QueueDao {
 
     @Query("UPDATE queue SET status = :status, errorMsg = :msg WHERE id = :id")
     suspend fun updateStatusAndError(id: Long, status: CopyStatus, msg: String?)
+
+    @Query("UPDATE queue SET status = 'PENDING', errorMsg = NULL WHERE status = 'FAILED'")
+    suspend fun resetFailed()
+
+    @Query("DELETE FROM queue WHERE status = 'COPIED'")
+    suspend fun clearCopied()
 }
