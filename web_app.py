@@ -136,7 +136,8 @@ def api_start():
                     {'type': 'stats', 'total': s.total, 'processed': s.processed,
                      'no_json': s.no_json, 'errors': s.errors, 'skipped': s.skipped}
                 ),
-                on_done=lambda ok: _push({'type': 'done', 'ok': ok}),
+                on_done=lambda ok: _push({'type': 'done', 'ok': ok,
+                                          'report': str(Path(dst) / '_processing_report.json')}),
                 skip_files=eff_skip,
             )
             _processor = proc
