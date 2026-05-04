@@ -11,6 +11,7 @@ import platform
 import queue
 import socket
 import subprocess
+import sys
 import threading
 import time
 import webbrowser
@@ -243,35 +244,57 @@ def _dup_dict(m: DupMatch, root: Path) -> dict:
 
 def _pick_folder() -> str:
     """Open the OS native folder-picker dialog and return the chosen path."""
+    # Try tkinter first — ships with Python, works on all platforms, reliably
+    # appears on top of other windows.
+    try:
+        r = subprocess.run(
+            [sys.executable, '-c',
+             'import tkinter, tkinter.filedialog;'
+             'root = tkinter.Tk(); root.withdraw();'
+             'root.wm_attributes("-topmost", 1);'
+             'p = tkinter.filedialog.askdirectory(title="Select folder");'
+             'print(p) if p else None'],
+            capture_output=True, text=True, timeout=120,
+        )
+        if r.returncode == 0 and r.stdout.strip():
+            return r.stdout.strip()
+    except Exception:
+        pass
+
+    # Windows fallback: PowerShell FolderBrowserDialog.
+    # -Sta forces Single-Threaded Apartment, required for Windows Forms dialogs.
     if _SYS == 'Windows':
         ps = (
             'Add-Type -AssemblyName System.Windows.Forms;'
+            '[System.Windows.Forms.Application]::EnableVisualStyles();'
             '$d = New-Object System.Windows.Forms.FolderBrowserDialog;'
             '$d.Description = "Select folder";'
             '$d.ShowNewFolderButton = $true;'
-            '[void]$d.ShowDialog();'
-            'Write-Output $d.SelectedPath'
+            'if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {'
+            '  Write-Output $d.SelectedPath }'
         )
         try:
             r = subprocess.run(
-                ['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', ps],
+                ['powershell', '-Sta', '-NoProfile', '-ExecutionPolicy', 'Bypass',
+                 '-Command', ps],
                 capture_output=True, text=True, timeout=120,
             )
             return r.stdout.strip()
         except Exception:
             return ''
-    else:
-        for cmd in [
-            ['zenity', '--file-selection', '--directory', '--title=Select folder'],
-            ['kdialog', '--getexistingdirectory'],
-        ]:
-            try:
-                r = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-                if r.returncode == 0:
-                    return r.stdout.strip()
-            except FileNotFoundError:
-                pass
-        return ''
+
+    # Linux/macOS fallback: zenity or kdialog
+    for cmd in [
+        ['zenity', '--file-selection', '--directory', '--title=Select folder'],
+        ['kdialog', '--getexistingdirectory'],
+    ]:
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+            if r.returncode == 0:
+                return r.stdout.strip()
+        except FileNotFoundError:
+            pass
+    return ''
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
