@@ -1036,6 +1036,7 @@ function handleEvent(ev) {
     case 'done':             onDone(ev); break;
     case 'scan_start':       onScanStart(); break;
     case 'scan_progress':    onScanProgress(ev); break;
+    case 'scan_done':        onScanDone(); break;
     case 'duplicates_found': onDuplicatesFound(ev); break;
     case 'file_result':      allRecords.push(ev.record); break;
   }
@@ -1271,6 +1272,10 @@ async function openOutput() {
 function onScanStart() {
   document.getElementById('scan-overlay').classList.add('open');
   document.getElementById('scan-sub').textContent = 'Analysing files…';
+}
+
+function onScanDone() {
+  document.getElementById('scan-overlay').classList.remove('open');
 }
 
 function onScanProgress(ev) {
