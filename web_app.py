@@ -45,6 +45,13 @@ def _push(event: dict) -> None:
         pass
 
 
+def _log(lvl: str, txt: str) -> None:
+    """Push a log event to SSE *and* echo it to the terminal."""
+    _push({'type': 'log', 'level': lvl, 'text': txt})
+    prefix = {'info': 'INFO ', 'ok': 'OK   ', 'warn': 'WARN ', 'error': 'ERROR', 'file': 'FILE '}.get(lvl, lvl.upper()[:5])
+    print(f'  [{prefix}] {txt}', flush=True)
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @app.route('/')
@@ -97,6 +104,7 @@ def api_start():
             eff_skip = skip_files
 
             if check_dupes and not skip_raw:
+                print(f'\n  [SCAN ] Scanning for duplicates in: {src}', flush=True)
                 _push({'type': 'scan_start'})
                 matches = find_duplicates(
                     Path(src), Path(src),
@@ -105,6 +113,7 @@ def api_start():
                     ),
                 )
                 if matches:
+                    print(f'  [SCAN ] Found {len(matches)} duplicate pair(s).', flush=True)
                     _push({
                         'type': 'duplicates_found',
                         'count': len(matches),
@@ -113,20 +122,19 @@ def api_start():
                     _decision_event.wait(timeout=600)   # up to 10 min to review
                     if _decision_value == 'skip_dupes':
                         eff_skip = frozenset(m.file_b for m in matches)
-                        _push({'type': 'log', 'level': 'info',
-                               'text': f'Skipping {len(eff_skip)} duplicate(s).'})
+                        _log('info', f'Skipping {len(eff_skip)} duplicate(s).')
                     else:
-                        _push({'type': 'log', 'level': 'info',
-                               'text': 'Keeping all copies.'})
+                        _log('info', 'Keeping all copies.')
                 else:
-                    _push({'type': 'log', 'level': 'info',
-                           'text': 'No duplicates found — proceeding.'})
+                    print('  [SCAN ] No duplicates found.', flush=True)
+                    _push({'type': 'scan_done'})   # close overlay — no duplicates_found will follow
+                    _log('info', 'No duplicates found — proceeding.')
 
             proc = Processor(
                 src=src, dst=dst,
                 copy_unmatched=True,   # always copy every source file
                 output_mode=output_mode,
-                on_log=lambda lvl, txt: _push({'type': 'log', 'level': lvl, 'text': txt}),
+                on_log=_log,
                 on_progress=lambda cur, tot, f, fps: _push(
                     {'type': 'progress', 'current': cur, 'total': tot,
                      'file': f, 'fps': round(fps, 1)}
@@ -143,7 +151,7 @@ def api_start():
             _processor = proc
             proc.run()
         except Exception as exc:
-            _push({'type': 'log', 'level': 'error', 'text': f'Unexpected error: {exc}'})
+            _log('error', f'Unexpected error: {exc}')
             _push({'type': 'done', 'ok': False})
         finally:
             with _lock:
@@ -288,4 +296,5 @@ if __name__ == '__main__':
         daemon=True,
     ).start()
 
-    app.run(host='127.0.0.1', port=port, debug=False, threaded=True)
+    app.run(host='127.0.0.1', port=port, debug=False, threaded=True,
+            use_reloader=False)
