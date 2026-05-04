@@ -36,16 +36,38 @@ The `OffsetTimeOriginal=+00:00` tag is the critical one most tools miss — with
 
 ## Browser UI
 
-The app runs as a local web server and opens in your default browser. All features of the original desktop app are available:
+The app runs as a local web server (`127.0.0.1` only — not reachable from other devices) and opens in your default browser automatically.
 
-- **Real-time progress** — animated bar, files/sec speed, current filename
-- **Live log** — color-coded by severity (info / ok / warn / error), auto-scrolling
-- **Animated stats** — Total · Fixed · No JSON · Errors, counts animate as files are processed
-- **Native folder picker** — Browse buttons open the Windows folder dialog
-- **Duplicate scanner** — optional pre-scan identifies copies across multiple Takeout exports; a review modal lets you skip or keep them
-- **Open Output** — opens the output folder in Windows Explorer when done
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│ 📷  Google Takeout EXIF Restoration      ExifTool v12.76 ◉  ◉ Live  │
+├───────────────────────────┬──────────────────────────────────────────┤
+│  Folders                  │  ┌──────┐ ┌──────┐ ┌─────────┐ ┌──────┐│
+│  Source  C:\Takeout\…     │  │  842 │ │  791 │ │   38    │ │  13  ││
+│  Output  D:\Photos\…      │  │TOTAL │ │FIXED │ │ NO JSON │ │ERRORS││
+│                           │  └──────┘ └──────┘ └─────────┘ └──────┘│
+│  Options                  │                                          │
+│  ○ Copy unmatched files   │  Processing 791 of 842  ████████░░  94% │
+│  ○ Organise by date       │  …/2021/07/IMG_4821.jpg  ETA 4s  8.3/s  │
+│  ○ Scan for duplicates    │                                          │
+│                           │  Activity Log          [Copy] [Clear]   │
+│  [▶ Start]  [■ Stop]      │  ✓ ExifTool v12.76 — ready.            │
+│  [📂 Open Output]         │  ✓ IMG_4821.jpg — date set              │
+│                           │  ⚠ IMG_0001.png — no JSON, copied       │
+└───────────────────────────┴──────────────────────────────────────────┘
+```
 
-The server binds to `127.0.0.1` only — it is not reachable from other devices on your network.
+**Features:**
+- **Animated stats cards** — Total · Fixed · No JSON · Errors, numbers count up in real time
+- **Progress bar** — shimmer animation while running, green on completion
+- **ETA + speed** — estimated time remaining and files/sec beside the current filename
+- **Color-coded live log** — info (blue) / ok (green) / warn (orange) / error (red), auto-scrolling with Copy button
+- **Native folder picker** — Browse buttons open the OS folder dialog (no path typing needed)
+- **Duplicate scanner** — optional pre-scan; a review modal lets you skip or keep duplicate pairs
+- **Keyboard shortcuts** — Enter to start (when a path field is focused), Escape to stop
+- **Remembers your paths** — source and output folders are saved across browser sessions
+- **Connection indicator** — "◉ Live" badge turns amber during reconnect; UI recovers state automatically
+- **Open Output** — opens the output folder in Explorer/Finder when done
 
 ---
 
