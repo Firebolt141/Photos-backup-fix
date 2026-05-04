@@ -27,7 +27,7 @@ if ! python3 -c "import flask" &>/dev/null; then
   echo "[session-start] Installing Flask..."
   python3 -m pip install flask --quiet --disable-pip-version-check --ignore-installed
 else
-  echo "[session-start] Flask $(python3 -c 'import flask; print(flask.__version__)') already installed."
+  echo "[session-start] Flask $(python3 -c 'import importlib.metadata; print(importlib.metadata.version("flask"))') already installed."
 fi
 
 # ── Python sanity check ───────────────────────────────────────────────────────
