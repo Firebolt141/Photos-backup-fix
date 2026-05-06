@@ -40,6 +40,7 @@ fun HomeScreen(
     onClearDateRange: () -> Unit,
     onRetryFailed: () -> Unit,
     onRenameOldFolders: () -> Unit,
+    onFixMissingExif: () -> Unit,
 ) {
     var showDatePicker by remember { mutableStateOf(false) }
 
@@ -317,6 +318,31 @@ fun HomeScreen(
                 if (state.renameStatus.isNotEmpty() && !state.renaming) {
                     Text(
                         state.renameStatus,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
+                // ── Fix missing EXIF ─────────────────────────────────────
+                OutlinedButton(
+                    onClick  = onFixMissingExif,
+                    enabled  = !isBusy && !state.renaming && !state.fixingExif,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    if (state.fixingExif) {
+                        CircularProgressIndicator(
+                            modifier    = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                        )
+                    } else {
+                        Icon(Icons.Default.AutoFixHigh, null, Modifier.size(18.dp))
+                    }
+                    Spacer(Modifier.width(6.dp))
+                    Text(if (state.fixingExif) "Writing EXIF dates…" else "Fix Missing EXIF Dates")
+                }
+                if (state.exifFixStatus.isNotEmpty() && !state.fixingExif) {
+                    Text(
+                        state.exifFixStatus,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

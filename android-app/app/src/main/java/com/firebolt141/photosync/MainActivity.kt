@@ -37,6 +37,7 @@ class MainActivity : ComponentActivity() {
                             onClearDateRange    = vm::clearDateRange,
                             onRetryFailed       = vm::retryFailed,
                             onRenameOldFolders  = vm::renameOldFolders,
+                            onFixMissingExif    = vm::fixMissingExif,
                         )
                     }
                     composable("queue") {
