@@ -9,6 +9,11 @@ import java.util.TimeZone
 
 object StorageHelper {
 
+    private val MONTHS = arrayOf(
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+    )
+
     fun isDriveMounted(context: Context, treeUriString: String?): Boolean {
         if (treeUriString.isNullOrBlank()) return false
         return try {
@@ -32,11 +37,42 @@ object StorageHelper {
         val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
             timeInMillis = dateTakenMs
         }
-        val year  = cal.get(Calendar.YEAR).toString()
-        val month = "%02d".format(cal.get(Calendar.MONTH) + 1)
-        val day   = "%02d".format(cal.get(Calendar.DAY_OF_MONTH))
-        val yDir  = getOrCreateDir(root, year)   ?: return null
-        val mDir  = getOrCreateDir(yDir, month)  ?: return null
-        return getOrCreateDir(mDir, day)
+        val year      = cal.get(Calendar.YEAR).toString()
+        val monthName = MONTHS[cal.get(Calendar.MONTH)]
+        val dayName   = "$monthName ${cal.get(Calendar.DAY_OF_MONTH)}"
+        val yDir = getOrCreateDir(root, year)      ?: return null
+        val mDir = getOrCreateDir(yDir, monthName) ?: return null
+        return getOrCreateDir(mDir, dayName)
+    }
+
+    /**
+     * Renames legacy numeric month/day folders on the drive to spelled-out names.
+     * e.g. 2024/01/15 → 2024/January/January 15
+     *
+     * Day folders are renamed first (while the parent URI is still valid), then
+     * the month folder is renamed.
+     */
+    fun renameLegacyFolders(root: DocumentFile, onProgress: (String) -> Unit): Pair<Int, Int> {
+        var renamed = 0
+        var errors  = 0
+        for (yearDir in root.listFiles()) {
+            if (!yearDir.isDirectory) continue
+            val yearName = yearDir.name?.takeIf { it.matches(Regex("\\d{4}")) } ?: continue
+            for (monthDir in yearDir.listFiles()) {
+                if (!monthDir.isDirectory) continue
+                val monthIdx = monthDir.name?.toIntOrNull()?.takeIf { it in 1..12 } ?: continue
+                val mName = MONTHS[monthIdx - 1]
+                for (dayDir in monthDir.listFiles()) {
+                    if (!dayDir.isDirectory) continue
+                    val dayNum = dayDir.name?.toIntOrNull()?.takeIf { it in 1..31 } ?: continue
+                    val newDayName = "$mName $dayNum"
+                    onProgress("$yearName/$mName/$newDayName")
+                    if (dayDir.renameTo(newDayName)) renamed++ else errors++
+                }
+                onProgress("$yearName/$mName")
+                if (monthDir.renameTo(mName)) renamed++ else errors++
+            }
+        }
+        return renamed to errors
     }
 }

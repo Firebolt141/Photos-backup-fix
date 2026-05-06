@@ -186,4 +186,13 @@ class SyncRepository(private val context: Context) {
 
     suspend fun retryFailed()  = withContext(Dispatchers.IO) { dao.resetFailed() }
     suspend fun clearCopied()  = withContext(Dispatchers.IO) { dao.clearCopied() }
+
+    suspend fun renameLegacyFolders(onProgress: (String) -> Unit): Pair<Int, Int> =
+        withContext(Dispatchers.IO) {
+            val driveUriStr = prefs.driveUri.first() ?: return@withContext 0 to 0
+            if (!StorageHelper.isDriveMounted(context, driveUriStr)) return@withContext 0 to 0
+            val root = DocumentFile.fromTreeUri(context, Uri.parse(driveUriStr))
+                ?: return@withContext 0 to 0
+            StorageHelper.renameLegacyFolders(root, onProgress)
+        }
 }

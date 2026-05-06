@@ -27,17 +27,20 @@ data class UiState(
     val fromDateMs: Long        = 0L,
     val toDateMs: Long          = 0L,
     val copyProgress: CopyProgress? = null,
+    val renaming: Boolean       = false,
+    val renameStatus: String    = "",
 )
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
 
-    private val repo   = SyncRepository(app)
-    private val prefs  = Prefs(app)
+    private val repo      = SyncRepository(app)
+    private val prefs     = Prefs(app)
     private val _scanning = MutableStateFlow(false)
+    private val _renameUi = MutableStateFlow(false to "")
 
     private val _dateRange = combine(prefs.fromDateMs, prefs.toDateMs) { f, t -> f to t }
 
-    val state: StateFlow<UiState> = combine(
+    private val _baseState = combine(
         repo.queueFlow,
         prefs.driveUri,
         _scanning,
@@ -66,6 +69,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             toDateMs       = toMs,
             copyProgress   = progress,
         )
+    }
+
+    val state: StateFlow<UiState> = combine(_baseState, _renameUi) { base, (renaming, status) ->
+        base.copy(renaming = renaming, renameStatus = status)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UiState())
 
     fun onDriveSelected(uri: Uri) {
@@ -110,5 +117,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun clearCopied() {
         viewModelScope.launch { repo.clearCopied() }
+    }
+
+    fun renameOldFolders() {
+        viewModelScope.launch {
+            _renameUi.value = true to "Starting…"
+            val (renamed, errors) = repo.renameLegacyFolders { path ->
+                _renameUi.value = true to path
+            }
+            val summary = when {
+                renamed == 0 && errors == 0 -> "No numeric folders found to rename"
+                errors == 0 -> "Done — $renamed folder${if (renamed == 1) "" else "s"} renamed"
+                else -> "Done — $renamed renamed, $errors failed"
+            }
+            _renameUi.value = false to summary
+        }
     }
 }

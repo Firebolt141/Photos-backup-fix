@@ -458,6 +458,13 @@ class Processor:
             except ValueError:
                 rel_dst = dst_file.name
 
+            kw: dict = dict(
+                capture_output=True, text=True,
+                encoding='utf-8', errors='replace', timeout=120,
+            )
+            if _SYS == 'Windows':
+                kw['creationflags'] = subprocess.CREATE_NO_WINDOW
+
             if json_path:
                 try:
                     shutil.copy2(src_file, dst_file)
@@ -472,12 +479,6 @@ class Processor:
 
                 args = build_exiftool_args(dst_file, meta)
                 try:
-                    kw: dict = dict(
-                        capture_output=True, text=True,
-                        encoding='utf-8', errors='replace', timeout=120,
-                    )
-                    if _SYS == 'Windows':
-                        kw['creationflags'] = subprocess.CREATE_NO_WINDOW
                     r = subprocess.run(args, **kw)
                     if r.returncode == 0:
                         parts = []
@@ -511,9 +512,8 @@ class Processor:
                     self.stats.errors += 1
                     self._record(FileRecord(rel_src, 'error', dest=rel_dst, error=msg))
             else:
-                # Always copy files with no JSON sidecar so every source file
-                # has a corresponding output file regardless of metadata status.
-                self.stats.no_json += 1
+                # No JSON sidecar — copy the file first, then attempt to stamp
+                # the date if the filename encodes one (e.g. IMG_20240315_…).
                 try:
                     shutil.copy2(src_file, dst_file)
                 except Exception as e:
@@ -524,10 +524,32 @@ class Processor:
                     self._record(FileRecord(rel_src, 'error', error=msg))
                     self.on_stats(self.stats)
                     continue
-                hint = (f' → {dst_file.relative_to(self.dst)}'
-                        if self.output_mode == 'date' else '')
-                self.on_log('warn', f'  ! No JSON sidecar — copied as-is{hint}')
-                self._record(FileRecord(rel_src, 'no_json_copied', dest=rel_dst))
+
+                if eff_ts:
+                    args = build_exiftool_args(dst_file, Meta(timestamp=eff_ts))
+                    try:
+                        r = subprocess.run(args, **kw)
+                        if r.returncode == 0:
+                            dt = datetime.fromtimestamp(eff_ts, tz=timezone.utc)
+                            date_str = dt.strftime('%Y-%m-%d %H:%M UTC')
+                            self.on_log('ok', f'  ✓ Date from filename: {date_str}')
+                            self.stats.processed += 1
+                            self._record(FileRecord(rel_src, 'fixed', dest=rel_dst, date=date_str))
+                        else:
+                            err = (r.stderr or r.stdout).strip()[:140]
+                            self.on_log('warn', f'  ! No JSON — ExifTool failed ({err}), copied as-is')
+                            self.stats.no_json += 1
+                            self._record(FileRecord(rel_src, 'no_json_copied', dest=rel_dst))
+                    except subprocess.TimeoutExpired:
+                        self.on_log('warn', '  ! No JSON — ExifTool timed out, copied as-is')
+                        self.stats.no_json += 1
+                        self._record(FileRecord(rel_src, 'no_json_copied', dest=rel_dst))
+                else:
+                    hint = (f' → {dst_file.relative_to(self.dst)}'
+                            if self.output_mode == 'date' else '')
+                    self.on_log('warn', f'  ! No JSON sidecar — copied as-is{hint}')
+                    self.stats.no_json += 1
+                    self._record(FileRecord(rel_src, 'no_json_copied', dest=rel_dst))
 
             self.on_stats(self.stats)
 
@@ -538,7 +560,7 @@ class Processor:
         self.on_log('info',
             f'Finished.  '
             f'Fixed: {self.stats.processed}  |  '
-            f'No JSON: {self.stats.no_json}  |  '
+            f'No date: {self.stats.no_json}  |  '
             f'Errors: {self.stats.errors}  |  '
             f'Skipped: {self.stats.skipped}'
         )

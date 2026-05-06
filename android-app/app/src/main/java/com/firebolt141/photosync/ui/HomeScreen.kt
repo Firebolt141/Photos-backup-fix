@@ -39,6 +39,7 @@ fun HomeScreen(
     onDateRangeSelected: (fromMs: Long, toMs: Long) -> Unit,
     onClearDateRange: () -> Unit,
     onRetryFailed: () -> Unit,
+    onRenameOldFolders: () -> Unit,
 ) {
     var showDatePicker by remember { mutableStateOf(false) }
 
@@ -292,6 +293,33 @@ fun HomeScreen(
                     Icon(Icons.Default.Refresh, null, Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
                     Text("Retry ${state.failedCount} failed file${if (state.failedCount == 1) "" else "s"}")
+                }
+            }
+
+            // ── Rename legacy folders ────────────────────────────────────
+            if (state.driveConnected) {
+                OutlinedButton(
+                    onClick  = onRenameOldFolders,
+                    enabled  = !isBusy && !state.renaming,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    if (state.renaming) {
+                        CircularProgressIndicator(
+                            modifier    = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                        )
+                    } else {
+                        Icon(Icons.Default.DriveFileRenameOutline, null, Modifier.size(18.dp))
+                    }
+                    Spacer(Modifier.width(6.dp))
+                    Text(if (state.renaming) "Renaming…" else "Rename Old Month/Day Folders")
+                }
+                if (state.renameStatus.isNotEmpty() && !state.renaming) {
+                    Text(
+                        state.renameStatus,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
 

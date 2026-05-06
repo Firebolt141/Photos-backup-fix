@@ -36,6 +36,7 @@ class MainActivity : ComponentActivity() {
                             onDateRangeSelected = vm::setDateRange,
                             onClearDateRange    = vm::clearDateRange,
                             onRetryFailed       = vm::retryFailed,
+                            onRenameOldFolders  = vm::renameOldFolders,
                         )
                     }
                     composable("queue") {
