@@ -15,22 +15,4 @@
         android:fillColor="#D8F3DC"
         android:pathData="M54,26 L42,52 L66,52 Z" />
 
-    <!-- Arc over the peak (orange stroke) -->
-    <path
-        android:fillColor="#00000000"
-        android:strokeColor="#F5A623"
-        android:strokeWidth="6"
-        android:strokeLineCap="round"
-        android:pathData="M22,72 Q54,8 88,72" />
-
-    <!-- Arrowhead at arc end: triangle pointing up, rotated 152° CW to match arc tangent -->
-    <group
-        android:pivotX="88"
-        android:pivotY="72"
-        android:rotation="152">
-        <path
-            android:fillColor="#F5A623"
-            android:pathData="M88,62 L81,74 L95,74 Z" />
-    </group>
-
 </vector>

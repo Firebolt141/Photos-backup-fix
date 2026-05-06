@@ -41,6 +41,7 @@ fun HomeScreen(
     onRetryFailed: () -> Unit,
     onRenameOldFolders: () -> Unit,
     onFixMissingExif: () -> Unit,
+    onOpenTakeout: () -> Unit,
 ) {
     var showDatePicker by remember { mutableStateOf(false) }
 
@@ -356,6 +357,41 @@ fun HomeScreen(
                 exit    = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
             ) {
                 state.copyProgress?.let { CopyProgressCard(it) }
+            }
+
+            // ── Process Takeout entry ─────────────────────────────────────
+            ElevatedCard(
+                onClick   = onOpenTakeout,
+                modifier  = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    Modifier.padding(16.dp),
+                    verticalAlignment     = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Icon(
+                        Icons.Default.FolderZip, null,
+                        Modifier.size(24.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            "Process Google Takeout",
+                            style      = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            "Fix EXIF dates, GPS & descriptions from JSON sidecars",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Icon(
+                        Icons.Default.ChevronRight, null,
+                        Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
 
             Spacer(Modifier.height(8.dp))

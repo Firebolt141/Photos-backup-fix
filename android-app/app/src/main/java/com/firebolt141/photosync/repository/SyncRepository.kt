@@ -208,4 +208,22 @@ class SyncRepository(private val context: Context) {
             ?: return@withContext ExifFixer.ExifFixResult()
         ExifFixer.fixMissingExif(root, context, onProgress)
     }
+
+    suspend fun processTakeout(
+        sourceUri:  String,
+        options:    com.firebolt141.ubertrag.util.TakeoutOptions,
+        onProgress: (done: Int, total: Int, name: String) -> Unit,
+    ) = withContext(Dispatchers.IO) {
+        val driveUriStr = prefs.driveUri.first()
+            ?: return@withContext com.firebolt141.ubertrag.util.TakeoutResult()
+        if (!StorageHelper.isDriveMounted(context, driveUriStr))
+            return@withContext com.firebolt141.ubertrag.util.TakeoutResult()
+        val sourceRoot = DocumentFile.fromTreeUri(context, Uri.parse(sourceUri))
+            ?: return@withContext com.firebolt141.ubertrag.util.TakeoutResult()
+        val outputRoot = DocumentFile.fromTreeUri(context, Uri.parse(driveUriStr))
+            ?: return@withContext com.firebolt141.ubertrag.util.TakeoutResult()
+        com.firebolt141.ubertrag.util.TakeoutProcessor.process(
+            sourceRoot, outputRoot, context, options, onProgress
+        )
+    }
 }

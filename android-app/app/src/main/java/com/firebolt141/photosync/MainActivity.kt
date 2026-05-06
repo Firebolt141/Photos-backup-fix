@@ -12,6 +12,7 @@ import androidx.navigation.compose.rememberNavController
 import com.firebolt141.ubertrag.ui.HomeScreen
 import com.firebolt141.ubertrag.ui.MainViewModel
 import com.firebolt141.ubertrag.ui.QueueScreen
+import com.firebolt141.ubertrag.ui.TakeoutScreen
 import com.firebolt141.ubertrag.ui.theme.UbertragTheme
 
 class MainActivity : ComponentActivity() {
@@ -38,6 +39,7 @@ class MainActivity : ComponentActivity() {
                             onRetryFailed       = vm::retryFailed,
                             onRenameOldFolders  = vm::renameOldFolders,
                             onFixMissingExif    = vm::fixMissingExif,
+                            onOpenTakeout       = { nav.navigate("takeout") },
                         )
                     }
                     composable("queue") {
@@ -46,6 +48,9 @@ class MainActivity : ComponentActivity() {
                             onBack        = { nav.popBackStack() },
                             onClearCopied = vm::clearCopied,
                         )
+                    }
+                    composable("takeout") {
+                        TakeoutScreen(onBack = { nav.popBackStack() })
                     }
                 }
             }
