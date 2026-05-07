@@ -219,58 +219,6 @@ fun TakeoutScreen(
 }
 
 @Composable
-private fun FolderPickerCard(
-    title:   String,
-    subtitle: String,
-    icon:    androidx.compose.ui.graphics.vector.ImageVector,
-    name:    String,
-    enabled: Boolean,
-    onPick:  () -> Unit,
-) {
-    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(icon, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(8.dp))
-                Column {
-                    Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                    Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-
-            if (name.isNotBlank()) {
-                Row(
-                    verticalAlignment     = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Icon(
-                        Icons.Default.CheckCircle, null,
-                        Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                    Text(
-                        name,
-                        style    = MaterialTheme.typography.bodyMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
-
-            FilledTonalButton(
-                onClick  = onPick,
-                enabled  = enabled,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Icon(Icons.Default.FolderOpen, null, Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
-                Text(if (name.isBlank()) "Select Folder" else "Change Folder")
-            }
-        }
-    }
-}
-
-@Composable
 private fun ResultCard(r: TakeoutResult, onDismiss: () -> Unit) {
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
