@@ -10,6 +10,7 @@ import com.firebolt141.ubertrag.data.CopyStatus
 import com.firebolt141.ubertrag.data.Prefs
 import com.firebolt141.ubertrag.data.QueueItem
 import com.firebolt141.ubertrag.util.DateExtractor
+import com.firebolt141.ubertrag.util.ExifFixResult
 import com.firebolt141.ubertrag.util.ExifFixer
 import com.firebolt141.ubertrag.util.StorageHelper
 import kotlinx.coroutines.Dispatchers
@@ -201,11 +202,11 @@ class SyncRepository(private val context: Context) {
         onProgress: (current: Int, total: Int, name: String) -> Unit,
     ) = withContext(Dispatchers.IO) {
         val driveUriStr = prefs.driveUri.first()
-            ?: return@withContext ExifFixer.ExifFixResult()
+            ?: return@withContext ExifFixResult()
         if (!StorageHelper.isDriveMounted(context, driveUriStr))
-            return@withContext ExifFixer.ExifFixResult()
+            return@withContext ExifFixResult()
         val root = DocumentFile.fromTreeUri(context, Uri.parse(driveUriStr))
-            ?: return@withContext ExifFixer.ExifFixResult()
+            ?: return@withContext ExifFixResult()
         ExifFixer.fixMissingExif(root, context, onProgress)
     }
 
