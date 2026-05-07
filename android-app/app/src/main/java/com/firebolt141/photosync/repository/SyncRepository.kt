@@ -3,6 +3,7 @@ package com.firebolt141.ubertrag.repository
 import android.content.ContentUris
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import android.provider.MediaStore
 import androidx.documentfile.provider.DocumentFile
 import com.firebolt141.ubertrag.data.AppDatabase
@@ -212,17 +213,29 @@ class SyncRepository(private val context: Context) {
 
     suspend fun processTakeout(
         sourceUri:  String,
+        outputUri:  String,
         options:    com.firebolt141.ubertrag.util.TakeoutOptions,
         onProgress: (done: Int, total: Int, name: String) -> Unit,
     ) = withContext(Dispatchers.IO) {
-        val driveUriStr = prefs.driveUri.first()
-            ?: return@withContext com.firebolt141.ubertrag.util.TakeoutResult()
-        if (!StorageHelper.isDriveMounted(context, driveUriStr))
-            return@withContext com.firebolt141.ubertrag.util.TakeoutResult()
+        Log.d("SyncRepository", "processTakeout start — source=$sourceUri output=$outputUri")
+
         val sourceRoot = DocumentFile.fromTreeUri(context, Uri.parse(sourceUri))
-            ?: return@withContext com.firebolt141.ubertrag.util.TakeoutResult()
-        val outputRoot = DocumentFile.fromTreeUri(context, Uri.parse(driveUriStr))
-            ?: return@withContext com.firebolt141.ubertrag.util.TakeoutResult()
+        if (sourceRoot == null) {
+            Log.e("SyncRepository", "processTakeout: cannot open source folder — uri=$sourceUri")
+            return@withContext com.firebolt141.ubertrag.util.TakeoutResult(
+                errorMsg = "Cannot open the selected source folder. Try selecting it again."
+            )
+        }
+
+        val outputRoot = DocumentFile.fromTreeUri(context, Uri.parse(outputUri))
+        if (outputRoot == null) {
+            Log.e("SyncRepository", "processTakeout: cannot open output folder — uri=$outputUri")
+            return@withContext com.firebolt141.ubertrag.util.TakeoutResult(
+                errorMsg = "Cannot open the selected output folder. Try selecting it again."
+            )
+        }
+
+        Log.d("SyncRepository", "processTakeout: source=${sourceRoot.name} output=${outputRoot.name}")
         com.firebolt141.ubertrag.util.TakeoutProcessor.process(
             sourceRoot, outputRoot, context, options, onProgress
         )

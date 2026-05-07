@@ -33,6 +33,10 @@ fun TakeoutScreen(
         ActivityResultContracts.OpenDocumentTree()
     ) { uri -> uri?.let(vm::onSourceSelected) }
 
+    val outputPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri -> uri?.let(vm::onOutputSelected) }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -66,66 +70,36 @@ fun TakeoutScreen(
                         Modifier.size(20.dp).padding(top = 2.dp),
                         tint = MaterialTheme.colorScheme.primary,
                     )
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            "Reads JSON sidecars from your Takeout export and writes " +
-                            "correct dates, GPS, and descriptions into JPEG / PNG / WebP files. " +
-                            "HEIC, RAW, and video files are copied to the right date folder " +
-                            "but cannot have EXIF written.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+                    Text(
+                        "Reads JSON sidecars from your Takeout export and writes " +
+                        "correct dates, GPS, and descriptions into JPEG / PNG / WebP files. " +
+                        "HEIC, RAW, and video files are copied to the right date folder " +
+                        "but cannot have EXIF written.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
 
             // ── Source folder ────────────────────────────────────────────
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            Icons.Default.FolderZip, null,
-                            Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            "Takeout Source Folder",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                    }
+            FolderPickerCard(
+                title    = "Takeout Source Folder",
+                subtitle = "The folder exported from Google Takeout",
+                icon     = Icons.Default.FolderZip,
+                name     = state.sourceName,
+                enabled  = !state.running,
+                onPick   = { sourcePicker.launch(null) },
+            )
 
-                    if (state.sourceName.isNotBlank()) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            Icon(
-                                Icons.Default.CheckCircle, null,
-                                Modifier.size(16.dp),
-                                tint = MaterialTheme.colorScheme.primary,
-                            )
-                            Text(
-                                state.sourceName,
-                                style = MaterialTheme.typography.bodyMedium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    }
-
-                    FilledTonalButton(
-                        onClick   = { sourcePicker.launch(null) },
-                        enabled   = !state.running,
-                        modifier  = Modifier.fillMaxWidth(),
-                    ) {
-                        Icon(Icons.Default.FolderOpen, null, Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text(if (state.sourceName.isBlank()) "Select Takeout Folder" else "Change Folder")
-                    }
-                }
-            }
+            // ── Output folder ────────────────────────────────────────────
+            FolderPickerCard(
+                title    = "Output Folder",
+                subtitle = "Where to copy files (drive, internal storage, etc.)",
+                icon     = Icons.Default.DriveFileMove,
+                name     = state.outputName,
+                enabled  = !state.running,
+                onPick   = { outputPicker.launch(null) },
+            )
 
             // ── Options ──────────────────────────────────────────────────
             ElevatedCard(modifier = Modifier.fillMaxWidth()) {
@@ -139,13 +113,13 @@ fun TakeoutScreen(
                         Spacer(Modifier.width(8.dp))
                         Text(
                             "Options",
-                            style = MaterialTheme.typography.titleSmall,
+                            style      = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold,
                         )
                     }
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
+                        modifier              = Modifier.fillMaxWidth(),
+                        verticalAlignment     = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
                         Column(Modifier.weight(1f)) {
@@ -160,9 +134,9 @@ fun TakeoutScreen(
                             )
                         }
                         Switch(
-                            checked  = state.skipIfHasExif,
+                            checked         = state.skipIfHasExif,
                             onCheckedChange = vm::setSkipIfHasExif,
-                            enabled  = !state.running,
+                            enabled         = !state.running,
                         )
                     }
                 }
@@ -171,7 +145,7 @@ fun TakeoutScreen(
             // ── Process button ───────────────────────────────────────────
             Button(
                 onClick  = vm::startProcessing,
-                enabled  = state.sourceUri.isNotBlank() && !state.running,
+                enabled  = state.sourceUri.isNotBlank() && state.outputUri.isNotBlank() && !state.running,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 if (state.running) {
@@ -206,7 +180,7 @@ fun TakeoutScreen(
                         ) {
                             Text(
                                 "Processing files…",
-                                style = MaterialTheme.typography.titleSmall,
+                                style      = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.SemiBold,
                             )
                             Text(
@@ -236,7 +210,7 @@ fun TakeoutScreen(
             }
 
             // ── Results ──────────────────────────────────────────────────
-            state.result?.let { ResultCard(it) }
+            state.result?.let { ResultCard(it, vm::clearResult) }
 
             Spacer(Modifier.height(8.dp))
         }
@@ -244,9 +218,94 @@ fun TakeoutScreen(
 }
 
 @Composable
-private fun ResultCard(r: TakeoutResult) {
+private fun FolderPickerCard(
+    title:   String,
+    subtitle: String,
+    icon:    androidx.compose.ui.graphics.vector.ImageVector,
+    name:    String,
+    enabled: Boolean,
+    onPick:  () -> Unit,
+) {
+    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(icon, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(8.dp))
+                Column {
+                    Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+
+            if (name.isNotBlank()) {
+                Row(
+                    verticalAlignment     = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Icon(
+                        Icons.Default.CheckCircle, null,
+                        Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        name,
+                        style    = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+
+            FilledTonalButton(
+                onClick  = onPick,
+                enabled  = enabled,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(Icons.Default.FolderOpen, null, Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(if (name.isBlank()) "Select Folder" else "Change Folder")
+            }
+        }
+    }
+}
+
+@Composable
+private fun ResultCard(r: TakeoutResult, onDismiss: () -> Unit) {
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+
+            // Error state
+            if (r.errorMsg.isNotBlank()) {
+                Row(
+                    verticalAlignment     = Alignment.Top,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Icon(
+                        Icons.Default.ErrorOutline, null,
+                        Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.error,
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            "Could not start processing",
+                            style      = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color      = MaterialTheme.colorScheme.error,
+                        )
+                        Text(
+                            r.errorMsg,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
+                    Text("Dismiss")
+                }
+                return@Column
+            }
+
+            // Success state
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     Icons.Default.CheckCircle, null,
@@ -256,22 +315,22 @@ private fun ResultCard(r: TakeoutResult) {
                 Spacer(Modifier.width(8.dp))
                 Text(
                     "Done — ${r.total} file${if (r.total == 1) "" else "s"} processed",
-                    style = MaterialTheme.typography.titleSmall,
+                    style      = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                 )
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                ResultRow("EXIF written (JSON sidecar)",   r.fixed,           Icons.Default.AutoFixHigh)
-                ResultRow("EXIF written (filename date)", r.fromFilename,     Icons.Default.TextFields)
+                ResultRow("EXIF written (JSON sidecar)",         r.fixed,           Icons.Default.AutoFixHigh)
+                ResultRow("EXIF written (filename date)",        r.fromFilename,    Icons.Default.TextFields)
                 if (r.skippedExisting > 0)
-                    ResultRow("Already had date — skipped", r.skippedExisting, Icons.Default.SkipNext)
+                    ResultRow("Already had date — skipped",      r.skippedExisting, Icons.Default.SkipNext)
                 if (r.noDate > 0)
-                    ResultRow("No date found — copied as-is", r.noDate,       Icons.Default.HelpOutline)
+                    ResultRow("No date found — copied as-is",    r.noDate,          Icons.Default.HelpOutline)
                 if (r.unsupported > 0)
-                    ResultRow("Copied (HEIC/video — no EXIF write)", r.unsupported, Icons.Default.Warning)
+                    ResultRow("Copied (HEIC/video — no EXIF)",   r.unsupported,     Icons.Default.Warning)
                 if (r.errors > 0)
-                    ResultRow("Errors", r.errors,                              Icons.Default.ErrorOutline)
+                    ResultRow("Errors",                          r.errors,          Icons.Default.ErrorOutline)
             }
         }
     }
@@ -284,9 +343,6 @@ private fun ResultRow(label: String, count: Int, icon: androidx.compose.ui.graph
         verticalAlignment     = Alignment.CenterVertically,
     ) {
         Icon(icon, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(
-            "$label: $count",
-            style = MaterialTheme.typography.bodySmall,
-        )
+        Text("$label: $count", style = MaterialTheme.typography.bodySmall)
     }
 }

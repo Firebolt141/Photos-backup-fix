@@ -16,6 +16,8 @@ import kotlinx.coroutines.launch
 data class TakeoutUiState(
     val sourceUri:     String         = "",
     val sourceName:    String         = "",
+    val outputUri:     String         = "",
+    val outputName:    String         = "",
     val skipIfHasExif: Boolean        = true,
     val running:       Boolean        = false,
     val done:          Int            = 0,
@@ -32,11 +34,19 @@ class TakeoutViewModel(app: Application) : AndroidViewModel(app) {
     val state: StateFlow<TakeoutUiState> = _state.asStateFlow()
 
     fun onSourceSelected(uri: Uri) {
-        val name = uri.lastPathSegment
-            ?.substringAfterLast('/')
-            ?.substringAfterLast(':')
-            ?: uri.toString()
-        _state.update { it.copy(sourceUri = uri.toString(), sourceName = name, result = null) }
+        _state.update { it.copy(
+            sourceUri  = uri.toString(),
+            sourceName = displayName(uri),
+            result     = null,
+        ) }
+    }
+
+    fun onOutputSelected(uri: Uri) {
+        _state.update { it.copy(
+            outputUri  = uri.toString(),
+            outputName = displayName(uri),
+            result     = null,
+        ) }
     }
 
     fun setSkipIfHasExif(value: Boolean) {
@@ -44,12 +54,15 @@ class TakeoutViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun startProcessing() {
-        val srcUri = _state.value.sourceUri.takeIf { it.isNotBlank() } ?: return
+        val s = _state.value
+        val srcUri = s.sourceUri.takeIf { it.isNotBlank() } ?: return
+        val outUri = s.outputUri.takeIf { it.isNotBlank() } ?: return
         viewModelScope.launch {
             _state.update { it.copy(running = true, done = 0, total = 0, currentFile = "", result = null) }
             val result = repo.processTakeout(
                 sourceUri = srcUri,
-                options   = TakeoutOptions(skipIfHasExif = _state.value.skipIfHasExif),
+                outputUri = outUri,
+                options   = TakeoutOptions(skipIfHasExif = s.skipIfHasExif),
             ) { done, total, name ->
                 _state.update { it.copy(done = done, total = total, currentFile = name) }
             }
@@ -60,4 +73,10 @@ class TakeoutViewModel(app: Application) : AndroidViewModel(app) {
     fun clearResult() {
         _state.update { it.copy(result = null) }
     }
+
+    private fun displayName(uri: Uri) =
+        uri.lastPathSegment
+            ?.substringAfterLast('/')
+            ?.substringAfterLast(':')
+            ?: uri.toString()
 }

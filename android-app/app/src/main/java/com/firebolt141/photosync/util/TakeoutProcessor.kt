@@ -1,6 +1,7 @@
 package com.firebolt141.ubertrag.util
 
 import android.content.Context
+import android.util.Log
 import androidx.documentfile.provider.DocumentFile
 import androidx.exifinterface.media.ExifInterface
 import org.json.JSONObject
@@ -24,18 +25,21 @@ data class TakeoutOptions(
 )
 
 data class TakeoutResult(
-    val total:           Int = 0,
-    val fixed:           Int = 0,  // date+GPS written from JSON sidecar
-    val fromFilename:    Int = 0,  // date written from filename only
-    val noDate:          Int = 0,  // no JSON, no filename date — copied as-is
-    val skippedExisting: Int = 0,  // already had EXIF date, not modified
-    val unsupported:     Int = 0,  // HEIC / video / RAW — copied, no EXIF write
-    val errors:          Int = 0,
+    val total:           Int    = 0,
+    val fixed:           Int    = 0,  // date+GPS written from JSON sidecar
+    val fromFilename:    Int    = 0,  // date written from filename only
+    val noDate:          Int    = 0,  // no JSON, no filename date — copied as-is
+    val skippedExisting: Int    = 0,  // already had EXIF date, not modified
+    val unsupported:     Int    = 0,  // HEIC / video / RAW — copied, no EXIF write
+    val errors:          Int    = 0,
+    val errorMsg:        String = "", // non-blank when processing could not start
 )
 
 // ── Processor ─────────────────────────────────────────────────────────────────
 
 object TakeoutProcessor {
+
+    private const val TAG = "TakeoutProcessor"
 
     private val IMAGE_EXTS = setOf(
         "jpg", "jpeg", "png", "gif", "bmp", "tiff", "tif",
@@ -155,8 +159,14 @@ object TakeoutProcessor {
         options:    TakeoutOptions,
         onProgress: (done: Int, total: Int, name: String) -> Unit,
     ): TakeoutResult {
+        Log.d(TAG, "process() start — source=${sourceRoot.uri} output=${outputRoot.uri}")
         val items = mutableListOf<Pair<DocumentFile, DocumentFile>>() // (file, parentDir)
         collectMediaFiles(sourceRoot, items)
+        Log.d(TAG, "collectMediaFiles found ${items.size} media files")
+
+        if (items.isEmpty()) {
+            Log.w(TAG, "No media files found under source root. Check folder selection and permissions.")
+        }
 
         var fixed = 0; var fromFilename = 0; var noDate = 0
         var skippedExisting = 0; var unsupported = 0; var errors = 0
@@ -170,16 +180,22 @@ object TakeoutProcessor {
                 val sibMap = siblingMaps.getOrPut(parentDir.uri.toString()) {
                     buildSiblingMap(parentDir)
                 }
-                when (processOne(file, sibMap, outputRoot, context, options)) {
-                    Outcome.FIXED       -> fixed++
+                val outcome = processOne(file, sibMap, outputRoot, context, options)
+                Log.d(TAG, "[${idx+1}/${items.size}] ${file.name} -> $outcome")
+                when (outcome) {
+                    Outcome.FIXED         -> fixed++
                     Outcome.FROM_FILENAME -> fromFilename++
-                    Outcome.NO_DATE     -> noDate++
-                    Outcome.SKIPPED     -> skippedExisting++
-                    Outcome.UNSUPPORTED -> unsupported++
+                    Outcome.NO_DATE       -> noDate++
+                    Outcome.SKIPPED       -> skippedExisting++
+                    Outcome.UNSUPPORTED   -> unsupported++
                 }
-            } catch (_: Exception) { errors++ }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error processing ${file.name}: ${e.message}", e)
+                errors++
+            }
         }
 
+        Log.d(TAG, "process() done — total=${items.size} fixed=$fixed fromFilename=$fromFilename noDate=$noDate skipped=$skippedExisting unsupported=$unsupported errors=$errors")
         return TakeoutResult(items.size, fixed, fromFilename, noDate, skippedExisting, unsupported, errors)
     }
 
@@ -191,7 +207,9 @@ object TakeoutProcessor {
         dir: DocumentFile,
         out: MutableList<Pair<DocumentFile, DocumentFile>>,
     ) {
-        for (child in dir.listFiles()) {
+        val children = dir.listFiles()
+        Log.d(TAG, "listFiles(${dir.name}) → ${children.size} entries")
+        for (child in children) {
             when {
                 child.isDirectory -> collectMediaFiles(child, out)
                 child.isFile -> {
