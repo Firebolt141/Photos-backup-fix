@@ -29,17 +29,14 @@ data class UiState(
     val copyProgress: CopyProgress? = null,
     val renaming: Boolean       = false,
     val renameStatus: String    = "",
-    val fixingExif: Boolean     = false,
-    val exifFixStatus: String   = "",
 )
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val repo      = SyncRepository(app)
     private val prefs     = Prefs(app)
-    private val _scanning    = MutableStateFlow(false)
-    private val _renameUi   = MutableStateFlow(false to "")
-    private val _exifFixUi  = MutableStateFlow(false to "")
+    private val _scanning  = MutableStateFlow(false)
+    private val _renameUi = MutableStateFlow(false to "")
 
     private val _dateRange = combine(prefs.fromDateMs, prefs.toDateMs) { f, t -> f to t }
 
@@ -74,13 +71,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
-    val state: StateFlow<UiState> = combine(
-        combine(_baseState, _renameUi) { base, (renaming, status) ->
-            base.copy(renaming = renaming, renameStatus = status)
-        },
-        _exifFixUi,
-    ) { withRename, (fixing, status) ->
-        withRename.copy(fixingExif = fixing, exifFixStatus = status)
+    val state: StateFlow<UiState> = combine(_baseState, _renameUi) { base, (renaming, status) ->
+        base.copy(renaming = renaming, renameStatus = status)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UiState())
 
     fun onDriveSelected(uri: Uri) {
@@ -142,19 +134,4 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun fixMissingExif() {
-        viewModelScope.launch {
-            _exifFixUi.value = true to "Scanning drive…"
-            val result = repo.fixMissingExif { current, total, name ->
-                _exifFixUi.value = true to "[$current/$total] $name"
-            }
-            val summary = buildString {
-                append("Fixed: ${result.fixed}")
-                if (result.alreadyHasDate > 0) append("  ·  Already dated: ${result.alreadyHasDate}")
-                if (result.skipped       > 0) append("  ·  Skipped (HEIC/video): ${result.skipped}")
-                if (result.failed        > 0) append("  ·  Errors: ${result.failed}")
-            }
-            _exifFixUi.value = false to summary
-        }
-    }
 }

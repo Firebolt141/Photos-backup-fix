@@ -82,11 +82,7 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                         composable("fix-exif") {
-                            FixExifScreen(
-                                state            = state,
-                                onFixMissingExif = vm::fixMissingExif,
-                                onOpenDrawer     = ::openDrawer,
-                            )
+                            FixExifScreen(onOpenDrawer = ::openDrawer)
                         }
                         composable("rename-folders") {
                             RenameFoldersScreen(

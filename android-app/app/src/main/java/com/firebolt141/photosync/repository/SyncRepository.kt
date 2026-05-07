@@ -13,6 +13,7 @@ import com.firebolt141.ubertrag.data.QueueItem
 import com.firebolt141.ubertrag.util.DateExtractor
 import com.firebolt141.ubertrag.util.ExifFixResult
 import com.firebolt141.ubertrag.util.ExifFixer
+import com.firebolt141.ubertrag.util.FixByFilenameResult
 import com.firebolt141.ubertrag.util.StorageHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -219,6 +220,20 @@ class SyncRepository(private val context: Context) {
         val root = DocumentFile.fromTreeUri(context, Uri.parse(driveUriStr))
             ?: return@withContext ExifFixResult()
         ExifFixer.fixMissingExif(root, context, onProgress)
+    }
+
+    suspend fun fixByFilename(
+        sourceUri:  String,
+        outputUri:  String,
+        onLog:      (String) -> Unit,
+        onProgress: (current: Int, total: Int, name: String) -> Unit,
+    ): FixByFilenameResult = withContext(Dispatchers.IO) {
+        Log.d("SyncRepository", "fixByFilename source=$sourceUri output=$outputUri")
+        val src = DocumentFile.fromTreeUri(context, Uri.parse(sourceUri))
+            ?: run { onLog("✗ Cannot open source folder"); return@withContext FixByFilenameResult() }
+        val out = DocumentFile.fromTreeUri(context, Uri.parse(outputUri))
+            ?: run { onLog("✗ Cannot open output folder"); return@withContext FixByFilenameResult() }
+        ExifFixer.fixByFilename(src, out, context, onLog, onProgress)
     }
 
     suspend fun processTakeout(

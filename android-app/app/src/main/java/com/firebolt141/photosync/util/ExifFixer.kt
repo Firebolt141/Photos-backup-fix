@@ -7,6 +7,7 @@ import androidx.exifinterface.media.ExifInterface
 import java.io.File
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
 data class ExifFixResult(
@@ -16,9 +17,24 @@ data class ExifFixResult(
     val failed: Int = 0,
 )
 
+data class FixByFilenameResult(
+    val copied: Int      = 0,
+    val exifWritten: Int = 0,  // writable formats with date written
+    val noDate: Int      = 0,  // filename had no recognisable date
+    val alreadyExists: Int = 0,  // file already at destination — skipped
+    val unsupported: Int = 0,  // HEIC / video — copied but no EXIF write
+    val failed: Int      = 0,
+)
+
 object ExifFixer {
 
     private const val TAG = "ExifFixer"
+
+    private val ALL_MEDIA_EXTS = setOf(
+        "jpg", "jpeg", "png", "webp", "gif", "bmp", "tiff", "tif",
+        "heic", "heif", "raw", "cr2", "nef", "arw", "dng", "orf", "rw2", "srw", "pef",
+        "mp4", "mov", "avi", "m4v", "mkv", "wmv", "3gp", "mpg", "mpeg", "mts", "ts", "flv",
+    )
 
     private val MONTH_NAMES = mapOf(
         "January" to 1, "February" to 2, "March" to 3,
@@ -80,6 +96,108 @@ object ExifFixer {
 
         Log.d(TAG, "fixMissingExif done — fixed=$fixed alreadyDated=$alreadyHasDate skipped=$skipped failed=$failed")
         return ExifFixResult(fixed, alreadyHasDate, skipped, failed)
+    }
+
+    /**
+     * Scans [sourceRoot] for media files, extracts a date from each filename, copies
+     * the file into [outputRoot]/year/month/day/ and writes EXIF for writable formats.
+     * Files whose names contain no recognisable date are reported under [noDate] and skipped.
+     */
+    fun fixByFilename(
+        sourceRoot: DocumentFile,
+        outputRoot: DocumentFile,
+        context:    Context,
+        onLog:      (String) -> Unit,
+        onProgress: (current: Int, total: Int, name: String) -> Unit,
+    ): FixByFilenameResult {
+        Log.d(TAG, "fixByFilename start — source=${sourceRoot.name} output=${outputRoot.name}")
+        val files = mutableListOf<DocumentFile>()
+        collectAllFiles(sourceRoot, files)
+        Log.d(TAG, "fixByFilename: ${files.size} media files found")
+        if (files.isEmpty()) onLog("⚠ No media files found in the selected folder")
+
+        var copied = 0; var exifWritten = 0; var noDate = 0
+        var alreadyExists = 0; var unsupported = 0; var failed = 0
+
+        files.forEachIndexed { idx, file ->
+            val name = file.name ?: return@forEachIndexed
+            onProgress(idx + 1, files.size, name)
+
+            val tsSec = TakeoutProcessor.tsFromFilename(name)
+            if (tsSec == null) {
+                noDate++
+                Log.d(TAG, "  no date: $name")
+                onLog("⚠  No date in filename: $name")
+                return@forEachIndexed
+            }
+
+            val destDir = StorageHelper.resolveDestDir(outputRoot, tsSec * 1000L)
+            if (destDir == null) {
+                failed++
+                Log.e(TAG, "  cannot create dest dir: $name")
+                onLog("✗  Cannot create folder for: $name")
+                return@forEachIndexed
+            }
+
+            if (destDir.findFile(name) != null) {
+                alreadyExists++
+                Log.d(TAG, "  already exists: $name")
+                return@forEachIndexed
+            }
+
+            val destFile = try {
+                destDir.createFile(file.type ?: "application/octet-stream", name)
+                    ?: throw Exception("createFile returned null")
+            } catch (e: Exception) {
+                failed++
+                Log.e(TAG, "  create failed: $name — ${e.message}")
+                onLog("✗  Failed to create: $name")
+                return@forEachIndexed
+            }
+
+            try {
+                context.contentResolver.openOutputStream(destFile.uri)?.use { out ->
+                    context.contentResolver.openInputStream(file.uri)
+                        ?.use { inp -> inp.copyTo(out) }
+                        ?: throw Exception("Cannot open source")
+                } ?: throw Exception("Cannot open dest")
+                copied++
+
+                val extDot = ".${name.substringAfterLast('.').lowercase()}"
+                if (extDot in WRITABLE_EXTS) {
+                    val date = java.time.Instant.ofEpochSecond(tsSec)
+                        .atOffset(ZoneOffset.UTC).toLocalDate()
+                    writeExifDate(context, destFile, date)
+                    exifWritten++
+                    Log.d(TAG, "  ✓ copied+EXIF: $name")
+                    onLog("✓  $name")
+                } else {
+                    unsupported++
+                    Log.d(TAG, "  → copied (no EXIF): $name")
+                    onLog("→  Copied (HEIC/video): $name")
+                }
+            } catch (e: Exception) {
+                destFile.delete()
+                failed++
+                Log.e(TAG, "  failed: $name — ${e.message}", e)
+                onLog("✗  Error: $name — ${e.message}")
+            }
+        }
+
+        Log.d(TAG, "fixByFilename done — copied=$copied exifWritten=$exifWritten noDate=$noDate alreadyExists=$alreadyExists unsupported=$unsupported failed=$failed")
+        return FixByFilenameResult(copied, exifWritten, noDate, alreadyExists, unsupported, failed)
+    }
+
+    private fun collectAllFiles(dir: DocumentFile, out: MutableList<DocumentFile>) {
+        for (child in dir.listFiles()) {
+            when {
+                child.isDirectory -> collectAllFiles(child, out)
+                child.isFile -> {
+                    val ext = child.name?.substringAfterLast('.')?.lowercase() ?: continue
+                    if (ext in ALL_MEDIA_EXTS) out.add(child)
+                }
+            }
+        }
     }
 
     private fun collectItems(root: DocumentFile, out: MutableList<Pair<DocumentFile, LocalDate>>) {
