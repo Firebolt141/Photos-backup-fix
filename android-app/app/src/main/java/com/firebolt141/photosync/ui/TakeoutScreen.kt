@@ -25,6 +25,7 @@ import com.firebolt141.ubertrag.util.TakeoutResult
 @Composable
 fun TakeoutScreen(
     onBack: () -> Unit,
+    onOpenDrawer: () -> Unit = {},
     vm: TakeoutViewModel = viewModel(),
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
@@ -42,8 +43,8 @@ fun TakeoutScreen(
             TopAppBar(
                 title = { Text("Process Google Takeout", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    IconButton(onClick = onOpenDrawer) {
+                        Icon(Icons.Default.Menu, contentDescription = "Menu")
                     }
                 },
             )

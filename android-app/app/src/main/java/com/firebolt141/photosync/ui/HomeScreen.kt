@@ -30,18 +30,16 @@ import java.util.*
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
-    state: UiState,
-    onScan: () -> Unit,
-    onCopy: () -> Unit,
-    onDriveSelected: (Uri) -> Unit,
-    onForgetDrive: () -> Unit,
-    onViewQueue: () -> Unit,
+    state:              UiState,
+    onScan:             () -> Unit,
+    onCopy:             () -> Unit,
+    onDriveSelected:    (Uri) -> Unit,
+    onForgetDrive:      () -> Unit,
+    onViewQueue:        () -> Unit,
     onDateRangeSelected: (fromMs: Long, toMs: Long) -> Unit,
-    onClearDateRange: () -> Unit,
-    onRetryFailed: () -> Unit,
-    onRenameOldFolders: () -> Unit,
-    onFixMissingExif: () -> Unit,
-    onOpenTakeout: () -> Unit,
+    onClearDateRange:   () -> Unit,
+    onRetryFailed:      () -> Unit,
+    onOpenDrawer:       () -> Unit,
 ) {
     var showDatePicker by remember { mutableStateOf(false) }
 
@@ -94,6 +92,11 @@ fun HomeScreen(
                             color = if (state.driveConnected) MaterialTheme.colorScheme.primary
                                     else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                    }
+                },
+                navigationIcon = {
+                    IconButton(onClick = onOpenDrawer) {
+                        Icon(Icons.Default.Menu, contentDescription = "Menu")
                     }
                 },
                 actions = {
@@ -298,58 +301,6 @@ fun HomeScreen(
                 }
             }
 
-            // ── Rename legacy folders ────────────────────────────────────
-            if (state.driveConnected) {
-                OutlinedButton(
-                    onClick  = onRenameOldFolders,
-                    enabled  = !isBusy && !state.renaming,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    if (state.renaming) {
-                        CircularProgressIndicator(
-                            modifier    = Modifier.size(18.dp),
-                            strokeWidth = 2.dp,
-                        )
-                    } else {
-                        Icon(Icons.Default.DriveFileRenameOutline, null, Modifier.size(18.dp))
-                    }
-                    Spacer(Modifier.width(6.dp))
-                    Text(if (state.renaming) "Renaming…" else "Rename Old Month/Day Folders")
-                }
-                if (state.renameStatus.isNotEmpty() && !state.renaming) {
-                    Text(
-                        state.renameStatus,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-
-                // ── Fix missing EXIF ─────────────────────────────────────
-                OutlinedButton(
-                    onClick  = onFixMissingExif,
-                    enabled  = !isBusy && !state.renaming && !state.fixingExif,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    if (state.fixingExif) {
-                        CircularProgressIndicator(
-                            modifier    = Modifier.size(18.dp),
-                            strokeWidth = 2.dp,
-                        )
-                    } else {
-                        Icon(Icons.Default.AutoFixHigh, null, Modifier.size(18.dp))
-                    }
-                    Spacer(Modifier.width(6.dp))
-                    Text(if (state.fixingExif) "Writing EXIF dates…" else "Fix Missing EXIF Dates")
-                }
-                if (state.exifFixStatus.isNotEmpty() && !state.fixingExif) {
-                    Text(
-                        state.exifFixStatus,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-
             // ── Copy progress card (animated in/out) ─────────────────────
             AnimatedVisibility(
                 visible = state.copyProgress != null,
@@ -357,41 +308,6 @@ fun HomeScreen(
                 exit    = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
             ) {
                 state.copyProgress?.let { CopyProgressCard(it) }
-            }
-
-            // ── Process Takeout entry ─────────────────────────────────────
-            ElevatedCard(
-                onClick   = onOpenTakeout,
-                modifier  = Modifier.fillMaxWidth(),
-            ) {
-                Row(
-                    Modifier.padding(16.dp),
-                    verticalAlignment     = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Icon(
-                        Icons.Default.FolderZip, null,
-                        Modifier.size(24.dp),
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            "Process Google Takeout",
-                            style      = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Text(
-                            "Fix EXIF dates, GPS & descriptions from JSON sidecars",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Icon(
-                        Icons.Default.ChevronRight, null,
-                        Modifier.size(20.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
             }
 
             Spacer(Modifier.height(8.dp))
@@ -425,7 +341,7 @@ fun HomeScreen(
 // ── Shared card components ────────────────────────────────────────────────────
 
 @Composable
-private fun CardTitle(icon: ImageVector, title: String) {
+internal fun CardTitle(icon: ImageVector, title: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Icon(icon, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
         Spacer(Modifier.width(8.dp))
