@@ -34,7 +34,9 @@ class SyncRepository(private val context: Context) {
     // ── scan ─────────────────────────────────────────────────────────────
 
     suspend fun scanMedia(): Int = withContext(Dispatchers.IO) {
+        Log.d("SyncRepository", "scanMedia start")
         val existingIds = dao.getAllMediaIds().toHashSet()
+        Log.d("SyncRepository", "scanMedia: ${existingIds.size} already in DB")
         val newItems    = mutableListOf<QueueItem>()
 
         val projection = arrayOf(
@@ -84,6 +86,7 @@ class SyncRepository(private val context: Context) {
         }
 
         if (newItems.isNotEmpty()) dao.insertAll(newItems)
+        Log.d("SyncRepository", "scanMedia done — found ${newItems.size} new items")
         newItems.size
     }
 
@@ -109,8 +112,10 @@ class SyncRepository(private val context: Context) {
         toMs: Long = 0L,
         onProgress: suspend (done: Int, total: Int, currentName: String, speedMBps: Double) -> Unit,
     ): CopySummary = withContext(Dispatchers.IO) {
-        val driveUriStr = prefs.driveUri.first() ?: return@withContext CopySummary(0, 0, 0)
-        if (!StorageHelper.isDriveMounted(context, driveUriStr)) return@withContext CopySummary(0, 0, 0)
+        Log.d("SyncRepository", "copyPending start")
+        val driveUriStr = prefs.driveUri.first()
+        if (driveUriStr == null) { Log.w("SyncRepository", "copyPending: no drive configured"); return@withContext CopySummary(0, 0, 0) }
+        if (!StorageHelper.isDriveMounted(context, driveUriStr)) { Log.w("SyncRepository", "copyPending: drive not mounted"); return@withContext CopySummary(0, 0, 0) }
 
         val root = DocumentFile.fromTreeUri(context, Uri.parse(driveUriStr))
             ?: return@withContext CopySummary(0, 0, 0)
@@ -131,6 +136,7 @@ class SyncRepository(private val context: Context) {
         var skipped    = 0
         var failed     = 0
 
+        Log.d("SyncRepository", "copyPending: ${pending.size} items to copy")
         for (item in pending) {
             onProgress(done, pending.size, item.displayName, calcSpeed(totalBytes, startMs))
             try {
@@ -138,18 +144,22 @@ class SyncRepository(private val context: Context) {
                 if (bytes != null) {
                     totalBytes += bytes
                     dao.updateStatus(item.id, CopyStatus.COPIED)
+                    Log.d("SyncRepository", "  copied: ${item.displayName} (${bytes}B)")
                     copied++
                 } else {
                     dao.updateStatus(item.id, CopyStatus.SKIPPED)
+                    Log.d("SyncRepository", "  skipped (exists): ${item.displayName}")
                     skipped++
                 }
             } catch (e: Exception) {
                 dao.updateStatusAndError(item.id, CopyStatus.FAILED, e.message)
+                Log.e("SyncRepository", "  failed: ${item.displayName} — ${e.message}", e)
                 failed++
             }
             done++
         }
         onProgress(done, pending.size, "", calcSpeed(totalBytes, startMs))
+        Log.d("SyncRepository", "copyPending done — copied=$copied skipped=$skipped failed=$failed")
         CopySummary(copied, skipped, failed)
     }
 

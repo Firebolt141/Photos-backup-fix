@@ -3,11 +3,14 @@ package com.firebolt141.ubertrag.util
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.util.Log
 import androidx.documentfile.provider.DocumentFile
 import java.util.Calendar
 import java.util.TimeZone
 
 object StorageHelper {
+
+    private const val TAG = "StorageHelper"
 
     private val MONTHS = arrayOf(
         "January", "February", "March", "April", "May", "June",
@@ -53,26 +56,33 @@ object StorageHelper {
      * the month folder is renamed.
      */
     fun renameLegacyFolders(root: DocumentFile, onProgress: (String) -> Unit): Pair<Int, Int> {
+        Log.d(TAG, "renameLegacyFolders start — root=${root.name}")
         var renamed = 0
         var errors  = 0
-        for (yearDir in root.listFiles()) {
+        val topLevel = root.listFiles()
+        Log.d(TAG, "  ${topLevel.size} top-level entries")
+        for (yearDir in topLevel) {
             if (!yearDir.isDirectory) continue
             val yearName = yearDir.name?.takeIf { it.matches(Regex("\\d{4}")) } ?: continue
+            Log.d(TAG, "  year=$yearName")
             for (monthDir in yearDir.listFiles()) {
                 if (!monthDir.isDirectory) continue
                 val monthIdx = monthDir.name?.toIntOrNull()?.takeIf { it in 1..12 } ?: continue
                 val mName = MONTHS[monthIdx - 1]
+                Log.d(TAG, "    month=${monthDir.name} → $mName")
                 for (dayDir in monthDir.listFiles()) {
                     if (!dayDir.isDirectory) continue
                     val dayNum = dayDir.name?.toIntOrNull()?.takeIf { it in 1..31 } ?: continue
                     val newDayName = "$mName $dayNum"
+                    Log.d(TAG, "      day=${dayDir.name} → $newDayName")
                     onProgress("$yearName/$mName/$newDayName")
-                    if (dayDir.renameTo(newDayName)) renamed++ else errors++
+                    if (dayDir.renameTo(newDayName)) renamed++ else { Log.w(TAG, "      rename FAILED: ${dayDir.name}"); errors++ }
                 }
                 onProgress("$yearName/$mName")
-                if (monthDir.renameTo(mName)) renamed++ else errors++
+                if (monthDir.renameTo(mName)) renamed++ else { Log.w(TAG, "    rename FAILED: ${monthDir.name}"); errors++ }
             }
         }
+        Log.d(TAG, "renameLegacyFolders done — renamed=$renamed errors=$errors")
         return renamed to errors
     }
 }

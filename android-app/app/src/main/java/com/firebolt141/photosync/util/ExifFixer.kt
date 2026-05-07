@@ -1,6 +1,7 @@
 package com.firebolt141.ubertrag.util
 
 import android.content.Context
+import android.util.Log
 import androidx.documentfile.provider.DocumentFile
 import androidx.exifinterface.media.ExifInterface
 import java.io.File
@@ -16,6 +17,8 @@ data class ExifFixResult(
 )
 
 object ExifFixer {
+
+    private const val TAG = "ExifFixer"
 
     private val MONTH_NAMES = mapOf(
         "January" to 1, "February" to 2, "March" to 3,
@@ -35,8 +38,14 @@ object ExifFixer {
         context: Context,
         onProgress: (current: Int, total: Int, name: String) -> Unit,
     ): ExifFixResult {
+        Log.d(TAG, "fixMissingExif start — root=${root.name}")
         val workItems = mutableListOf<Pair<DocumentFile, LocalDate>>()
         collectItems(root, workItems)
+        Log.d(TAG, "collectItems found ${workItems.size} files")
+
+        if (workItems.isEmpty()) {
+            Log.w(TAG, "No media files found. Check drive folder structure (expected year/month/day).")
+        }
 
         var fixed = 0
         var alreadyHasDate = 0
@@ -49,47 +58,57 @@ object ExifFixer {
                 ?.lowercase()?.let { ".$it" } ?: ""
 
             if (ext !in WRITABLE_EXTS) {
+                Log.d(TAG, "  skip (unsupported): ${file.name}")
                 skipped++
                 return@forEachIndexed
             }
 
             try {
                 if (hasExifDate(context, file)) {
+                    Log.d(TAG, "  already dated: ${file.name}")
                     alreadyHasDate++
                 } else {
+                    Log.d(TAG, "  writing EXIF $date → ${file.name}")
                     writeExifDate(context, file, date)
                     fixed++
                 }
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                Log.e(TAG, "  failed: ${file.name} — ${e.message}", e)
                 failed++
             }
         }
 
+        Log.d(TAG, "fixMissingExif done — fixed=$fixed alreadyDated=$alreadyHasDate skipped=$skipped failed=$failed")
         return ExifFixResult(fixed, alreadyHasDate, skipped, failed)
     }
 
     private fun collectItems(root: DocumentFile, out: MutableList<Pair<DocumentFile, LocalDate>>) {
-        for (yearDir in root.listFiles()) {
+        val topLevel = root.listFiles()
+        Log.d(TAG, "collectItems: ${topLevel.size} entries under root")
+        for (yearDir in topLevel) {
             if (!yearDir.isDirectory) continue
-            val year = yearDir.name?.toIntOrNull()?.takeIf { it in 2000..2040 } ?: continue
+            val year = yearDir.name?.toIntOrNull()?.takeIf { it in 2000..2040 }
+            if (year == null) { Log.d(TAG, "  skip non-year dir: ${yearDir.name}"); continue }
+            Log.d(TAG, "  year=$year")
 
             for (monthDir in yearDir.listFiles()) {
                 if (!monthDir.isDirectory) continue
-                // Handle both "January" (new) and "01" (legacy numeric) month folders
                 val month = MONTH_NAMES[monthDir.name]
                     ?: monthDir.name?.toIntOrNull()?.takeIf { it in 1..12 }
-                    ?: continue
+                if (month == null) { Log.d(TAG, "    skip non-month dir: ${monthDir.name}"); continue }
+                Log.d(TAG, "    month=${monthDir.name}")
 
                 for (dayDir in monthDir.listFiles()) {
                     if (!dayDir.isDirectory) continue
-                    val dayNum = parseDayFolderNum(dayDir.name ?: "") ?: continue
+                    val dayNum = parseDayFolderNum(dayDir.name ?: "")
+                    if (dayNum == null) { Log.d(TAG, "      skip non-day dir: ${dayDir.name}"); continue }
                     val date = try {
                         LocalDate.of(year, month, dayNum)
                     } catch (_: Exception) { continue }
 
-                    for (file in dayDir.listFiles()) {
-                        if (file.isFile) out.add(file to date)
-                    }
+                    val files = dayDir.listFiles().filter { it.isFile }
+                    Log.d(TAG, "      day=${dayDir.name} date=$date files=${files.size}")
+                    files.forEach { out.add(it to date) }
                 }
             }
         }
