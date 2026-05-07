@@ -234,13 +234,14 @@ object ExifFixer {
 
     /**
      * Parses day folder names in multiple formats:
-     *   "January 15"  → 15
-     *   "15"          → 15
-     *   "01"          → 1   (legacy numeric)
+     *   "January_07"  → 7   (current format)
+     *   "January 15"  → 15  (old format, still accepted)
+     *   "15"          → 15  (legacy numeric)
      */
-    private fun parseDayFolderNum(name: String): Int? {
-        if (' ' in name) return name.substringAfterLast(' ').toIntOrNull()
-        return name.toIntOrNull()
+    private fun parseDayFolderNum(name: String): Int? = when {
+        '_' in name -> name.substringAfterLast('_').toIntOrNull()
+        ' ' in name -> name.substringAfterLast(' ').toIntOrNull()
+        else        -> name.toIntOrNull()
     }
 
     private fun hasExifDate(context: Context, file: DocumentFile): Boolean {

@@ -42,7 +42,7 @@ object StorageHelper {
         }
         val year      = cal.get(Calendar.YEAR).toString()
         val monthName = MONTHS[cal.get(Calendar.MONTH)]
-        val dayName   = "$monthName ${cal.get(Calendar.DAY_OF_MONTH)}"
+        val dayName   = "${monthName}_${cal.get(Calendar.DAY_OF_MONTH).toString().padStart(2, '0')}"
         val yDir = getOrCreateDir(root, year)      ?: return null
         val mDir = getOrCreateDir(yDir, monthName) ?: return null
         return getOrCreateDir(mDir, dayName)
@@ -50,7 +50,7 @@ object StorageHelper {
 
     /**
      * Renames legacy numeric month/day folders on the drive to spelled-out names.
-     * e.g. 2024/01/15 → 2024/January/January 15
+     * e.g. 2024/01/15 → 2024/January/January_15
      *
      * Day folders are renamed first (while the parent URI is still valid), then
      * the month folder is renamed.
@@ -73,7 +73,7 @@ object StorageHelper {
                 for (dayDir in monthDir.listFiles()) {
                     if (!dayDir.isDirectory) continue
                     val dayNum = dayDir.name?.toIntOrNull()?.takeIf { it in 1..31 } ?: continue
-                    val newDayName = "$mName $dayNum"
+                    val newDayName = "${mName}_${dayNum.toString().padStart(2, '0')}"
                     Log.d(TAG, "      day=${dayDir.name} → $newDayName")
                     onProgress("$yearName/$mName/$newDayName")
                     if (dayDir.renameTo(newDayName)) renamed++ else { Log.w(TAG, "      rename FAILED: ${dayDir.name}"); errors++ }

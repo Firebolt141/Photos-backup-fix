@@ -68,7 +68,7 @@ fun RenameFoldersScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Text(
-                            "After:    2024 / January / January 15",
+                            "After:    2024 / January / January_15",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.primary,
                         )
