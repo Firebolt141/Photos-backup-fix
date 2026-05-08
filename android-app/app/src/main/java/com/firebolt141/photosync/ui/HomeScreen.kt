@@ -182,12 +182,34 @@ fun HomeScreen(
                         )
                     }
 
+                    // Folder name extracted from the SAF URI — shown so the user can
+                    // verify the correct root folder is selected (not a year subfolder).
+                    val driveFolderName = state.driveUri?.let { uriStr ->
+                        try {
+                            android.net.Uri.parse(uriStr).lastPathSegment
+                                ?.substringAfterLast('/')
+                                ?.substringAfterLast(':')
+                                ?.takeIf { it.isNotBlank() }
+                        } catch (_: Exception) { null }
+                    }
+
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Icon(driveIcon, null, Modifier.size(18.dp), tint = driveColor)
-                        Text(driveLabel, style = MaterialTheme.typography.bodyMedium, color = driveColor)
+                        Column {
+                            Text(driveLabel, style = MaterialTheme.typography.bodyMedium, color = driveColor)
+                            if (driveFolderName != null) {
+                                Text(
+                                    driveFolderName,
+                                    style    = MaterialTheme.typography.bodySmall,
+                                    color    = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
                     }
 
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
