@@ -114,7 +114,8 @@ fun FixExifScreen(
             // ── Drive mode: drive status ─────────────────────────────────
             if (!state.filenameMode) {
                 DriveStatusCard(
-                    state = UiState(driveUri = state.driveUri, driveConnected = state.driveConnected)
+                    driveUri       = state.driveUri,
+                    driveConnected = state.driveConnected,
                 )
             }
 

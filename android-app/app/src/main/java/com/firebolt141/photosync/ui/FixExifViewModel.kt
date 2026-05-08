@@ -85,7 +85,7 @@ class FixExifViewModel(app: Application) : AndroidViewModel(app) {
             log("Scanning drive for files…")
             val result = repo.fixMissingExif { current, total, name ->
                 _state.update { it.copy(done = current, total = total, currentFile = name) }
-                if (current % 10 == 0 || total <= 20) log("[$current/$total] $name")
+                if (current == 1 || current % 10 == 0 || total <= 20) log("[$current/$total] $name")
             }
             log("─────────────────────────────────────")
             log("Fixed:          ${result.fixed}")
@@ -101,6 +101,11 @@ class FixExifViewModel(app: Application) : AndroidViewModel(app) {
         if (s.sourceUri.isBlank() || s.outputUri.isBlank()) return
         viewModelScope.launch {
             _state.update { it.copy(running = true, logLines = emptyList(), result = null, done = 0, total = 0) }
+            if (s.sourceUri == s.outputUri) {
+                log("✗ Source and output folders must be different")
+                _state.update { it.copy(running = false) }
+                return@launch
+            }
             log("Scanning source folder…")
             val result = repo.fixByFilename(
                 sourceUri  = s.sourceUri,

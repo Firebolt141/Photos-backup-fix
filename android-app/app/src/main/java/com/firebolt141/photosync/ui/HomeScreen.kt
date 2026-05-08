@@ -43,11 +43,6 @@ fun HomeScreen(
 ) {
     var showDatePicker by remember { mutableStateOf(false) }
 
-    val dateRangeState = rememberDateRangePickerState(
-        initialSelectedStartDateMillis = state.fromDateMs.takeIf { it > 0 },
-        initialSelectedEndDateMillis   = state.toDateMs.takeIf   { it > 0 },
-    )
-
     val drivePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
     ) { uri -> uri?.let(onDriveSelected) }
@@ -315,7 +310,14 @@ fun HomeScreen(
     }
 
     // ── Date range picker dialog ──────────────────────────────────────────────
+    // State is created inside the if-block so it always initialises from the
+    // current ViewModel values when the dialog opens (avoids stale selection
+    // after the user clears the range and reopens the picker).
     if (showDatePicker) {
+        val dateRangeState = rememberDateRangePickerState(
+            initialSelectedStartDateMillis = state.fromDateMs.takeIf { it > 0 },
+            initialSelectedEndDateMillis   = state.toDateMs.takeIf   { it > 0 },
+        )
         DatePickerDialog(
             onDismissRequest = { showDatePicker = false },
             confirmButton = {

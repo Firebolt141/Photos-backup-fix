@@ -48,7 +48,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         CopyService.copyProgress,
     ) { queue, driveUri, scanning, dateRange, progress ->
         val (fromMs, toMs) = dateRange
-        val effectiveTo    = if (toMs > 0) toMs else Long.MAX_VALUE
+        // Add 24 h so the end date is inclusive: the picker returns midnight UTC
+        // of the selected day, which would exclude any file taken later that day.
+        val effectiveTo    = if (toMs > 0) toMs + 86_400_000L else Long.MAX_VALUE
 
         val filtered = if (fromMs == 0L && effectiveTo == Long.MAX_VALUE) queue
         else queue.filter { item ->

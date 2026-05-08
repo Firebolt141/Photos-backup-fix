@@ -69,7 +69,8 @@ fun FolderPickerCard(
 /** Drive status card shared by FixExifScreen and RenameFoldersScreen. */
 @Composable
 fun DriveStatusCard(
-    state: UiState,
+    driveUri: String?,
+    driveConnected: Boolean,
     onDriveSelected: ((Uri) -> Unit)? = null,
 ) {
     val drivePicker = if (onDriveSelected != null) {
@@ -91,12 +92,12 @@ fun DriveStatusCard(
             }
 
             val (icon, color, label) = when {
-                state.driveConnected -> Triple(
+                driveConnected -> Triple(
                     Icons.Default.CheckCircle,
                     MaterialTheme.colorScheme.primary,
                     "Drive connected — ready",
                 )
-                state.driveUri != null -> Triple(
+                driveUri != null -> Triple(
                     Icons.Default.Warning,
                     MaterialTheme.colorScheme.error,
                     "Drive not connected — plug it in and try again",
@@ -116,7 +117,7 @@ fun DriveStatusCard(
                 Text(label, style = MaterialTheme.typography.bodySmall, color = color)
             }
 
-            if (!state.driveConnected && drivePicker != null) {
+            if (!driveConnected && drivePicker != null) {
                 FilledTonalButton(
                     onClick  = { drivePicker.launch(null) },
                     modifier = Modifier.fillMaxWidth(),
