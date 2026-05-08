@@ -81,17 +81,29 @@ class FixExifViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun startDriveModeFix() {
         viewModelScope.launch {
+            val driveLabel = _state.value.driveUri
+                ?.let { android.net.Uri.parse(it) }?.let { label(it) } ?: "unknown"
             _state.update { it.copy(running = true, logLines = emptyList(), result = null, done = 0, total = 0) }
-            log("Scanning drive for files…")
+            log("Scanning drive: $driveLabel")
             val result = repo.fixMissingExif { current, total, name ->
                 _state.update { it.copy(done = current, total = total, currentFile = name) }
                 if (current == 1 || current % 10 == 0 || total <= 20) log("[$current/$total] $name")
             }
             log("─────────────────────────────────────")
-            log("Fixed:          ${result.fixed}")
-            log("Already dated:  ${result.alreadyHasDate}")
-            log("Skipped (HEIC/video): ${result.skipped}")
-            if (result.failed > 0) log("Errors:         ${result.failed}")
+            val noneFound = result.fixed == 0 && result.alreadyHasDate == 0 &&
+                            result.skipped == 0 && result.failed == 0
+            if (noneFound) {
+                log("⚠ No media files found on drive.")
+                log("  Expected structure inside \"$driveLabel\":")
+                log("    2024 / January / January_07 / photo.jpg")
+                log("  Make sure you selected the root of the drive,")
+                log("  not a year or month subfolder.")
+            } else {
+                log("Fixed:          ${result.fixed}")
+                log("Already dated:  ${result.alreadyHasDate}")
+                log("Skipped (HEIC/video): ${result.skipped}")
+                if (result.failed > 0) log("Errors:         ${result.failed}")
+            }
             _state.update { it.copy(running = false, result = FixExifResult.DriveMode(result)) }
         }
     }
