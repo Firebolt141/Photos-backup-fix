@@ -79,6 +79,16 @@ fun DriveStatusCard(
         }
     } else null
 
+    // Human-readable folder name extracted from the SAF tree URI
+    val folderName = driveUri?.let { uriStr ->
+        try {
+            Uri.parse(uriStr).lastPathSegment
+                ?.substringAfterLast('/')
+                ?.substringAfterLast(':')
+                ?.takeIf { it.isNotBlank() }
+        } catch (_: Exception) { null }
+    }
+
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -115,6 +125,27 @@ fun DriveStatusCard(
             ) {
                 Icon(icon, null, Modifier.size(18.dp), tint = color)
                 Text(label, style = MaterialTheme.typography.bodySmall, color = color)
+            }
+
+            // Show the selected folder name so the user can verify the right root is picked
+            if (folderName != null) {
+                Row(
+                    verticalAlignment     = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Icon(
+                        Icons.Default.Folder, null,
+                        Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        folderName,
+                        style    = MaterialTheme.typography.bodySmall,
+                        color    = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
 
             if (!driveConnected && drivePicker != null) {
