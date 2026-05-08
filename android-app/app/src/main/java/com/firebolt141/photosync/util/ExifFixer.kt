@@ -201,33 +201,48 @@ object ExifFixer {
     }
 
     private fun collectItems(root: DocumentFile, out: MutableList<Pair<DocumentFile, LocalDate>>) {
+        Log.d(TAG, "collectItems: root=${root.name}")
+
+        // If the selected root is itself a year folder (e.g. user selected "2014/" directly
+        // because they can't grant access to the parent), descend straight into its months.
+        val rootYear = root.name?.toIntOrNull()?.takeIf { it in 2000..2040 }
+        if (rootYear != null) {
+            Log.d(TAG, "  root is a year folder — scanning as year=$rootYear")
+            collectMonthDirs(root, rootYear, out)
+            return
+        }
+
+        // Normal mode: root contains one or more year subdirs.
         val topLevel = root.listFiles()
-        Log.d(TAG, "collectItems: ${topLevel.size} entries under root")
+        Log.d(TAG, "  ${topLevel.size} entries under root")
         for (yearDir in topLevel) {
             if (!yearDir.isDirectory) continue
             val year = yearDir.name?.toIntOrNull()?.takeIf { it in 2000..2040 }
             if (year == null) { Log.d(TAG, "  skip non-year dir: ${yearDir.name}"); continue }
             Log.d(TAG, "  year=$year")
+            collectMonthDirs(yearDir, year, out)
+        }
+    }
 
-            for (monthDir in yearDir.listFiles()) {
-                if (!monthDir.isDirectory) continue
-                val month = MONTH_NAMES[monthDir.name]
-                    ?: monthDir.name?.toIntOrNull()?.takeIf { it in 1..12 }
-                if (month == null) { Log.d(TAG, "    skip non-month dir: ${monthDir.name}"); continue }
-                Log.d(TAG, "    month=${monthDir.name}")
+    private fun collectMonthDirs(yearDir: DocumentFile, year: Int, out: MutableList<Pair<DocumentFile, LocalDate>>) {
+        for (monthDir in yearDir.listFiles()) {
+            if (!monthDir.isDirectory) continue
+            val month = MONTH_NAMES[monthDir.name]
+                ?: monthDir.name?.toIntOrNull()?.takeIf { it in 1..12 }
+            if (month == null) { Log.d(TAG, "    skip non-month dir: ${monthDir.name}"); continue }
+            Log.d(TAG, "    month=${monthDir.name}")
 
-                for (dayDir in monthDir.listFiles()) {
-                    if (!dayDir.isDirectory) continue
-                    val dayNum = parseDayFolderNum(dayDir.name ?: "")
-                    if (dayNum == null) { Log.d(TAG, "      skip non-day dir: ${dayDir.name}"); continue }
-                    val date = try {
-                        LocalDate.of(year, month, dayNum)
-                    } catch (_: Exception) { continue }
+            for (dayDir in monthDir.listFiles()) {
+                if (!dayDir.isDirectory) continue
+                val dayNum = parseDayFolderNum(dayDir.name ?: "")
+                if (dayNum == null) { Log.d(TAG, "      skip non-day dir: ${dayDir.name}"); continue }
+                val date = try {
+                    LocalDate.of(year, month, dayNum)
+                } catch (_: Exception) { continue }
 
-                    val files = dayDir.listFiles().filter { it.isFile }
-                    Log.d(TAG, "      day=${dayDir.name} date=$date files=${files.size}")
-                    files.forEach { out.add(it to date) }
-                }
+                val files = dayDir.listFiles().filter { it.isFile }
+                Log.d(TAG, "      day=${dayDir.name} date=$date files=${files.size}")
+                files.forEach { out.add(it to date) }
             }
         }
     }
