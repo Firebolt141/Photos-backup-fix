@@ -93,11 +93,12 @@ class FixExifViewModel(app: Application) : AndroidViewModel(app) {
             val noneFound = result.fixed == 0 && result.alreadyHasDate == 0 &&
                             result.skipped == 0 && result.failed == 0
             if (noneFound) {
-                log("⚠ No media files found on drive.")
-                log("  Expected structure inside \"$driveLabel\":")
-                log("    2024 / January / January_07 / photo.jpg")
-                log("  Make sure you selected the root of the drive,")
-                log("  not a year or month subfolder.")
+                log("⚠ No media files found.")
+                log("  Selected folder: \"$driveLabel\"")
+                log("  Supported structures:")
+                log("    drive-root / 2024 / January / January_07 / photo.jpg")
+                log("    2024 / January / January_07 / photo.jpg  (year folder)")
+                log("  A month folder selected directly is not supported.")
             } else {
                 log("Fixed:          ${result.fixed}")
                 log("Already dated:  ${result.alreadyHasDate}")
