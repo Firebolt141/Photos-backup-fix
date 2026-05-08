@@ -174,8 +174,18 @@ class TakeoutProcessorTest {
     }
 
     @Test
+    fun `accepts boundary year 2040`() {
+        assertNotNull(TakeoutProcessor.tsFromFilename("IMG_20401231_000000.jpg"))
+    }
+
+    @Test
     fun `rejects invalid month`() {
         assertNull(TakeoutProcessor.tsFromFilename("IMG_20241300_000000.jpg"))
+    }
+
+    @Test
+    fun `rejects impossible day for month (Feb 30)`() {
+        assertNull(TakeoutProcessor.tsFromFilename("IMG_20240230_000000.jpg"))
     }
 
     @Test

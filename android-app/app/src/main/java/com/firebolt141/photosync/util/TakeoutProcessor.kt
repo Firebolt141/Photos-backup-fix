@@ -250,10 +250,12 @@ object TakeoutProcessor {
             if (hasExifDate(context, file)) return Outcome.SKIPPED
         }
 
-        // Determine destination (null = no date info at all)
+        // Determine destination folder. resolveDestDir returns null only when it
+        // cannot create the directory (permissions / storage issue) — throw so the
+        // outer catch counts it as an error rather than silently losing the file.
         val destDir = StorageHelper.resolveDestDir(
             outputRoot, effectiveTsSec?.let { it * 1000L }
-        ) ?: return Outcome.NO_DATE
+        ) ?: throw Exception("Failed to create destination directory for $name")
 
         // Skip if file already copied (idempotent re-runs)
         if (destDir.findFile(name) != null) return Outcome.SKIPPED

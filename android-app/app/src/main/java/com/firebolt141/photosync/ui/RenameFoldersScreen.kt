@@ -77,7 +77,7 @@ fun RenameFoldersScreen(
             }
 
             // ── Drive status ─────────────────────────────────────────────
-            DriveStatusCard(state)
+            DriveStatusCard(driveUri = state.driveUri, driveConnected = state.driveConnected)
 
             // ── Run / progress ───────────────────────────────────────────
             if (state.driveConnected) {

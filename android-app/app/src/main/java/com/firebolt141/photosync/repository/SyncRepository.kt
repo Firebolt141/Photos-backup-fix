@@ -121,7 +121,8 @@ class SyncRepository(private val context: Context) {
         val root = DocumentFile.fromTreeUri(context, Uri.parse(driveUriStr))
             ?: return@withContext CopySummary(0, 0, 0)
 
-        val effectiveTo = if (toMs > 0) toMs else Long.MAX_VALUE
+        // Add 24 h so the end date is inclusive (picker returns midnight UTC of the selected day).
+        val effectiveTo = if (toMs > 0) toMs + 86_400_000L else Long.MAX_VALUE
         val pending = dao.getPending().let { all ->
             if (fromMs == 0L && effectiveTo == Long.MAX_VALUE) all
             else all.filter { item ->
