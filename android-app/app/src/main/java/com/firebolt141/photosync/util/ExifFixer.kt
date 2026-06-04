@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.documentfile.provider.DocumentFile
 import androidx.exifinterface.media.ExifInterface
 import java.io.File
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneOffset
@@ -99,9 +100,10 @@ object ExifFixer {
     }
 
     /**
-     * Scans [sourceRoot] for media files, extracts a date from each filename, copies
-     * the file into [outputRoot]/year/month/day/ and writes EXIF for writable formats.
-     * Files whose names contain no recognisable date are reported under [noDate] and skipped.
+     * Scans [sourceRoot] for media files, extracts a date from each filename, and copies
+     * the file into [outputRoot]/year/month/day/. Files with no recognisable date go to
+     * [outputRoot]/no-date/. Files that fail to copy go to [outputRoot]/error/.
+     * EXIF is written for JPEG/PNG/WebP; other formats are copied as-is.
      */
     fun fixByFilename(
         sourceRoot: DocumentFile,
@@ -123,64 +125,86 @@ object ExifFixer {
             val name = file.name ?: return@forEachIndexed
             onProgress(idx + 1, files.size, name)
 
+            // ── No date in filename → no-date/ fallback ───────────────────
             val tsSec = TakeoutProcessor.tsFromFilename(name)
             if (tsSec == null) {
                 noDate++
                 Log.d(TAG, "  no date: $name")
-                onLog("⚠  No date in filename: $name")
+                val ok = StorageHelper.copyToFallbackDir(context, file, outputRoot, "no-date")
+                onLog(if (ok) "⚠  No date (→ no-date/): $name"
+                      else     "⚠  No date, copy failed: $name")
                 return@forEachIndexed
             }
 
+            // ── Destination date folder ───────────────────────────────────
             val destDir = StorageHelper.resolveDestDir(outputRoot, tsSec * 1000L)
             if (destDir == null) {
                 failed++
                 Log.e(TAG, "  cannot create dest dir: $name")
-                onLog("✗  Cannot create folder for: $name")
+                val ok = StorageHelper.copyToFallbackDir(context, file, outputRoot, "error")
+                onLog(if (ok) "✗  Cannot create folder (→ error/): $name"
+                      else     "✗  Cannot create folder: $name")
                 return@forEachIndexed
             }
 
+            // ── Already at destination → skip ─────────────────────────────
             if (destDir.findFile(name) != null) {
                 alreadyExists++
                 Log.d(TAG, "  already exists: $name")
                 return@forEachIndexed
             }
 
+            // ── Create file at destination ────────────────────────────────
             val destFile = try {
                 destDir.createFile(file.type ?: "application/octet-stream", name)
                     ?: throw Exception("createFile returned null")
             } catch (e: Exception) {
                 failed++
                 Log.e(TAG, "  create failed: $name — ${e.message}")
-                onLog("✗  Failed to create: $name")
+                val ok = StorageHelper.copyToFallbackDir(context, file, outputRoot, "error")
+                onLog(if (ok) "✗  Failed to create (→ error/): $name"
+                      else     "✗  Failed to create: $name")
                 return@forEachIndexed
             }
 
-            try {
+            // ── Copy file bytes ───────────────────────────────────────────
+            val copyOk = try {
                 context.contentResolver.openOutputStream(destFile.uri)?.use { out ->
                     context.contentResolver.openInputStream(file.uri)
                         ?.use { inp -> inp.copyTo(out) }
                         ?: throw Exception("Cannot open source")
                 } ?: throw Exception("Cannot open dest")
-                copied++
+                true
+            } catch (e: Exception) {
+                destFile.delete()
+                failed++
+                Log.e(TAG, "  copy failed: $name — ${e.message}", e)
+                val ok = StorageHelper.copyToFallbackDir(context, file, outputRoot, "error")
+                onLog(if (ok) "✗  Copy error (→ error/): $name — ${e.message}"
+                      else     "✗  Copy error: $name — ${e.message}")
+                false
+            }
+            if (!copyOk) return@forEachIndexed
+            copied++
 
-                val extDot = ".${name.substringAfterLast('.').lowercase()}"
-                if (extDot in WRITABLE_EXTS) {
-                    val date = java.time.Instant.ofEpochSecond(tsSec)
-                        .atOffset(ZoneOffset.UTC).toLocalDate()
+            // ── Write EXIF (writable formats only) ───────────────────────
+            val extDot = ".${name.substringAfterLast('.').lowercase()}"
+            if (extDot in WRITABLE_EXTS) {
+                try {
+                    val date = Instant.ofEpochSecond(tsSec).atOffset(ZoneOffset.UTC).toLocalDate()
                     writeExifDate(context, destFile, date)
                     exifWritten++
                     Log.d(TAG, "  ✓ copied+EXIF: $name")
                     onLog("✓  $name")
-                } else {
-                    unsupported++
-                    Log.d(TAG, "  → copied (no EXIF): $name")
-                    onLog("→  Copied (HEIC/video): $name")
+                } catch (e: Exception) {
+                    // File is in the correct dated folder — just log the EXIF failure
+                    Log.e(TAG, "  EXIF write failed (file kept): $name — ${e.message}", e)
+                    onLog("→  Copied (EXIF write failed): $name")
                 }
-            } catch (e: Exception) {
-                destFile.delete()
-                failed++
-                Log.e(TAG, "  failed: $name — ${e.message}", e)
-                onLog("✗  Error: $name — ${e.message}")
+            } else {
+                unsupported++
+                Log.d(TAG, "  → copied (no EXIF): $name")
+                onLog("→  Copied (HEIC/video): $name")
             }
         }
 

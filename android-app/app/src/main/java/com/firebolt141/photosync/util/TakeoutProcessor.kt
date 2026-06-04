@@ -192,6 +192,8 @@ object TakeoutProcessor {
             } catch (e: Exception) {
                 Log.e(TAG, "Error processing ${file.name}: ${e.message}", e)
                 errors++
+                // File never reached the output (copy failed before completion) — put it in error/
+                StorageHelper.copyToFallbackDir(context, file, outputRoot, "error")
             }
         }
 
@@ -281,9 +283,15 @@ object TakeoutProcessor {
             return if (ext in UNSUPPORTED_EXTS) Outcome.UNSUPPORTED else Outcome.NO_DATE
         }
 
-        writeExif(context, destFile, meta, effectiveTsSec)
-
-        return if (meta.timestampSec != null) Outcome.FIXED else Outcome.FROM_FILENAME
+        return try {
+            writeExif(context, destFile, meta, effectiveTsSec)
+            if (meta.timestampSec != null) Outcome.FIXED else Outcome.FROM_FILENAME
+        } catch (e: Exception) {
+            // File is already in the correct dated folder — treat as unsupported rather than
+            // surfacing as an error that would trigger an error/ copy of a file that IS there.
+            Log.w(TAG, "EXIF write failed for $name (file kept in output): ${e.message}")
+            Outcome.UNSUPPORTED
+        }
     }
 
     private fun findJson(fileName: String, sibMap: Map<String, DocumentFile>): DocumentFile? {

@@ -129,12 +129,12 @@ class FixExifViewModel(app: Application) : AndroidViewModel(app) {
                 },
             )
             log("─────────────────────────────────────")
-            log("Copied:         ${result.copied}")
-            log("EXIF written:   ${result.exifWritten}")
-            if (result.noDate       > 0) log("No date found:  ${result.noDate}")
-            if (result.alreadyExists > 0) log("Already exists: ${result.alreadyExists}")
-            if (result.unsupported  > 0) log("Copied (no EXIF write — HEIC/video): ${result.unsupported}")
-            if (result.failed       > 0) log("Errors:         ${result.failed}")
+            log("Copied:            ${result.copied}")
+            log("EXIF written:      ${result.exifWritten}")
+            if (result.noDate       > 0) log("No date (→ no-date/):  ${result.noDate}")
+            if (result.alreadyExists > 0) log("Already exists:        ${result.alreadyExists}")
+            if (result.unsupported  > 0) log("Copied (no EXIF — HEIC/video): ${result.unsupported}")
+            if (result.failed       > 0) log("Errors (→ error/):     ${result.failed}")
             _state.update { it.copy(running = false, result = FixExifResult.FilenameMode(result)) }
         }
     }

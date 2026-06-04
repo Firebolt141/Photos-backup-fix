@@ -275,11 +275,11 @@ private fun ResultCard(r: TakeoutResult, onDismiss: () -> Unit) {
                 if (r.skippedExisting > 0)
                     ResultRow("Already had date — skipped",      r.skippedExisting, Icons.Default.SkipNext)
                 if (r.noDate > 0)
-                    ResultRow("No date found — copied as-is",    r.noDate,          Icons.Default.HelpOutline)
+                    ResultRow("No date found (in no-date/)",     r.noDate,          Icons.Default.HelpOutline)
                 if (r.unsupported > 0)
                     ResultRow("Copied (HEIC/video — no EXIF)",   r.unsupported,     Icons.Default.Warning)
                 if (r.errors > 0)
-                    ResultRow("Errors",                          r.errors,          Icons.Default.ErrorOutline)
+                    ResultRow("Errors (in error/)",              r.errors,          Icons.Default.ErrorOutline)
             }
         }
     }
