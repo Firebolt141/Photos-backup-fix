@@ -33,6 +33,34 @@ object StorageHelper {
     fun getOrCreateDir(parent: DocumentFile, name: String): DocumentFile? =
         parent.findFile(name) ?: parent.createDirectory(name)
 
+    /**
+     * Copies [source] into [outputRoot]/[dirName]/, creating the subfolder as needed.
+     * Returns true when the file is present in the fallback dir (including if it was
+     * already there from a previous run).  Returns false only when the copy itself fails.
+     */
+    fun copyToFallbackDir(
+        context:    Context,
+        source:     DocumentFile,
+        outputRoot: DocumentFile,
+        dirName:    String,
+    ): Boolean {
+        val name = source.name ?: return false
+        val dir  = getOrCreateDir(outputRoot, dirName) ?: return false
+        if (dir.findFile(name) != null) return true      // idempotent
+        val dest = dir.createFile(source.type ?: "application/octet-stream", name) ?: return false
+        return try {
+            context.contentResolver.openOutputStream(dest.uri)?.use { out ->
+                context.contentResolver.openInputStream(source.uri)?.use { inp ->
+                    inp.copyTo(out)
+                }
+            }
+            true
+        } catch (_: Exception) {
+            dest.delete()
+            false
+        }
+    }
+
     fun resolveDestDir(root: DocumentFile, dateTakenMs: Long?): DocumentFile? {
         if (dateTakenMs == null || dateTakenMs <= 0) {
             return getOrCreateDir(root, "no-date")
