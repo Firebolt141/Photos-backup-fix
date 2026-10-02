@@ -26,9 +26,9 @@ Photos-backup-fix/
 
 | File | Purpose |
 |---|---|
-| `core.py` | All processing logic, stdlib only. `Job` base class + `Processor` (Takeout / sort-by-filename), `DriveFixer`, `FolderRenamer`, `DuplicateFinder`; `ExifTool` (stay_open wrapper), `SidecarIndex`, `Manifest`, date helpers |
+| `core.py` | All processing logic, stdlib only. `Job` base class + `Processor` (Takeout / sort-by-filename), `DriveFixer`, `FolderRenamer`, `DuplicateFinder`, `ArchiveExtractor`, `analyze_folder()` (Start-here guide); `ExifTool` (stay_open wrapper), `SidecarIndex`, `Manifest`, date helpers |
 | `web_app.py` | Flask routes, `Hub` (SSE fan-out + replay), `Runner` (one job at a time), security guard, folder picker |
-| `cli.py` | argparse CLI over the same jobs (`takeout`, `sort`, `fix-dates`, `rename`, `dupes`) |
+| `cli.py` | argparse CLI over the same jobs (`takeout`, `sort`, `fix-dates`, `rename`, `dupes`, `unpack`, `analyze`) |
 | `templates/index.html` | Browser UI, no build step. Light theme = ivory/slate/clay, dark = `#151515` + dot grid; colours are CSS tokens on `:root[data-theme]`. Overview page + one `section.view` per tool; the shared `#activity` panel is moved into the active tool's `.activity-slot`. The JS `TOOLS` table drives request bodies, validation, stat tiles and result summaries |
 | `tests/` | pytest suite (`python -m pytest tests/`); ExifTool/ffmpeg tests auto-skip when missing |
 | `app.py` | Legacy tkinter UI (Takeout only) — must keep importing from `core.py` |
@@ -43,6 +43,14 @@ Photos-backup-fix/
 - Security: 127.0.0.1 only, `Host` header must be localhost:<port>, every `/api/*` needs the per-launch `TOKEN` (`X-Token` header, or `?t=` for SSE/downloads), POSTs must be JSON
 
 ### Key invariants
+
+- Every input file must end up somewhere: dated folder, `no-date/<rel dir>/`, `error/<rel dir>/` (empty, unreadable, failed copy, any per-file exception via `_safe_process`/`_fail`), or an explicit skip record (duplicate, already in output, filtered). Never drop a file silently
+- Fatal OS errors (`is_fatal_os_error`: disk full, device gone) stop the run via `Processor._fatal`; everything else is per-file. Use `friendly_os_error()` for user-facing messages
+- `iter_media`/`count_folder`/`analyze_folder` share the same skip rules (`_SKIP_DIRS`, `DUPES_DIR`, `is_junk_name`, `_SYSTEM_FILES`); change them together
+- Identical content headed for the same output folder is kept once (`_claim` → `_dir_fps`, full-hash verified outside the lock); a failed copy must `_release()` its claim
+- `Job._lock` is NOT re-entrant: never call `_fp`, `_count`, `_record`, `_release` while holding it
+- Files whose extension lies about their type (ExifTool "looks more like a JPEG") get their real extension in the output (`_real_extension`)
+- `ArchiveExtractor` sanitises member paths with `safe_member_path` (zip-slip), writes via temp files, and skips entries already unpacked
 
 - Output layout matches Android: `YYYY/Month/Month_DD` (`date_subdir()`), plus `no-date/`, `error/`; reports + `manifest.json` live in `_photofix/`
 - Date priority in `Processor`: embedded date (if `keep_existing_dates`) → sidecar `photoTakenTime` → filename → sidecar `creationTime` → embedded (if not kept) → `no-date/`

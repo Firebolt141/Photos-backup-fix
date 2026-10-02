@@ -277,6 +277,34 @@ input.switch:checked::after { transform: translateX(16px); }
 .pill.info { background: var(--info-soft); color: var(--info); border-color: transparent; }
 .empty-note { color: var(--text-3); font-size: 13.5px; }
 
+/* ── Start here ─────────────────────────────────────────────────────────── */
+.start-card { padding: 24px; margin-bottom: 30px; }
+.start-card h2 { font-family: var(--serif); font-weight: 400; font-size: 24px; letter-spacing: -.01em; }
+.start-card > p { color: var(--text-2); margin: 6px 0 16px; max-width: 760px; }
+.start-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.start-row .input { flex: 1 1 320px; }
+.analysis { margin-top: 20px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 18px; }
+.findings { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
+.findings li { display: grid; grid-template-columns: 22px 1fr; gap: 8px; color: var(--text-2); font-size: 13.5px; }
+.findings li b { color: var(--text); font-weight: 600; }
+.findings svg { margin-top: 2px; color: var(--text-3); }
+.findings li.warn svg { color: var(--warn); }
+.findings li.good svg { color: var(--ok); }
+.findings-title, .recs-title { font-size: 12px; color: var(--text-3); margin-bottom: 10px; }
+.recs { display: flex; flex-direction: column; gap: 10px; }
+.rec { display: grid; grid-template-columns: 28px 1fr auto; gap: 12px; align-items: start; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); }
+:root[data-theme="dark"] .rec { background: rgba(255, 255, 255, .03); }
+.rec.primary { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.rec-num { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-weight: 600; font-size: 12.5px; background: var(--surface-2); border: 1px solid var(--border); }
+.rec.primary .rec-num { background: var(--accent); color: #fff; border-color: transparent; }
+.rec h4 { margin: 0 0 3px; font-size: 14.5px; font-weight: 600; }
+.rec p { font-size: 13px; color: var(--text-2); }
+.arch-list { margin-top: 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); max-height: 180px; overflow: auto; }
+.arch-list div { display: flex; justify-content: space-between; gap: 12px; padding: 7px 10px; font-size: 12.5px; border-top: 1px solid var(--border); }
+.arch-list div:first-child { border-top: 0; }
+.arch-list span:first-child { font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 980px) { .analysis { grid-template-columns: 1fr; } }
+
 /* ── Tool pages ─────────────────────────────────────────────────────────── */
 .tool-head { max-width: 820px; margin-bottom: 26px; }
 .tool-head h1 { font-family: var(--serif); font-weight: 400; font-size: 36px; letter-spacing: -.02em; line-height: 1.15; }
@@ -502,6 +530,9 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
     <symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
     <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></symbol>
     <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-zip" viewBox="0 0 24 24"><path d="M6 2.5h8.5L19 7v14.5H6z"/><path d="M14 2.5V7h5"/><path d="M10 4v2M10 8v2M10 12v2"/><rect x="8.5" y="15.5" width="3" height="3" rx=".7"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="9" cy="9.5" r="1.8"/><path d="m21 16-5-5-9 9"/></symbol>
     <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
   </defs>
 </svg>
@@ -515,9 +546,11 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
     </a>
     <nav>
       <button class="nav-item" data-view="home"><svg class="i"><use href="#i-home"/></svg>Overview</button>
-      <div class="nav-label">Import</div>
+      <div class="nav-label">Google Takeout</div>
+      <button class="nav-item" data-view="unpack"><svg class="i"><use href="#i-zip"/></svg>Unpack archives<span class="run-dot"></span></button>
       <button class="nav-item" data-view="takeout"><svg class="i"><use href="#i-box"/></svg>Process Takeout<span class="run-dot"></span></button>
-      <button class="nav-item" data-view="filename"><svg class="i"><use href="#i-cal"/></svg>Sort by filename date<span class="run-dot"></span></button>
+      <div class="nav-label">Any photos</div>
+      <button class="nav-item" data-view="filename"><svg class="i"><use href="#i-cal"/></svg>Organize by date<span class="run-dot"></span></button>
       <div class="nav-label">Backup drive</div>
       <button class="nav-item" data-view="fixdrive"><svg class="i"><use href="#i-spark"/></svg>Fix missing dates<span class="run-dot"></span></button>
       <button class="nav-item" data-view="rename"><svg class="i"><use href="#i-folders"/></svg>Rename old folders<span class="run-dot"></span></button>
@@ -552,8 +585,37 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
           <p>Restore the dates and places Google Takeout stripped out, sort everything into tidy dated folders, and repair a backup drive in a few clicks.</p>
         </div>
 
-        <h2 class="section-title">What do you want to do?</h2>
+        <div class="card start-card">
+          <div class="eyebrow"><svg class="i sm"><use href="#i-search"/></svg>Not sure where to begin?</div>
+          <h2>Start here: show us your folder</h2>
+          <p>Pick any folder: a Google Takeout download (zipped or unzipped), an old backup drive, or years of unsorted photos in sub-folders. We'll look through it, without changing anything, and tell you exactly what to do next.</p>
+          <div class="start-row">
+            <input id="start-root" class="input mono persist" list="dl-start-root" placeholder="e.g. D:\My Pictures  or  C:\Users\you\Downloads" autocomplete="off">
+            <datalist id="dl-start-root"></datalist>
+            <button class="btn btn-secondary" data-browse="start-root"><svg class="i sm"><use href="#i-folder"/></svg>Browse</button>
+            <button class="btn btn-primary" id="btn-analyze"><svg class="i sm"><use href="#i-search"/></svg>Look at this folder</button>
+          </div>
+          <div class="hint" id="start-root-hint">Big folders can take up to a minute to look through.</div>
+          <div class="analysis" id="analysis" hidden>
+            <div>
+              <div class="findings-title">What we found</div>
+              <ul class="findings" id="findings"></ul>
+            </div>
+            <div>
+              <div class="recs-title">What to do next</div>
+              <div class="recs" id="recs"></div>
+            </div>
+          </div>
+        </div>
+
+        <h2 class="section-title">Or pick a tool yourself</h2>
         <div class="tasks">
+          <button class="task" data-view="unpack">
+            <span class="task-icon"><svg class="i"><use href="#i-zip"/></svg></span>
+            <h3>I have Google Takeout zip files</h3>
+            <p>Takeout downloads come as one or more <code>takeout-….zip</code> files. Unpack them all into one folder in a single step, then process it.</p>
+            <span class="go">Unpack archives <svg class="i sm"><use href="#i-arrow"/></svg></span>
+          </button>
           <button class="task" data-view="takeout">
             <span class="task-icon"><svg class="i"><use href="#i-box"/></svg></span>
             <h3>I downloaded my Google Photos with Takeout</h3>
@@ -562,9 +624,9 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
           </button>
           <button class="task" data-view="filename">
             <span class="task-icon"><svg class="i"><use href="#i-cal"/></svg></span>
-            <h3>I have Screenshots, WhatsApp or camera folders</h3>
-            <p>Files named like <code>IMG_20240315_143022.jpg</code>. Uses the date in the name to sort them into folders and stamp the date inside.</p>
-            <span class="go">Sort by filename date <svg class="i sm"><use href="#i-arrow"/></svg></span>
+            <h3>I have years of photos in messy folders</h3>
+            <p>Phone backups, camera dumps, WhatsApp, Screenshots, old PC folders. Copies everything into year/month/day folders using the date inside each photo or in its name.</p>
+            <span class="go">Organize by date <svg class="i sm"><use href="#i-arrow"/></svg></span>
           </button>
           <button class="task" data-view="fixdrive">
             <span class="task-icon"><svg class="i"><use href="#i-spark"/></svg></span>
@@ -612,10 +674,46 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
 
       <!-- ── Tool views (the activity panel is moved into the active one) ─── -->
 
+      <!-- Unpack Takeout archives -->
+      <section class="view" data-view="unpack">
+        <div class="tool-head">
+          <div class="eyebrow">Google Takeout</div>
+          <h1>Unpack Takeout archives</h1>
+          <p class="lead">Google Takeout downloads come as one or more zip (or .tgz) files. This unpacks all of them into one folder, so multi-part exports end up together, ready for <i>Process Takeout</i>.</p>
+          <div class="facts">
+            <span class="fact ok"><svg class="i sm"><use href="#i-shield"/></svg>The zip files are not changed or deleted</span>
+            <span class="fact info"><svg class="i sm"><use href="#i-clock"/></svg>Interrupted? Run again and finished files are skipped</span>
+            <span class="fact warn"><svg class="i sm"><use href="#i-alert"/></svg>Needs free space about the size of the zips</span>
+          </div>
+        </div>
+        <div class="tool-grid">
+          <div class="steps">
+            <div class="step">
+              <div class="step-head"><span class="step-num">1</span><h2>Choose folders</h2></div>
+              <div class="field">
+                <label for="unpack-src">Folder with the downloaded zip files</label>
+                <div class="input-row"><input id="unpack-src" class="input mono persist" list="dl-unpack-src" placeholder="e.g. C:\Users\you\Downloads" autocomplete="off"><button class="btn btn-secondary" data-browse="unpack-src"><svg class="i sm"><use href="#i-folder"/></svg>Browse</button></div>
+                <datalist id="dl-unpack-src"></datalist>
+                <div class="hint" id="unpack-src-hint">Usually your Downloads folder. Every <code>.zip</code>, <code>.tgz</code> and <code>.tar</code> in it is unpacked.</div>
+                <div class="arch-list" id="unpack-list" hidden></div>
+              </div>
+              <div class="field">
+                <label for="unpack-dst">Unpack into</label>
+                <div class="input-row"><input id="unpack-dst" class="input mono persist" list="dl-unpack-dst" placeholder="e.g. D:\Takeout" autocomplete="off"><button class="btn btn-secondary" data-browse="unpack-dst"><svg class="i sm"><use href="#i-folder"/></svg>Browse</button></div>
+                <datalist id="dl-unpack-dst"></datalist>
+                <div class="hint" id="unpack-dst-hint">A new or empty folder works best. A drive with plenty of space.</div>
+              </div>
+            </div>
+            <div class="step" data-runbox="unpack"></div>
+          </div>
+          <div class="activity-slot"></div>
+        </div>
+      </section>
+
       <!-- Process Takeout -->
       <section class="view" data-view="takeout">
         <div class="tool-head">
-          <div class="eyebrow">Import</div>
+          <div class="eyebrow">Google Takeout</div>
           <h1>Process Google Takeout</h1>
           <p class="lead">Copies every photo and video from an unzipped Takeout export into dated folders, and writes the date, location and caption from Google's JSON sidecar files into each one.</p>
           <div class="facts">
@@ -632,7 +730,7 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
                 <label for="takeout-src">Takeout folder</label>
                 <div class="input-row"><input id="takeout-src" class="input mono persist" list="dl-takeout-src" placeholder="e.g. D:\Takeout" autocomplete="off"><button class="btn btn-secondary" data-browse="takeout-src"><svg class="i sm"><use href="#i-folder"/></svg>Browse</button></div>
                 <datalist id="dl-takeout-src"></datalist>
-                <div class="hint" id="takeout-src-hint">The unzipped export. If you have several Takeout zips, extract them all into this one folder.</div>
+                <div class="hint" id="takeout-src-hint">The unpacked export (the folder that contains <code>Takeout</code>). Still have zip files? Use <i>Unpack archives</i> first.</div>
               </div>
               <div class="field">
                 <label for="takeout-dst">Output folder</label>
@@ -693,12 +791,13 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
       <!-- Sort by filename date -->
       <section class="view" data-view="filename">
         <div class="tool-head">
-          <div class="eyebrow">Import</div>
-          <h1>Sort by filename date</h1>
-          <p class="lead">For folders where the date is in the file name: Screenshots, WhatsApp, Signal, Pixel and most phone cameras. Each file is copied into a dated folder and the date is written inside it.</p>
+          <div class="eyebrow">Any photos</div>
+          <h1>Organize by date</h1>
+          <p class="lead">For years of photos spread across folders: phone backups, camera cards, WhatsApp, Screenshots, old PCs. Every photo and video is copied into a year/month/day folder using the date stored inside it, or the date in its name. Files with no date at all go to <code>no-date</code>, keeping their original folder names.</p>
           <div class="facts">
-            <span class="fact ok"><svg class="i sm"><use href="#i-shield"/></svg>Your source folder is never changed</span>
-            <span class="fact info"><svg class="i sm"><use href="#i-cal"/></svg>Understands IMG_20240315_143022, PXL_…, Screenshot_2024-03-15…, VID-20240315-WA…</span>
+            <span class="fact ok"><svg class="i sm"><use href="#i-shield"/></svg>Your original folders are never changed</span>
+            <span class="fact info"><svg class="i sm"><use href="#i-cal"/></svg>Reads camera dates and names like IMG_20240315_143022, PXL_…, Screenshot_2024-03-15…</span>
+            <span class="fact info"><svg class="i sm"><use href="#i-copy"/></svg>Identical copies are only kept once</span>
           </div>
         </div>
         <div class="tool-grid">
@@ -706,16 +805,16 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
             <div class="step">
               <div class="step-head"><span class="step-num">1</span><h2>Choose folders</h2></div>
               <div class="field">
-                <label for="filename-src">Folder with photos</label>
+                <label for="filename-src">Folder with your photos</label>
                 <div class="input-row"><input id="filename-src" class="input mono persist" list="dl-filename-src" placeholder="e.g. D:\Phone\Screenshots" autocomplete="off"><button class="btn btn-secondary" data-browse="filename-src"><svg class="i sm"><use href="#i-folder"/></svg>Browse</button></div>
                 <datalist id="dl-filename-src"></datalist>
-                <div class="hint" id="filename-src-hint">Sub-folders are included.</div>
+                <div class="hint" id="filename-src-hint">All sub-folders are included, however deep.</div>
               </div>
               <div class="field">
                 <label for="filename-dst">Output folder</label>
                 <div class="input-row"><input id="filename-dst" class="input mono persist" list="dl-filename-dst" placeholder="e.g. E:\Photos" autocomplete="off"><button class="btn btn-secondary" data-browse="filename-dst"><svg class="i sm"><use href="#i-folder"/></svg>Browse</button></div>
                 <datalist id="dl-filename-dst"></datalist>
-                <div class="hint" id="filename-dst-hint">Where the sorted copies go.</div>
+                <div class="hint" id="filename-dst-hint">Where the organized copies go. A different folder or drive, not inside the source.</div>
               </div>
             </div>
             <div class="step">
@@ -879,7 +978,8 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
         <div class="act-body">
           <div class="act-empty" id="act-empty">
             <div class="big">Nothing running</div>
-            <div>Choose your folders, then press <b>Preview</b> to see exactly what will happen. Nothing is written in preview mode.</div>
+            <div id="act-empty-text">Choose your folders, then press <b>Preview</b> to see exactly what will happen. Nothing is written in preview mode.</div>
+            <div id="act-last" class="faint" style="margin-top:12px;font-size:13px" hidden></div>
           </div>
           <div class="progress" id="progress" hidden>
             <div class="progress-top"><b id="prog-label">Starting…</b><span id="prog-pct" class="faint"></span></div>
@@ -891,6 +991,7 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
             <div class="result-text" id="result-text"></div>
             <div class="result-actions">
               <button class="btn btn-accent btn-sm" id="btn-apply" hidden><svg class="i sm"><use href="#i-play"/></svg><span>Apply for real</span></button>
+              <button class="btn btn-accent btn-sm" id="btn-next" hidden><span>Next</span><svg class="i sm"><use href="#i-arrow"/></svg></button>
               <button class="btn btn-secondary btn-sm" id="btn-open-out"><svg class="i sm"><use href="#i-folder"/></svg>Open folder</button>
               <button class="btn btn-secondary btn-sm" id="btn-all-files"><svg class="i sm"><use href="#i-list"/></svg>All files</button>
               <button class="btn btn-ghost btn-sm" id="btn-csv"><svg class="i sm"><use href="#i-down"/></svg>Report (CSV)</button>
@@ -1031,8 +1132,28 @@ const COPY_METRICS = [
 ];
 
 const TOOLS = {
+  unpack: {
+    crumb: ['Google Takeout', 'Unpack archives'],
+    noPreview: true,
+    runText: 'Unpacks every archive into the chosen folder. The zip files themselves are left as they are.',
+    runLabel: 'Unpack archives',
+    metrics: [
+      { label: 'Archives', v: V('total'), st: [] },
+      { label: 'Unpacked', v: V('archives_ok'), st: ['unpacked'], tone: 'ok' },
+      { label: 'Files written', v: V('extracted'), st: [], tone: 'ok' },
+      { label: 'Already there', v: V('skipped'), st: [], tip: 'Unpacked by an earlier run; not written again.' },
+      { label: 'Problems', v: (s) => V('errors')(s) + V('archives_bad')(s), st: ['error'], tone: 'err', tip: 'Damaged or incomplete archives, or files that could not be written.' },
+    ],
+    fields: ['unpack-src', 'unpack-dst'],
+    body: () => ({ src: val('unpack-src'), dst: val('unpack-dst') }),
+    validate: (b) => !b.src ? 'Choose the folder with the zip files.' : !b.dst ? 'Choose where to unpack them.' : '',
+    summary: (s) => `${plural(s.archives_ok || 0, 'archive')} unpacked: ${fmt(s.extracted)} files written` +
+      (s.skipped ? `, ${fmt(s.skipped)} were already there` : '') + '.' +
+      ((s.archives_bad || 0) ? ` ${plural(s.archives_bad, 'archive')} could not be read: download ${s.archives_bad === 1 ? 'it' : 'them'} again from Google Takeout.` : ''),
+    next: (ev) => ev.ok || (ev.stats && ev.stats.archives_ok) ? { label: 'Next: process these photos', go: () => prefill('takeout', { src: ev.output }) } : null,
+  },
   takeout: {
-    crumb: ['Import', 'Process Takeout'],
+    crumb: ['Google Takeout', 'Process Takeout'],
     metrics: COPY_METRICS,
     preview: 'Shows where every file would go and which date it would get. Nothing is copied.',
     apply: 'Copies all files to the output folder and writes their dates. Your Takeout folder is not changed.',
@@ -1052,11 +1173,11 @@ const TOOLS = {
     summary: copySummary,
   },
   filename: {
-    crumb: ['Import', 'Sort by filename date'],
+    crumb: ['Any photos', 'Organize by date'],
     metrics: COPY_METRICS,
-    preview: 'Shows the date found for each file and where it would go. Nothing is copied.',
-    apply: 'Copies the files into dated folders and writes the dates. The source folder is not changed.',
-    applyLabel: 'Start sorting',
+    preview: 'Shows the date found for each file and the folder it would go to. Nothing is copied.',
+    apply: 'Copies every photo and video into dated folders and writes the dates. Your original folders are not changed.',
+    applyLabel: 'Start organizing',
     fields: ['filename-src', 'filename-dst'],
     body: () => ({
       src: val('filename-src'), dst: val('filename-dst'), output_mode: radio('filename-mode'),
@@ -1065,7 +1186,7 @@ const TOOLS = {
       kinds: radio('filename-kinds'), date_from: val('filename-from'), date_to: val('filename-to'),
       filename_tz: val('filename-tz'),
     }),
-    validate: (b) => !b.src ? 'Choose the folder with photos.' : !b.dst ? 'Choose an output folder.'
+    validate: (b) => !b.src ? 'Choose the folder with your photos.' : !b.dst ? 'Choose an output folder.'
       : b.src === b.dst ? 'The output folder must be different.'
       : (b.date_from && b.date_to && b.date_from > b.date_to) ? 'The start date is after the end date.' : '',
     summary: copySummary,
@@ -1121,6 +1242,8 @@ const TOOLS = {
   dupes: {
     crumb: ['Backup drive', 'Find duplicates'],
     noPreview: true,
+    runText: 'Scanning only reads files. With "Move the extra copies" on, duplicates are moved into a _duplicates folder at the end.',
+    runLabel: 'Scan for duplicates',
     metrics: [
       { label: 'Files scanned', v: V('total'), st: [] },
       { label: 'Groups', v: V('groups'), st: ['keep'], tip: 'Sets of identical files. One file per group is kept.' },
@@ -1137,7 +1260,7 @@ const TOOLS = {
       : 'No duplicates found.',
   },
 };
-const TOOL_NAMES = { takeout: 'Process Takeout', filename: 'Sort by filename date', fixdrive: 'Fix missing dates', rename: 'Rename old folders', dupes: 'Find duplicates' };
+const TOOL_NAMES = { unpack: 'Unpack archives', takeout: 'Process Takeout', filename: 'Organize by date', fixdrive: 'Fix missing dates', rename: 'Rename old folders', dupes: 'Find duplicates' };
 
 function copySummary(s, dry) {
   const parts = [];
@@ -1158,7 +1281,7 @@ const STATUS = {
   unsupported: ['Can\'t hold a date', 'warn'], exists: ['Already there', ''], duplicate: ['Identical copy', ''],
   meta_failed: ['Copied, date not written', 'err'], error: ['Error', 'err'], filtered: ['Outside dates', ''],
   mismatched: ['Date ≠ folder', 'warn'], corrected: ['Corrected', 'ok'], rename: ['Renamed', 'ok'], merge: ['Merged', 'ok'],
-  keep: ['Kept', 'ok'], moved: ['Moved aside', 'warn'],
+  keep: ['Kept', 'ok'], moved: ['Moved aside', 'warn'], unpacked: ['Unpacked', 'ok'],
 };
 
 // ── State & helpers ─────────────────────────────────────────────────────────
@@ -1207,6 +1330,8 @@ document.addEventListener('DOMContentLoaded', () => {
     $(id).addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(() => checkField(id), 700); });
     $(id).addEventListener('change', () => { clearTimeout(timer); store(id, $(id).value); checkField(id); });
   }));
+  $('btn-analyze').addEventListener('click', analyze);
+  $('start-root').addEventListener('keydown', (e) => { if (e.key === 'Enter') analyze(); });
   $('btn-pause').addEventListener('click', () => api(state.paused ? '/api/resume' : '/api/pause', {}));
   $('btn-stop').addEventListener('click', stop);
   $('btn-apply').addEventListener('click', applyForReal);
@@ -1264,13 +1389,12 @@ function buildRunBoxes() {
     seg.querySelectorAll('input').forEach(inp => {
       inp.name = `${tool}-runmode`;
       inp.id = `${tool}-runmode-${inp.value}`;
-      inp.classList.add('persist');
       inp.nextElementSibling.htmlFor = inp.id;
     });
     if (TOOLS[tool].noPreview) {
       seg.remove();
-      box.querySelector('.run-explain').textContent = 'Scanning only reads files. With "Move the extra copies" on, duplicates are moved into a _duplicates folder at the end.';
-      box.querySelector('.run-btn span').textContent = 'Scan for duplicates';
+      box.querySelector('.run-explain').textContent = TOOLS[tool].runText;
+      box.querySelector('.run-btn span').textContent = TOOLS[tool].runLabel;
       box.querySelector('.run-btn use').setAttribute('href', '#i-play');
     } else {
       seg.addEventListener('change', () => updateRunBox(tool));
@@ -1359,6 +1483,7 @@ function show(view, noHash) {
     if (i < a.length - 1) { const s = document.createElement('span'); s.textContent = '/'; crumbs.appendChild(s); }
   });
   if (TOOLS[view]) document.querySelector(`section[data-view="${view}"] .activity-slot`).appendChild($('activity'));
+  refreshActivity();
   updateChip();
   window.scrollTo({ top: 0 });
 }
@@ -1425,34 +1550,169 @@ function setHint(id, cls, icon, text) {
 
 async function checkField(id) {
   const hint = $(id + '-hint');
+  if (!hint) return;
   if (hint.dataset.default === undefined) hint.dataset.default = hint.innerHTML;
   const v = val(id);
+  if (id === 'unpack-src') $('unpack-list').hidden = true;
   if (!v) { hint.className = 'hint'; hint.innerHTML = hint.dataset.default; return; }
   setHint(id, '', 'clock', 'Checking…');
   if (id.endsWith('-root')) return checkDrive(id, v);
+  if (id === 'unpack-src') return checkArchives(v);
   const isDst = id.endsWith('-dst');
-  const d = await api('/api/preflight', isDst ? { dst: v } : { src: v }).catch(() => ({}));
+  const srcId = isDst ? id.replace('-dst', '-src') : null;
+  const body = isDst ? { dst: v, within: $(srcId) && id !== 'unpack-dst' ? val(srcId) : '' } : { src: v };
+  const d = await api('/api/preflight', body).catch(() => ({}));
   if (val(id) !== v) return;
   if (isDst) {
-    if (d.free_h === undefined) { setHint(id, 'err', 'alert', 'Can\'t reach this location.'); return; }
-    const src = $(id.replace('-dst', '-src'));
-    const size = src && src.dataset.size ? +src.dataset.size : 0;
-    if (size && d.free < size) setHint(id, 'warn', 'alert', `${d.free_h} free, which may not be enough for ${bytes(size)} of photos.`);
+    if (d.free_h === undefined) { setHint(id, 'err', 'alert', 'Can\'t reach this location. Is the drive connected?'); return; }
+    if (d.inside_src) { setHint(id, 'warn', 'alert', 'This folder is inside the source folder. It works, but a separate folder or drive is tidier.'); return; }
+    const size = $(srcId) && $(srcId).dataset.size ? +$(srcId).dataset.size : 0;
+    if (size && d.free < size) setHint(id, 'warn', 'alert', `${d.free_h} free, which may not be enough for ${bytes(size)}.`);
     else setHint(id, 'ok', 'check', `${d.free_h} free` + (d.exists ? '' : ' · the folder will be created'));
     return;
   }
-  if (d.count === undefined) { setHint(id, 'err', 'alert', 'Folder not found.'); return; }
+  if (d.missing || d.count === undefined) { setHint(id, 'err', 'alert', 'Folder not found. Check the path, or use Browse.'); return; }
   $(id).dataset.size = d.size;
-  if (!d.count) { setHint(id, 'warn', 'alert', 'No photos or videos found in this folder.'); return; }
+  const tool = id.split('-')[0];
+  if (!d.count) {
+    if (d.archives) {
+      const span = setHint(id, 'warn', 'zip', `No photos here yet, but ${plural(d.archives, 'zip/archive file')} found. `);
+      addAction(span, 'Unpack them first', () => prefill('unpack', { src: v }));
+    } else {
+      setHint(id, 'warn', 'alert', 'No photos or videos found in this folder or its sub-folders.');
+    }
+    return;
+  }
   let t = `${fmt(d.count)} photos & videos · ${d.size_h}`;
   let cls = 'ok', icon = 'check';
-  if (id === 'takeout-src') {
-    if (d.sidecars) t += ` · ${fmt(d.sidecars)} Takeout .json files`;
-    else { t += ' · no Takeout .json files here. Is this the right folder? "Sort by filename date" may suit it better.'; cls = 'warn'; icon = 'alert'; }
+  if (tool === 'takeout') {
+    if (d.sidecars) t += ` · ${plural(d.sidecars, 'Takeout .json file')}`;
+    else { t += ' · no Takeout .json files, so this doesn\'t look like a Takeout export.'; cls = 'warn'; icon = 'alert'; }
   }
-  setHint(id, cls, icon, t);
-  const dst = id.replace('-src', '-dst');
-  if ($(dst) && val(dst)) checkField(dst);
+  if (d.other) t += ` · ${plural(d.other, 'other file')} (${d.other_desc}) will be left alone`;
+  const span = setHint(id, cls, icon, t);
+  if (tool === 'takeout' && !d.sidecars) { span.append(' '); addAction(span, 'Use Organize by date instead', () => prefill('filename', { src: v })); }
+  if (d.archives) { span.append(` ${plural(d.archives, 'archive')} found too. `); addAction(span, 'Unpack', () => prefill('unpack', { src: v })); }
+  if (srcId === null) {
+    const dst = id.replace('-src', '-dst');
+    if (id.endsWith('-src') && $(dst) && val(dst)) checkField(dst);
+  }
+}
+
+function addAction(after, label, fn) {
+  const a = document.createElement('span');
+  a.className = 'act';
+  a.textContent = label;
+  a.addEventListener('click', fn);
+  after.after(a);
+  return a;
+}
+
+async function checkArchives(v) {
+  const id = 'unpack-src';
+  const d = await api('/api/archives', { src: v }).catch(() => ({}));
+  if (val(id) !== v) return;
+  if (!d.ok) { setHint(id, 'err', 'alert', d.error || 'Folder not found.'); return; }
+  const list = $('unpack-list');
+  list.innerHTML = '';
+  if (!d.archives.length) { setHint(id, 'warn', 'alert', 'No .zip, .tgz or .tar files found here (or one folder down).'); return; }
+  setHint(id, 'ok', 'check', `${plural(d.archives.length, 'archive')} found · ${d.total_h} in total`);
+  $(id).dataset.size = d.archives.reduce((a, x) => a + x.size, 0);
+  d.archives.forEach(a => {
+    const row = document.createElement('div');
+    const n = document.createElement('span'); n.textContent = a.name; n.title = a.path;
+    const z = document.createElement('span'); z.className = 'faint'; z.textContent = a.size_h;
+    row.append(n, z);
+    list.appendChild(row);
+  });
+  list.hidden = false;
+  if (!val('unpack-dst')) {
+    const sep = v.includes('\\') ? '\\' : '/';
+    $('unpack-dst').value = v.replace(/[\\/]+$/, '') + sep + 'Takeout unpacked';
+    checkField('unpack-dst');
+  } else {
+    checkField('unpack-dst');
+  }
+}
+
+function prefill(tool, values) {
+  show(tool);
+  Object.entries(values || {}).forEach(([k, v]) => {
+    const el = $(`${tool}-${k}`);
+    if (el && v) { el.value = v; store(el.id, v); checkField(el.id); }
+  });
+  // unpack-dst is filled in automatically once the archives have been found
+  const next = TOOLS[tool].fields.find(id => !val(id) && id !== 'unpack-dst' && id !== 'dupes-b');
+  const ask = { dst: 'Now choose where the organized copies should go.', root: 'Now choose the drive folder.',
+                src: 'Now choose the source folder.', a: 'Now choose a folder to scan.' };
+  if (next) { $(next).focus(); toast(ask[next.split('-')[1]] || 'Now fill in the remaining folder.'); }
+}
+
+// ── Start here: analyze a folder ────────────────────────────────────────────
+async function analyze() {
+  const v = val('start-root');
+  if (!v) { toast('Choose a folder first.', 'err'); $('start-root').focus(); return; }
+  remember('start-root', v);
+  store('start-root', v);
+  const btn = $('btn-analyze');
+  btn.disabled = true;
+  $('analysis').hidden = true;
+  setHint('start-root', '', 'clock', 'Looking through the folder… big folders can take a minute.');
+  const d = await api('/api/analyze', { root: v }).catch(() => ({ ok: false, error: 'Can\'t reach the app.' }));
+  btn.disabled = false;
+  if (!d.ok) { setHint('start-root', 'err', 'alert', d.error || 'Could not read this folder.'); return; }
+  setHint('start-root', 'ok', 'check', d.partial ? 'Done (this folder is very large, so only part of it was counted).' : 'Done. Nothing was changed.');
+  renderAnalysis(d);
+}
+
+function renderAnalysis(d) {
+  const ul = $('findings');
+  ul.innerHTML = '';
+  const add = (icon, html, cls) => {
+    const li = document.createElement('li');
+    if (cls) li.className = cls;
+    li.innerHTML = svg(icon) + '<span></span>';
+    li.lastChild.innerHTML = html;
+    ul.appendChild(li);
+  };
+  const b = (x) => `<b>${escapeHtml(x)}</b>`;
+  const years = Object.keys(d.years || {});
+  if (d.media) add('image', `${b(plural(d.photos, 'photo'))} and ${b(plural(d.videos, 'video'))} (${b(d.size_h)}) in ${plural(d.folders, 'folder')}`);
+  else add('image', 'No photos or videos found yet.', 'warn');
+  if (d.archives.length) add('zip', `${b(plural(d.archives.length, 'archive'))} (${d.archive_size_h}) not unpacked yet: ${escapeHtml(d.archives.slice(0, 3).map(a => a.name).join(', '))}${d.archives.length > 3 ? '…' : ''}`, 'warn');
+  if (d.sidecars) add('box', `${b(plural(d.sidecars, 'Google Takeout .json file'))} with the real dates and places`, 'good');
+  if (d.dated_media) add('folders', `${b(fmt(d.dated_media))} already ${d.dated_media === 1 ? 'is' : 'are'} in year/month/day folders` + (d.legacy_media ? ` (${fmt(d.legacy_media)} in the old <code>2024/01/15</code> style)` : ''), 'good');
+  if (d.name_dated) add('cal', `${b(plural(d.name_dated, 'file has', 'files have'))} a date in the file name`, 'good');
+  if (d.sample_checked) add('search', `Of ${plural(d.sample_checked, 'other file')} we checked, ${b(fmt(d.sample_dated))} ${d.sample_dated === 1 ? 'has' : 'have'} a date stored inside`, d.sample_dated ? 'good' : 'warn');
+  if (years.length) add('clock', `Dates found from ${b(years.length > 1 ? years[0] + ' to ' + years[years.length - 1] : years[0])}`);
+  if (d.possible_dupes) add('copy', `${b(plural(d.possible_dupes, 'file looks', 'files look'))} like a duplicate (same name and size)`);
+  if (d.empty) add('alert', `${b(plural(d.empty, 'empty (0-byte) file'))}, probably a broken copy. These go to an <code>error</code> folder so nothing is lost.`, 'warn');
+  if (d.other_total) add('info', `${plural(d.other_total, 'other file')} (${escapeHtml(d.other_desc)}) will be left alone`);
+  if (d.unreadable.length) add('alert', `${b(plural(d.unreadable.length, 'folder'))} could not be opened (permissions?)`, 'warn');
+
+  const recs = $('recs');
+  recs.innerHTML = '';
+  if (!d.recommendations.length) {
+    recs.innerHTML = '<div class="empty-note">Nothing to do here: no photos, videos or Takeout archives found. Try a different folder.</div>';
+  }
+  d.recommendations.forEach((r, i) => {
+    const el = document.createElement('div');
+    el.className = 'rec' + (r.primary ? ' primary' : '');
+    el.innerHTML = `<span class="rec-num">${i + 1}</span><div><h4></h4><p></p></div>`;
+    el.querySelector('h4').textContent = r.title;
+    el.querySelector('p').textContent = r.why;
+    const go = document.createElement('button');
+    go.className = 'btn btn-sm ' + (r.primary ? 'btn-primary' : 'btn-secondary');
+    go.innerHTML = 'Set it up ' + svg('arrow');
+    go.addEventListener('click', () => prefill(r.tool, r.prefill));
+    el.appendChild(go);
+    recs.appendChild(el);
+  });
+  $('analysis').hidden = false;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 async function checkDrive(id, v) {
@@ -1481,12 +1741,12 @@ async function checkDrive(id, v) {
 }
 
 async function browse(id) {
-  const titles = { src: 'Choose the source folder', dst: 'Choose the output folder', root: 'Choose the drive folder', a: 'Choose a folder to scan', b: 'Choose a folder to compare' };
+  const titles = { src: 'Choose the source folder', dst: 'Choose the output folder', root: 'Choose the folder', a: 'Choose a folder to scan', b: 'Choose a folder to compare' };
   const d = await api('/api/browse', { title: titles[id.split('-')[1]] || 'Choose a folder' }).catch(() => ({}));
   if (d.path) {
     $(id).value = d.path;
     store(id, d.path);
-    checkField(id);
+    if (id === 'start-root') analyze(); else checkField(id);
   } else if (d.error) {
     toast('The folder picker isn\'t available. Paste the path instead.', 'err');
   }
@@ -1560,7 +1820,7 @@ function setStatus(kind) {
   kind = kind || (state.last ? (state.last.ok ? 'done' : 'failed') : 'idle');
   $('status-pill').className = 'status-pill ' + (kind === 'idle' ? '' : kind);
   $('status-text').textContent = labels[kind];
-  $('act-title').textContent = state.runKind && (state.running || state.last) ? TOOL_NAMES[state.runKind] : 'Activity';
+  refreshActivity();
 }
 
 function updateChip() {
@@ -1636,6 +1896,7 @@ function onStarted(kind, dry, resumed) {
   setRunning(true);
   if (!resumed && TOOLS[kind] && state.view !== kind) show(kind);
   renderMetrics();
+  refreshActivity();
 }
 
 function resetActivity() {
@@ -1683,19 +1944,57 @@ function showResult(ev) {
   if (ev.ok) $('prog-pct').textContent = '100%';
   const t = TOOLS[ev.kind];
   const s = ev.stats || state.stats || {};
-  const bad = (s.errors || 0) + (s.meta_failed || 0);
+  const bad = (s.errors || 0) + (s.meta_failed || 0) + (s.archives_bad || 0);
+  const partial = !ev.ok && !ev.stopped && bad && ((s.archives_ok || 0) + (s.extracted || 0) + (s.processed || 0) + (s.fixed || 0) > 0);
   const r = $('result');
   r.hidden = false;
-  r.className = 'result ' + (!ev.ok ? 'err' : bad ? 'warn' : 'ok');
+  r.className = 'result ' + (partial ? 'warn' : !ev.ok ? 'err' : bad ? 'warn' : 'ok');
   $('result-title').innerHTML = svg(!ev.ok ? 'alert' : ev.dry_run ? 'eye' : 'check') + '<span></span>';
-  $('result-title').lastChild.textContent = !ev.ok ? (ev.stopped ? 'Stopped. Press start again to continue.' : 'Something went wrong. See the log.')
+  $('result-title').lastChild.textContent = partial ? 'Finished, with some problems' : !ev.ok ? (ev.stopped ? 'Stopped. Press start again to continue.' : 'Something went wrong. See the log.')
     : ev.dry_run ? 'Preview: nothing was changed' : 'All done';
   $('result-text').textContent = t ? t.summary(s, ev.dry_run) : '';
   $('btn-apply').hidden = !(ev.ok && ev.dry_run && t && !t.noPreview);
   $('btn-apply').querySelector('span').textContent = t && t.applyLabel ? t.applyLabel : 'Apply for real';
+  const nx = t && t.next ? t.next(ev) : null;
+  $('btn-next').hidden = !nx;
+  if (nx) { $('btn-next').querySelector('span').textContent = nx.label; $('btn-next').onclick = nx.go; }
   $('btn-csv').hidden = $('btn-json').hidden = !ev.report;
   $('btn-open-out').hidden = !ev.output;
   setStatus(null);
+  refreshActivity();
+}
+
+// Show the running/last run only on its own tool's page; elsewhere show this
+// tool's empty state with a link back to the last run.
+function refreshActivity() {
+  const view = state.view;
+  if (!TOOLS[view]) return;
+  const kind = state.running ? state.runKind : (state.last ? state.last.kind : '');
+  const mine = !!kind && kind === view;
+  const other = !!kind && !mine;
+  const showRun = mine && (state.running || !!state.last);
+  $('act-empty').hidden = showRun;
+  $('progress').hidden = !showRun;
+  $('result').hidden = !(mine && !state.running && state.last);
+  $('metrics').hidden = !(mine && state.stats) || !$('metrics').childElementCount;
+  $('log').parentElement.hidden = other && !state.running;
+  const last = $('act-last');
+  last.hidden = !other;
+  if (other) {
+    last.innerHTML = '';
+    last.append(state.running ? `${TOOL_NAMES[kind]} is running. ` : `Last run: ${TOOL_NAMES[kind]}. `);
+    const a = document.createElement('span');
+    a.className = 'act';
+    a.textContent = state.running ? 'Watch it' : 'See the result';
+    a.style.color = 'var(--info)';
+    a.style.cursor = 'pointer';
+    a.style.textDecoration = 'underline';
+    a.addEventListener('click', () => show(kind));
+    last.appendChild(a);
+  }
+  $('status-pill').hidden = other;
+  $('elapsed').hidden = other;
+  $('act-title').textContent = mine ? TOOL_NAMES[kind] : 'Activity';
 }
 
 // ── Metrics ─────────────────────────────────────────────────────────────────
@@ -1717,6 +2016,7 @@ function renderMetrics() {
     b.addEventListener('click', () => openDrawer(m.label, m.st));
     box.appendChild(b);
   });
+  refreshActivity();
 }
 
 // ── Log ─────────────────────────────────────────────────────────────────────
@@ -1730,7 +2030,6 @@ function addLog(level, text) {
   log.appendChild(div);
   while (log.childElementCount > MAX_LOG) log.firstElementChild.remove();
   if (state.autoScroll) log.scrollTop = log.scrollHeight;
-  $('act-empty').hidden = true;
 }
 function filterLog() {
   const q = $('log-search').value.trim().toLowerCase();
@@ -1864,6 +2163,9 @@ function download(kind) {
   a.click();
 }
 function toast(msg, tone) {
+  const box = $('toasts');
+  if ([...box.children].some(t => t.lastChild.textContent === msg)) return;   // no repeats
+  while (box.childElementCount >= 2) box.firstElementChild.remove();          // keep it to two
   const el = document.createElement('div');
   el.className = 'toast';
   el.innerHTML = svg(tone === 'err' ? 'alert' : tone === 'ok' ? 'check' : 'info') + '<span></span>';

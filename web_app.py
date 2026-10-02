@@ -32,6 +32,7 @@ from typing import Optional
 
 from flask import Flask, Response, abort, jsonify, render_template, request, send_file, stream_with_context
 
+import core
 from core import (
     _SYS, OUTPUT_MODES, DriveFixer, DuplicateFinder, FolderRenamer, Job,
     ProcessOptions, Processor, _check_exiftool, _fmt_size, _norm_key, collect_dated_files,
@@ -223,6 +224,19 @@ def _build_job(tool: str, d: dict):
         else:
             job = FolderRenamer(root, dry_run=_bool(d, 'dry_run', False), **cb)
         return job, '', {'output': root}
+    if tool == 'unpack':
+        src = (d.get('src') or '').strip()
+        dst = (d.get('dst') or '').strip()
+        if not src or not Path(src).is_dir():
+            return None, 'Folder with the downloaded archives not found.', {}
+        archives = [a for a in (d.get('archives') or []) if isinstance(a, str)] or \
+            [str(a) for a in core.find_archives(Path(src))]
+        if not archives:
+            return None, 'No .zip or .tgz archives found in that folder.', {}
+        if not dst:
+            return None, 'Choose where to unpack the archives.', {}
+        job = core.ArchiveExtractor(archives, dst, **cb)
+        return job, '', {'output': dst}
     if tool == 'dupes':
         roots = [r.strip() for r in (d.get('roots') or []) if isinstance(r, str) and r.strip()]
         if not roots:
@@ -393,22 +407,18 @@ def api_start():
 
 @app.route('/api/preflight', methods=['POST'])
 def api_preflight():
-    """Quick look at a folder: media count, size, free space at output."""
+    """Quick look at a folder: media count/size, sidecars, archives, other
+    files, and free space at the output."""
     d = request.get_json(silent=True) or {}
     src = (d.get('src') or '').strip()
     out: dict = {}
     if src and Path(src).is_dir():
-        files = iter_media(Path(src))
-        size = 0
-        for p in files:
-            try:
-                size += p.stat().st_size
-            except OSError:
-                pass
-        sidecars = 0
-        for _dp, _dn, fns in os.walk(src):
-            sidecars += sum(1 for f in fns if f.lower().endswith('.json'))
-        out.update(count=len(files), size=size, size_h=_fmt_size(size), sidecars=sidecars)
+        c = core.count_folder(Path(src))
+        out.update(count=c['count'], size=c['size'], size_h=_fmt_size(c['size']), sidecars=c['sidecars'],
+                   archives=c['archives'], other=sum(c['other'].values()),
+                   other_desc=core.describe_ignored(c['other'], 4))
+    elif src:
+        out['missing'] = True
     dst = (d.get('dst') or '').strip()
     if dst:
         out['exists'] = Path(dst).is_dir()
@@ -420,7 +430,44 @@ def api_preflight():
             out.update(free=free, free_h=_fmt_size(free))
         except OSError:
             pass
+        within = (d.get('within') or '').strip()      # path-only check, no folder walk
+        if within and Path(within).is_dir():
+            out['inside_src'] = core._is_within(Path(dst), Path(within))
     return jsonify(out)
+
+
+@app.route('/api/analyze', methods=['POST'])
+def api_analyze():
+    """The "Start here" guide: what is in this folder and what to do next."""
+    root = ((request.get_json(silent=True) or {}).get('root') or '').strip()
+    if not root or not Path(root).is_dir():
+        return jsonify({'ok': False, 'error': 'Folder not found. Check the path or use Browse.'})
+    try:
+        info = core.analyze_folder(Path(root))
+    except OSError as e:
+        return jsonify({'ok': False, 'error': core.friendly_os_error(e)})
+    info['ok'] = True
+    info['size_h'] = _fmt_size(info['size'])
+    info['archive_size_h'] = _fmt_size(info['archive_size'])
+    for a in info['archives']:
+        a['size_h'] = _fmt_size(a['size'])
+    return jsonify(info)
+
+
+@app.route('/api/archives', methods=['POST'])
+def api_archives():
+    """Takeout archives found in a folder (for the Unpack tool)."""
+    root = ((request.get_json(silent=True) or {}).get('src') or '').strip()
+    if not root or not Path(root).is_dir():
+        return jsonify({'ok': False, 'error': 'Folder not found.'})
+    arcs = []
+    for a in core.find_archives(Path(root)):
+        try:
+            size = a.stat().st_size
+        except OSError:
+            size = 0
+        arcs.append({'path': str(a), 'name': a.name, 'size': size, 'size_h': _fmt_size(size)})
+    return jsonify({'ok': True, 'archives': arcs, 'total_h': _fmt_size(sum(a['size'] for a in arcs))})
 
 
 @app.route('/api/inspect', methods=['POST'])

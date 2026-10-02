@@ -368,7 +368,7 @@ class TestProcessor:
         assert fn['DateTimeOriginal'] == '2019:02:03 10:11:12'
         assert read_tags(dst / '2018/May/May_05/camera.jpg', 'DateTimeOriginal')['DateTimeOriginal'] \
             == '2018:05:05 08:00:00'
-        assert (dst / 'no-date/undated.jpg').exists()
+        assert (dst / 'no-date/Takeout/Google Photos/Photos from 2019/undated.jpg').exists()
         assert (dst / '2019/July/July_04/broken.jpg').exists()          # kept despite ExifTool failure
         assert not list(dst.rglob('.~photofix~*'))
         assert job.report_path and job.report_path.with_suffix('.csv').exists()
@@ -407,7 +407,7 @@ class TestProcessor:
         src = self.make_takeout(tmp_path / 'src')
         job = Processor(str(src), str(tmp_path / 'out'), options=ProcessOptions(use_sidecars=False))
         assert job.run() and job.stats.from_sidecar == 0
-        assert (tmp_path / 'out/no-date/IMG_0001.JPG').exists()
+        assert (tmp_path / 'out/no-date/Takeout/Google Photos/Photos from 2019/IMG_0001.JPG').exists()
 
     def test_skip_files_and_stop(self, tmp_path):
         src = self.make_takeout(tmp_path / 'src')
@@ -500,3 +500,306 @@ def test_drive_fixer_corrects_mismatched_dates(tmp_path):
     assert (job.stats.mismatched, job.stats.corrected) == (1, 1)
     assert read_tags(c, 'DateTimeOriginal')['DateTimeOriginal'] == '2021:03:11 07:15:00'
     assert DriveFixer(str(tmp_path)).run()
+
+
+# ── Robustness: every file ends up somewhere sensible ─────────────────────────
+
+import errno  # noqa: E402
+import io  # noqa: E402
+import tarfile  # noqa: E402
+import zipfile  # noqa: E402
+
+from core import (  # noqa: E402
+    ArchiveExtractor, analyze_folder, collect_dated_files, find_archives, friendly_os_error,
+    iter_media, safe_member_path,
+)
+
+
+def test_iter_media_skips_junk_and_reports_others(tmp_path):
+    jpeg(tmp_path / 'a/IMG_1.jpg')
+    (tmp_path / 'a/._IMG_1.jpg').write_bytes(b'appledouble')
+    jpeg(tmp_path / '@eaDir/thumb.jpg')
+    jpeg(tmp_path / '.thumbnails/t.jpg')
+    (tmp_path / 'a/receipt.pdf').write_bytes(b'x')
+    (tmp_path / 'a/Thumbs.db').write_bytes(b'x')
+    (tmp_path / 'a/IMG_1.jpg.json').write_text('{}')
+    jpeg(tmp_path / 'b/RAW.CR3')
+    ignored = {}
+    files = iter_media(tmp_path, ignored=ignored)
+    assert sorted(p.name for p in files) == ['IMG_1.jpg', 'RAW.CR3']
+    assert ignored == {'.pdf': 1}
+
+
+def test_iter_media_reports_unreadable_folders(tmp_path, monkeypatch):
+    jpeg(tmp_path / 'ok/a.jpg')
+    (tmp_path / 'locked').mkdir()
+    real = os.scandir
+
+    def fake(path='.'):
+        if str(path).endswith('locked'):
+            raise PermissionError(13, 'Permission denied', str(path))
+        return real(path)
+    monkeypatch.setattr(os, 'scandir', fake)
+    errs = []
+    assert [p.name for p in iter_media(tmp_path, errors=errs)] == ['a.jpg']
+    assert len(errs) == 1 and 'locked' in errs[0]
+
+
+@pytest.mark.parametrize('err,text', [
+    (OSError(errno.ENOSPC, 'x'), 'full'), (OSError(errno.EFBIG, 'x'), 'FAT32'),
+    (PermissionError(errno.EACCES, 'x'), 'Permission'), (FileNotFoundError(errno.ENOENT, 'x'), 'disconnected'),
+])
+def test_friendly_os_error(err, text):
+    assert text in friendly_os_error(err)
+
+
+@needs_exiftool
+class TestEveryFileLands:
+    def test_empty_file_and_undated_keep_their_folders(self, tmp_path):
+        src = tmp_path / 'src'
+        jpeg(src / 'Holiday 2015/Day 1/beach.jpg', b'u')                   # no date anywhere
+        (src / 'Scans/broken.jpg').parent.mkdir(parents=True)
+        (src / 'Scans/broken.jpg').write_bytes(b'')                       # empty
+        job = Processor(str(src), str(tmp_path / 'out'), options=ProcessOptions(use_sidecars=False))
+        assert job.run()
+        assert (tmp_path / 'out/no-date/Holiday 2015/Day 1/beach.jpg').exists()
+        assert (tmp_path / 'out/error/Scans/broken.jpg').exists()
+        assert job.stats.errors == 1 and job.stats.no_json == 1
+
+    def test_renamed_identical_copy_kept_once(self, tmp_path):
+        src = tmp_path / 'src'
+        jpeg(src / 'a/IMG_20200101_120000.jpg', b'same')
+        jpeg(src / 'b/IMG_20200101_120000 copy.jpg', b'same')      # same date from name, same bytes
+        jpeg(src / 'c/IMG_20200101_120000 (2).jpg', b'other')      # same day, different photo
+        out = tmp_path / 'out'
+        job = Processor(str(src), str(out), options=ProcessOptions(use_sidecars=False, filename_tz='utc'))
+        assert job.run() and job.stats.skipped == 1
+        day = out / '2020/January/January_01'
+        assert len(list(day.iterdir())) == 2
+        # Re-run with renamed output names: content already there → skipped, not duplicated
+        again = Processor(str(src), str(out), options=ProcessOptions(use_sidecars=False, filename_tz='utc',
+                                                                     rename_to_date=True))
+        assert again.run() and again.stats.skipped == 3 and len(list(day.iterdir())) == 2
+        # A file deleted from the output is copied again on the next run
+        victim = sorted(day.iterdir())[0]
+        victim.unlink()
+        third = Processor(str(src), str(out), options=ProcessOptions(use_sidecars=False, filename_tz='utc'))
+        assert third.run() and len(list(day.iterdir())) == 2
+
+    def test_disk_full_stops_the_run(self, tmp_path, monkeypatch):
+        src = tmp_path / 'src'
+        for i in range(12):
+            jpeg(src / f'IMG_2020010{i % 9 + 1}_120000_{i}.jpg', bytes([i]))
+        calls = {'n': 0}
+        real = shutil.copy2
+
+        def full(a, b, *k, **kw):
+            calls['n'] += 1
+            if calls['n'] > 2:
+                raise OSError(errno.ENOSPC, 'No space left on device')
+            return real(a, b, *k, **kw)
+        monkeypatch.setattr(core.shutil, 'copy2', full)
+        job = Processor(str(src), str(tmp_path / 'out'),
+                        options=ProcessOptions(use_sidecars=False, keep_existing_dates=False), workers=1)
+        assert job.run() is False
+        assert 'full' in job.fatal
+        assert job.stats.errors < 12                    # stopped early instead of failing everything
+        assert not list((tmp_path / 'out').rglob('.~photofix~*'))
+
+
+def test_collect_dated_files_nested_loose_and_locked(tmp_path, monkeypatch):
+    jpeg(tmp_path / '2020/March/March_02/a.jpg')
+    jpeg(tmp_path / '2020/March/March_02/Burst/b.jpg')
+    jpeg(tmp_path / '2020/March/loose.jpg')
+    jpeg(tmp_path / '2020/April/April_01/c.jpg')
+    (tmp_path / '2020/March/March_02/._a.jpg').write_bytes(b'x')
+    real = core._list_dir
+
+    def flaky(d, notes=None):
+        if d.name == 'April':
+            if notes is not None:
+                notes.append(f'could not open {d}: Permission denied')
+            return [], []
+        return real(d, notes)
+    monkeypatch.setattr(core, '_list_dir', flaky)
+    items, notes = collect_dated_files(tmp_path)
+    assert sorted(p.name for p, _ in items) == ['a.jpg', 'b.jpg']
+    assert any('no day folder' in n for n in notes) and any('Permission' in n for n in notes)
+
+
+# ── Archives ──────────────────────────────────────────────────────────────────
+
+@pytest.mark.parametrize('name,expected', [
+    ('Takeout/Google Photos/a.jpg', 'Takeout/Google Photos/a.jpg'),
+    ('../../evil.jpg', None), ('/etc/passwd', 'etc/passwd'), ('a/../../b.jpg', None),
+    ('Takeout/what?.jpg', 'Takeout/what_.jpg'), ('C:\\Windows\\x.jpg', 'Windows/x.jpg'), ('', None),
+])
+def test_safe_member_path(name, expected):
+    got = safe_member_path(name)
+    assert (got.as_posix() if got else None) == expected
+
+
+def _make_takeout_zips(d: Path):
+    d.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(d / 'takeout-001.zip', 'w') as z:
+        z.writestr('Takeout/Google Photos/Photos from 2019/IMG_1.jpg', JPEG)
+        z.writestr('Takeout/Google Photos/Photos from 2019/IMG_1.jpg.json', json.dumps({'photoTakenTime': {'timestamp': '1562236200'}}))
+        z.writestr('../escape.jpg', JPEG)
+    with zipfile.ZipFile(d / 'takeout-002.zip', 'w') as z:
+        z.writestr('Takeout/Google Photos/Photos from 2020/IMG_2.jpg', JPEG + b'2')
+    good = (d / 'takeout-002.zip').read_bytes()
+    (d / 'takeout-003.zip').write_bytes(good[:len(good) // 2])
+    with tarfile.open(d / 'takeout-004.tgz', 'w:gz') as t:
+        ti = tarfile.TarInfo('Takeout/Google Photos/Photos from 2021/IMG_3.jpg')
+        ti.size = len(JPEG)
+        t.addfile(ti, io.BytesIO(JPEG))
+
+
+def test_archive_extractor(tmp_path):
+    _make_takeout_zips(tmp_path / 'dl')
+    arcs = find_archives(tmp_path / 'dl')
+    assert len(arcs) == 4
+    out = tmp_path / 'unpacked'
+    job = ArchiveExtractor([str(a) for a in arcs], str(out))
+    assert job.run() is False                          # one archive is damaged
+    s = job.stats
+    assert (s.archives_ok, s.archives_bad, s.extracted) == (3, 1, 4)
+    assert (out / 'Takeout/Google Photos/Photos from 2021/IMG_3.jpg').exists()
+    assert not (tmp_path / 'escape.jpg').exists() and not (out.parent / 'escape.jpg').exists()
+    good = [str(a) for a in arcs if '003' not in a.name]
+    again = ArchiveExtractor(good, str(out))
+    assert again.run() and again.stats.extracted == 0 and again.stats.skipped == 4
+
+
+# ── Folder analysis ───────────────────────────────────────────────────────────
+
+def test_analyze_takeout(tmp_path):
+    for i in range(6):
+        jpeg(tmp_path / f'Takeout/Google Photos/Photos from 2019/IMG_{i}.jpg', bytes([i]))
+        sidecar(tmp_path / f'Takeout/Google Photos/Photos from 2019/IMG_{i}.jpg.json', 1)
+    a = analyze_folder(tmp_path)
+    assert a['kind'] == 'takeout' and a['recommendations'][0]['tool'] == 'takeout'
+
+
+def test_analyze_archives(tmp_path):
+    _make_takeout_zips(tmp_path)
+    a = analyze_folder(tmp_path)
+    assert a['kind'] == 'archives' and a['recommendations'][0]['tool'] == 'unpack'
+
+
+def test_analyze_drive_with_legacy_folders(tmp_path):
+    jpeg(tmp_path / '2020/01/15/a.jpg', b'a')
+    jpeg(tmp_path / '2020/January/January_16/b.jpg', b'b')
+    a = analyze_folder(tmp_path)
+    tools = [r['tool'] for r in a['recommendations']]
+    assert a['kind'] == 'drive' and tools[:2] == ['rename', 'fixdrive']
+    assert a['dated_media'] == 2 and a['legacy_media'] == 1
+
+
+def test_analyze_unorganized_and_empty(tmp_path):
+    jpeg(tmp_path / 'Phone/IMG_20200101_101010.jpg', b'a')
+    jpeg(tmp_path / 'Old PC/holiday/beach.jpg', b'b')
+    (tmp_path / 'docs.pdf').write_bytes(b'x')
+    (tmp_path / 'Old PC/empty.jpg').write_bytes(b'')
+    a = analyze_folder(tmp_path)
+    assert a['kind'] == 'unorganized' and a['recommendations'][0]['tool'] == 'filename'
+    assert a['name_dated'] == 1 and a['empty'] == 1 and a['other'] == {'.pdf': 1}
+    assert analyze_folder(tmp_path / 'Phone')['media'] == 1
+    empty = tmp_path / 'nothing'
+    empty.mkdir()
+    assert analyze_folder(empty)['recommendations'] == []
+
+
+# ── Regression tests for review findings ──────────────────────────────────────
+
+@needs_exiftool
+def test_twin_takes_over_when_first_copy_fails(tmp_path, monkeypatch):
+    src = tmp_path / 'src'
+    jpeg(src / 'a/IMG_20200101_120000.jpg', b'same')
+    jpeg(src / 'b/IMG_20200101_120000 copy.jpg', b'same')
+    real = shutil.copy2
+    failed = {}
+
+    def flaky(a, b, *k, **kw):
+        if str(a).endswith('a/IMG_20200101_120000.jpg') and 'error' not in str(b) and not failed:
+            failed['x'] = 1
+            raise PermissionError(13, 'locked')
+        return real(a, b, *k, **kw)
+    monkeypatch.setattr(core.shutil, 'copy2', flaky)
+    job = Processor(str(src), str(tmp_path / 'out'), workers=1,
+                    options=ProcessOptions(use_sidecars=False, filename_tz='utc'))
+    job.run()
+    day = tmp_path / 'out/2020/January/January_01'
+    assert [p.name for p in day.iterdir()] == ['IMG_20200101_120000 copy.jpg']
+    assert (tmp_path / 'out/error/a/IMG_20200101_120000.jpg').exists()
+
+
+@needs_exiftool
+def test_old_flat_no_date_is_recognised(tmp_path):
+    src = tmp_path / 'src'
+    jpeg(src / 'Album/beach.jpg', b'u')
+    out = tmp_path / 'out'
+    jpeg(out / 'no-date/beach.jpg', b'u')                     # written by an older version
+    m = core.Manifest(out)
+    m.put(Path('no-date/beach.jpg'), core.quick_fingerprint(src / 'Album/beach.jpg'))
+    m.save()
+    job = Processor(str(src), str(out), options=ProcessOptions(use_sidecars=False))
+    assert job.run() and job.stats.skipped == 1
+    assert not (out / 'no-date/Album').exists()
+
+
+def test_long_path_error_is_not_fatal():
+    e = FileNotFoundError(2, 'path not found')
+    e.winerror = 3
+    assert not core.is_fatal_os_error(e)
+    full = OSError(28, 'full')
+    assert core.is_fatal_os_error(full)
+
+
+def test_archive_with_corrupt_member_continues(tmp_path):
+    d = tmp_path / 'dl'
+    d.mkdir()
+    payload = os.urandom(4000)
+    with zipfile.ZipFile(d / 'a.zip', 'w', compression=zipfile.ZIP_DEFLATED) as z:
+        z.writestr('Takeout/bad.jpg', payload)
+        z.writestr('Takeout/good.jpg', JPEG)
+    raw = bytearray((d / 'a.zip').read_bytes())
+    i = raw.find(b'Takeout/bad.jpg') + len('Takeout/bad.jpg') + 40
+    raw[i:i + 50] = bytes(50)                                   # damage the compressed data
+    (d / 'a.zip').write_bytes(bytes(raw))
+    with zipfile.ZipFile(d / 'b.zip', 'w') as z:
+        z.writestr('Takeout/other.jpg', JPEG + b'b')
+    job = ArchiveExtractor([str(d / 'a.zip'), str(d / 'b.zip')], str(tmp_path / 'out'))
+    job.run()
+    assert (tmp_path / 'out/Takeout/good.jpg').exists() and (tmp_path / 'out/Takeout/other.jpg').exists()
+    assert job.stats.errors >= 1 and not list((tmp_path / 'out').rglob('.~photofix~*'))
+
+
+def test_deep_archives_found_and_tar_progress(tmp_path):
+    deep = tmp_path / 'a/b/c/d'
+    deep.mkdir(parents=True)
+    with tarfile.open(deep / 't.tgz', 'w:gz') as t:
+        for i in range(5):
+            ti = tarfile.TarInfo(f'Takeout/{i}.jpg')
+            ti.size = len(JPEG)
+            t.addfile(ti, io.BytesIO(JPEG))
+    assert find_archives(tmp_path) == [deep / 't.tgz']
+    seen = []
+    job = ArchiveExtractor([str(deep / 't.tgz')], str(tmp_path / 'out'),
+                           on_progress=lambda c, t, n, f: seen.append((c, t)))
+    assert job.run()
+    assert all(c <= t for c, t in seen) and job.stats.extracted == 5
+    assert job._remaining_size(deep / 't.tgz') >= 0
+
+
+@needs_exiftool
+def test_wrong_extension_is_corrected(tmp_path):
+    src = tmp_path / 'src'
+    jpeg(src / 'Screenshot_2022-05-01-10-10-00.png', b'really a jpeg')
+    job = Processor(str(src), str(tmp_path / 'out'), options=ProcessOptions(use_sidecars=False, filename_tz='utc'))
+    assert job.run() and job.stats.meta_failed == 0 and job.stats.from_filename == 1
+    out = tmp_path / 'out/2022/May/May_01/Screenshot_2022-05-01-10-10-00.jpg'
+    assert read_tags(out, 'DateTimeOriginal')['DateTimeOriginal'] == '2022:05:01 10:10:00'
+    assert 'corrected' in job.records[0].note
+    assert core._real_extension('Not a valid PNG (looks more like a JPEG)') == '.jpg'
+    assert core._real_extension('Error: something else') is None

@@ -7,6 +7,8 @@ Photos Backup Fix — command-line interface (same engine as the web UI).
   python cli.py fix-dates DRIVE   [--dry-run]              (stamp missing dates in place)
   python cli.py rename    DRIVE   [--dry-run]              (01/15 → January/January_15)
   python cli.py dupes     FOLDER [FOLDER2] [--move]        (find identical files)
+  python cli.py unpack    DOWNLOADS DEST                   (unpack Takeout .zip/.tgz files)
+  python cli.py analyze   FOLDER                           (what is in here / what to do next)
 
 Exit codes: 0 = success, 1 = could not run / stopped, 2 = finished with errors.
 """
@@ -18,8 +20,10 @@ import signal
 import sys
 import time
 
-from core import (OUTPUT_MODES, DriveFixer, DuplicateFinder, FolderRenamer, ProcessOptions,
-                  Processor)
+from pathlib import Path
+
+from core import (OUTPUT_MODES, ArchiveExtractor, DriveFixer, DuplicateFinder, FolderRenamer,
+                  ProcessOptions, Processor, _fmt_size, analyze_folder, find_archives)
 
 
 def _printer(verbose: bool):
@@ -95,8 +99,15 @@ def main(argv=None) -> int:
     p = sub.add_parser('dupes', parents=[common], help='find byte-identical photos/videos')
     p.add_argument('folders', nargs='+')
     p.add_argument('--move', action='store_true', help='move extra copies to _duplicates/')
+    p = sub.add_parser('unpack', parents=[common], help='unpack Google Takeout .zip/.tgz downloads')
+    p.add_argument('src', help='folder containing the downloaded archives (searched recursively)')
+    p.add_argument('dest', help='folder to unpack into')
+    p = sub.add_parser('analyze', parents=[common], help="describe a folder and suggest what to do")
+    p.add_argument('folder')
 
     a = ap.parse_args(argv)
+    if a.cmd == 'analyze':
+        return _analyze(a.folder)
     cb = dict(on_log=_printer(a.verbose), on_progress=_progress())
 
     if a.cmd in ('takeout', 'sort'):
@@ -114,6 +125,12 @@ def main(argv=None) -> int:
                          workers=a.workers, **cb)
     elif a.cmd == 'rename':
         job = FolderRenamer(a.drive, dry_run=a.dry_run, **cb)
+    elif a.cmd == 'unpack':
+        archives = find_archives(Path(a.src))
+        if not archives:
+            print(f'No .zip/.tgz/.tar archives found in {a.src}', file=sys.stderr)
+            return 1
+        job = ArchiveExtractor([str(x) for x in archives], a.dest, **cb)
     else:
         job = DuplicateFinder(a.folders, move=a.move, **cb)
 
@@ -127,6 +144,38 @@ def main(argv=None) -> int:
         return 1
     errors = getattr(job.stats, 'errors', 0) + getattr(job.stats, 'meta_failed', 0)
     return 2 if errors else 0
+
+
+def _analyze(folder: str) -> int:
+    if not Path(folder).is_dir():
+        print(f'Folder not found: {folder}', file=sys.stderr)
+        return 1
+    i = analyze_folder(Path(folder))
+    print(f'{folder}')
+    print(f'  {i["photos"]:,} photos, {i["videos"]:,} videos, {_fmt_size(i["size"])} in {i["folders"]:,} folders'
+          + ('  (partial: very large folder)' if i['partial'] else ''))
+    facts = [
+        (i['archives'], f'{len(i["archives"])} Takeout archive(s) not unpacked yet'),
+        (i['sidecars'], f'{i["sidecars"]:,} Google Takeout .json files'),
+        (i['dated_media'], f'{i["dated_media"]:,} files in year/month/day folders ({i["legacy_media"]:,} old-style)'),
+        (i['name_dated'], f'{i["name_dated"]:,} files with a date in the name'),
+        (i['sample_checked'], f'{i["sample_dated"]}/{i["sample_checked"]} sampled files have a date inside'),
+        (i['empty'], f'{i["empty"]:,} empty files'),
+        (i['other_total'], f'{i["other_total"]:,} other files ({i["other_desc"]})'),
+    ]
+    for show, text in facts:
+        if show:
+            print(f'  - {text}')
+    print('What to do next:' if i['recommendations'] else 'Nothing to do here.')
+    q = f'"{folder}"'
+    cmd = {'unpack': f'unpack {q} DEST', 'takeout': f'takeout {q} DEST --dry-run',
+           'filename': f'sort {q} DEST --dry-run', 'fixdrive': f'fix-dates {q} --dry-run',
+           'rename': f'rename {q} --dry-run', 'dupes': f'dupes {q}'}
+    for n, r in enumerate(i['recommendations'], 1):
+        print(f'  {n}. {r["title"]}')
+        print(f'     {r["why"]}')
+        print(f'     python cli.py {cmd[r["tool"]]}')
+    return 0
 
 
 if __name__ == '__main__':

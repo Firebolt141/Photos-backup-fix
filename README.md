@@ -1,68 +1,98 @@
 # Photos Backup Fix
 
-Two tools for rescuing Google Photos metadata and backing up your phone photos — one for Windows (desktop), one for Android.
+Put the right dates back on your photos, and get years of scattered pictures into one tidy, dated folder structure.
+
+- **Windows (desktop):** a local app that opens in your browser. Point it at *any* folder (a Google Takeout download, an old backup drive, or years of unsorted photos) and it tells you what to do, step by step.
+- **Android (Übertrag):** backs up your phone's photos to a USB/SD drive in the same layout, and fixes dates on the go.
+
+Both tools use the same folder layout (`2024/March/March_15/`), so they can share one drive.
+
+<p align="center">
+  <img src="docs/screenshots/02-start-here.png" alt="Start here: the app looks at a folder and recommends what to do" width="900">
+</p>
 
 ---
 
 ## Tool 1 — Windows: Photos Backup Fix (desktop)
 
-A local browser app (Flask + ExifTool) with five tools. It shares the Android app's folder layout, so both can work on the same backup drive.
+### Quick start
 
-| Tool | What it does |
-|---|---|
-| 📦 **Process Takeout** | Copies a Google Takeout export into dated folders and writes the date, GPS, caption, people and favourite rating from Google's JSON sidecars |
-| 🗓️ **Sort by Filename Date** | For Screenshots/WhatsApp/camera folders: takes the date from names like `IMG_20240315_143022.jpg`, sorts the files and writes the date into them |
-| ✨ **Fix Missing Dates** | Walks an existing `year/month/day` drive and writes the folder's date **in place** into files that have none (JPEG, PNG, HEIC, RAW, MP4/MOV) |
-| 🏷️ **Rename Old Folders** | `2024/01/15` → `2024/January/January_15`, merging safely when both layouts exist |
-| 🧬 **Find Duplicates** | Finds byte-identical photos/videos by content hash; can move the extra copies to `_duplicates/` (never deletes) |
+1. Download this repository as a zip ([**Code → Download ZIP**](https://github.com/Firebolt141/Photos-backup-fix/archive/refs/heads/main.zip)) and extract it anywhere.
+2. Double-click **`Start.bat`**. The first time, it downloads ExifTool, installs Python and Flask if needed, then opens the app in your browser.
+3. On the **Overview** page, paste or browse to your photo folder and press **Look at this folder**.
+4. Press **Set it up** on the suggested step, choose an output folder, press **Preview**, and when it looks right, **Apply**.
 
-Every tool has a **Preview** mode (dry run), and every run writes a JSON + CSV report to `_photofix/` in the output or drive folder.
+Nothing is uploaded: everything runs on your computer, and the app only listens on `127.0.0.1`.
 
-### The app
+### What it can do
 
-- **Overview page:** pick what you're trying to do ("I downloaded my Google Photos with Takeout", "Photos on my backup drive have no date", …). It also shows recent runs and this computer's ExifTool status.
-- **Each tool walks you through three steps:** choose folders, options, run.
-  - **Folder checks as you type:** photo count and size, Takeout sidecars found, free space at the output, and old-style folders on a drive (with a one-click jump to *Rename old folders*).
-  - **Options:** the common ones are visible, the rest sit under *Advanced options*. A live example path shows what the output layout will look like.
-  - **Preview first, then Apply:** after a preview, the results card offers **Apply for real** in one click. Tools that edit a drive in place ask for confirmation first.
-- **Activity panel:**
-  - Status, elapsed time, progress, speed and time remaining
-  - Pause/Resume and Stop
-  - A plain-English summary of the results
-  - Clickable stat tiles (hover them for an explanation) that open a searchable per-file results list, which can be copied into Excel
-  - A log filtered by warnings or errors, with search
-- **Light and dark themes** (or follow the system), a phone-width layout, and no internet needed.
-
-### Options worth knowing
-
-| Option | Tools | What it does |
+| Tool | Use it when… | What happens |
 |---|---|---|
-| Folder layout | Takeout, Sort | `2024/March/March_15` (default), `2024/03/15`, keep Takeout's folders, or one folder |
-| Keep dates already in the file | Takeout, Sort | Camera dates win; only missing GPS/caption is added |
-| Rename files to their date | Takeout, Sort | `IMG_1234.JPG` → `2019-07-04_10-30-00.jpg` |
-| Which files | Takeout, Sort | Photos & videos / photos only / videos only |
-| Only photos taken between | Takeout, Sort | Process one year (or any date range) at a time |
-| Check for duplicates first | Takeout | Review renamed identical copies before processing |
-| Also correct dates that disagree with their folder | Fix missing dates | Moves a wrong date to the folder's day, keeping the time of day |
-| Move the extra copies | Find duplicates | Moves duplicates to `_duplicates/` instead of only reporting |
+| 📦 **Unpack archives** | You downloaded Google Takeout as `takeout-….zip` / `.tgz` files | Unpacks every part into one folder (multi-part exports merge). Damaged or incomplete downloads are named so you can re-download just those |
+| 🗂 **Process Takeout** | You have an unpacked Takeout export | Copies every photo/video into dated folders and writes the date, GPS, caption, people and favourite from Google's JSON files |
+| 🗓 **Organize by date** | Years of photos in messy folders: phone backups, camera cards, WhatsApp, Screenshots, old PCs | Copies everything into `year/month/day` using the date inside each photo or in its name. Undated files go to `no-date/`, keeping their original folder names |
+| ✨ **Fix missing dates** | Your backup drive is already in `year/month/day` folders, but some files have no date | Writes each folder's date into files that have none, in place (JPEG, PNG, HEIC, RAW, MP4/MOV). Can also correct dates that disagree with their folder |
+| 🏷 **Rename old folders** | Your drive uses the old `2024/01/15` layout | Renames it to `2024/January/January_15`, merging safely |
+| 🧬 **Find duplicates** | You suspect the same photos are stored twice | Finds byte-identical files under any name; report only, or move the extras to `_duplicates/`. Never deletes |
 
-### Quick start (Windows)
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/01-overview-light.png" alt="Overview page"><br><sub><b>Overview:</b> pick a folder, or a task</sub></td>
+    <td width="50%"><img src="docs/screenshots/03-start-here-dark.png" alt="Start here in dark mode, recommending to unpack Takeout zips"><br><sub><b>Start here</b> spots Takeout zips and says to unpack them first (dark theme)</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/04-unpack.png" alt="Unpack archives tool"><br><sub><b>Unpack archives:</b> one click to the next step</sub></td>
+    <td><img src="docs/screenshots/05-takeout-preview.png" alt="Process Takeout preview"><br><sub><b>Preview first:</b> nothing is written until you press Apply</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/07-organize-dark.png" alt="Organize by date result"><br><sub><b>Organize by date:</b> a messy folder sorted, with a plain-English summary</sub></td>
+    <td><img src="docs/screenshots/06-results.png" alt="Per-file results list"><br><sub><b>Every file accounted for:</b> searchable results, copyable to Excel</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/08-fix-dates-dark.png" alt="Fix missing dates on a drive"><br><sub><b>Fix missing dates</b> on a drive, with a hint to rename old folders first</sub></td>
+    <td valign="top"><sub>Screenshots taken from the real app with a small sample library. On Windows the app uses Segoe UI, so text looks slightly different.</sub></td>
+  </tr>
+</table>
 
-1. Download the repo zip and extract it anywhere.
-2. Double-click **`Start.bat`**. It downloads ExifTool, installs Flask and opens the browser.
-3. Pick a tool in the sidebar, choose your folders and press **Start** (or tick **Dry run** first).
+### Every file ends up somewhere
+
+The tool never silently drops a file:
+
+| What it finds | Where it goes |
+|---|---|
+| A date (Takeout JSON, inside the file, or in its name) | `2024/March/March_15/` (or `2024/03/15/` with the numeric layout) |
+| No date anywhere | `no-date/<original sub-folders>/`, so `no-date/Holiday 2015/IMG_123.jpg` keeps its context |
+| Empty (0-byte) or unreadable file, or a copy that failed | `error/<original sub-folders>/` |
+| The same photo twice (album copies, "copy of…") | Kept once; the other copy is listed as skipped |
+| Two *different* photos with the same name | Both kept: `IMG_1.jpg`, `IMG_1_1.jpg` |
+| A JPEG saved with a `.png` name (common with downloads) | Extension corrected to `.jpg` so the date can be written |
+| Not a photo (PDF, TXT…) | Left alone, and listed so you know |
+| macOS `._` files, `Thumbs.db`, NAS `@eaDir` thumbnails | Ignored: they aren't photos |
+
+If the output drive fills up or is unplugged, the run stops immediately with a clear message instead of failing thousands of files. Press Start again later, and finished files are skipped.
 
 ### Output layout
 
 ```
 Output/
 ├── 2024/March/March_15/IMG_20240315_143022.jpg   ← same layout as the Android app
-├── no-date/      ← files with no date anywhere (sidecar, filename or embedded)
-├── error/        ← files that could not be copied
-└── _photofix/    ← reports (report-*.json/.csv) + manifest.json for safe re-runs
+├── no-date/Old laptop/Holiday 2015/beach.jpg     ← no date anywhere (original folders kept)
+├── error/Scans/broken.jpg                        ← empty / unreadable / failed to copy
+└── _photofix/                                    ← reports (report-*.csv/.json) + manifest.json
 ```
 
-Choose **Numeric** for the old `2024/03/15` layout, or **Preserve** / **Flat**.
+### Options worth knowing
+
+| Option | Tools | What it does |
+|---|---|---|
+| Folder layout | Takeout, Organize | `2024/March/March_15` (default), `2024/03/15`, keep Takeout's folders, or one folder |
+| Keep dates already in the file | Takeout, Organize | Camera dates win; only missing GPS/caption is added |
+| Rename files to their date | Takeout, Organize | `IMG_1234.JPG` → `2019-07-04_10-30-00.jpg` |
+| Which files | Takeout, Organize | Photos & videos / photos only / videos only |
+| Only photos taken between | Takeout, Organize | Process one year (or any date range) at a time |
+| Check for duplicates first | Takeout | Review renamed identical copies before processing |
+| Also correct dates that disagree with their folder | Fix missing dates | Moves a wrong date to the folder's day, keeping the time of day |
+| Move the extra copies | Find duplicates | Moves duplicates to `_duplicates/` instead of only reporting |
 
 ### Where the date comes from (in order)
 
@@ -97,10 +127,12 @@ The same engine is available without the browser:
 ```bat
 python cli.py takeout  D:\Takeout E:\Photos --dry-run
 python cli.py takeout  D:\Takeout E:\Photos --from 2019-01-01 --to 2019-12-31 --rename-to-date
-python cli.py sort     D:\Screenshots E:\Photos --only photos
+python cli.py sort     "D:\My Pictures" E:\Photos --only photos   &:: Organize by date
 python cli.py fix-dates E:\Photos --fix-mismatched
 python cli.py rename   E:\Photos
 python cli.py dupes    E:\Photos --move
+python cli.py unpack   C:\Users\you\Downloads D:\Takeout
+python cli.py analyze  "D:\My Pictures"          &:: what is in here, and what to run
 python cli.py takeout --help        &:: all options
 ```
 
@@ -122,7 +154,8 @@ Photos-backup-fix/
 ├── core.py             ← All processing logic (no GUI deps)
 ├── cli.py              ← Command-line interface
 ├── templates/index.html← Browser UI
-├── tests/              ← pytest suite
+├── tests/              ← pytest suite (110+ tests, incl. real ExifTool runs)
+├── docs/screenshots/   ← README images
 ├── app.py              ← Legacy tkinter UI (Takeout only)
 ├── Start.bat           ← Windows launcher
 └── setup.ps1           ← PowerShell setup script
@@ -266,6 +299,14 @@ Tests cover `TakeoutProcessor`'s pure functions: JSON sidecar name generation, s
 ## Troubleshooting
 
 **Windows — "ExifTool not found"** — Run `Start.bat` which downloads it automatically.
+
+**Windows — "This archive looks incomplete or damaged"** — That Takeout zip didn't finish downloading. Download just that part again from Google Takeout and run *Unpack archives* again (finished files are skipped).
+
+**Windows — "File is larger than 4 GB … FAT32"** — The output drive is formatted FAT32, which can't store files over 4 GB (long videos). Reformat it as exFAT (Windows: right-click the drive → Format → exFAT), or use another drive.
+
+**Windows — "The drive is full" / the run stopped** — Free up space or choose a bigger drive, then press Start again. Everything already copied is kept and skipped.
+
+**Windows — Some files are in `no-date/`** — No date could be found in them (no Takeout JSON, nothing in the name, nothing inside the file). They keep their original folder names so you can sort them by hand, or run *Fix missing dates* after moving them into a dated folder.
 
 **Windows — Browser doesn't open** — Open the URL printed in the console window (usually `http://127.0.0.1:5000`; another port is picked if 5000 is busy). Opening the bare URL is fine — the page carries its own access token.
 

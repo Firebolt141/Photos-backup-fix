@@ -47,22 +47,29 @@ APP_ROOT = Path(__file__).resolve().parent
 # ── Media extensions ──────────────────────────────────────────────────────────
 
 IMAGE_EXTS = {
-    '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.tif',
-    '.webp', '.heic', '.heif', '.raw', '.cr2', '.nef', '.arw',
-    '.dng', '.orf', '.rw2', '.srw', '.pef', '.3fr', '.iiq', '.x3f',
+    '.jpg', '.jpeg', '.jpe', '.jfif', '.png', '.gif', '.bmp', '.tiff', '.tif',
+    '.webp', '.heic', '.heif', '.avif', '.jxl', '.mpo',
+    '.raw', '.cr2', '.cr3', '.crw', '.nef', '.nrw', '.arw', '.srf', '.sr2', '.raf',
+    '.dng', '.orf', '.rw2', '.rwl', '.srw', '.pef', '.3fr', '.iiq', '.x3f', '.erf',
+    '.kdc', '.dcr', '.mrw', '.mef', '.mos',
 }
 VIDEO_EXTS = {
-    '.mp4', '.mov', '.avi', '.m4v', '.mkv', '.wmv', '.3gp',
-    '.mpg', '.mpeg', '.mts', '.m2ts', '.flv', '.webm', '.ts',
+    '.mp4', '.mov', '.qt', '.avi', '.m4v', '.mkv', '.wmv', '.asf', '.3gp', '.3g2',
+    '.mpg', '.mpeg', '.mts', '.m2ts', '.m2t', '.vob', '.mod', '.tod', '.flv', '.f4v',
+    '.webm', '.ogv', '.ts', '.divx', '.dv', '.insv',
 }
 ALL_MEDIA = IMAGE_EXTS | VIDEO_EXTS
 
 # Formats ExifTool cannot write date/GPS metadata into.  They are still
 # copied/sorted and get their file-system timestamps set.
 NON_WRITABLE_EXTS = {
-    '.bmp', '.raw', '.x3f',
-    '.avi', '.mkv', '.wmv', '.mpg', '.mpeg', '.mts', '.m2ts', '.flv', '.webm', '.ts',
+    '.bmp', '.raw', '.x3f', '.crw', '.kdc', '.dcr', '.mrw', '.mef', '.mos', '.srf', '.sr2',
+    '.avi', '.mkv', '.wmv', '.asf', '.mpg', '.mpeg', '.mts', '.m2ts', '.m2t', '.vob',
+    '.mod', '.tod', '.flv', '.webm', '.ogv', '.ts', '.divx', '.dv',
 }
+
+# Archives a Google Takeout download comes as (see `ArchiveExtractor`).
+ARCHIVE_EXTS = ('.zip', '.tgz', '.tar.gz', '.tar')
 
 MONTHS = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -78,7 +85,14 @@ APP_DIR = '_photofix'          # reports + manifest live here
 DUPES_DIR = '_duplicates'
 _TMP_PREFIX = '.~photofix~'
 
-_SKIP_DIRS = {APP_DIR.lower(), '$recycle.bin', 'system volume information', '.trashes'}
+_SKIP_DIRS = {
+    APP_DIR.lower(), '$recycle.bin', 'system volume information', '.trashes', '.trash',
+    '@eadir', '.thumbnails', '.spotlight-v100', '.fseventsd', '.temporaryitems', '.git',
+}
+_SYSTEM_FILES = {'thumbs.db', 'desktop.ini', '.ds_store', 'icon\r', 'picasa.ini', '.picasa.ini',
+                 'archive_browser.html', '.nomedia'}
+# Not photos even though they may carry a photo extension.
+_JUNK_PREFIXES = ('._', _TMP_PREFIX, '.trashed-', '.pending-')
 
 YEAR_MIN, YEAR_MAX = 2000, 2040   # same plausibility window as the Android app
 
@@ -338,6 +352,36 @@ def _fs(p: Path) -> str:
     return s
 
 
+_FATAL_WINERRORS = {112, 39, 21, 15}      # disk full ×2, device not ready, invalid drive
+_FATAL_ERRNOS = {28}                       # ENOSPC
+
+
+def friendly_os_error(e: BaseException) -> str:
+    """Plain-English explanation for the OS errors people actually hit."""
+    win = getattr(e, 'winerror', None)
+    no = getattr(e, 'errno', None)
+    if no == 28 or win in (112, 39):
+        return 'The drive is full'
+    if no == 27 or win == 223:
+        return 'File is larger than 4 GB, which this drive (FAT32) cannot store; reformat it as exFAT or NTFS'
+    if no in (13, 1) or win in (5, 32, 33):
+        return ('The file is open in another program or you don\'t have permission'
+                if win in (32, 33) else 'Permission denied')
+    if no == 2 or win in (2, 3):
+        return 'File or folder not found (was the drive disconnected?)'
+    if win in (21, 15) or no == 19:
+        return 'The drive is not ready or was disconnected'
+    if no == 36 or win == 206:
+        return 'The file path is too long'
+    if no == 5 or win in (23, 1117):
+        return 'Read error (the file or drive may be damaged)'
+    return f'{getattr(e, "strerror", None) or e}'
+
+
+def is_fatal_os_error(e: BaseException) -> bool:
+    return getattr(e, 'errno', None) in _FATAL_ERRNOS or getattr(e, 'winerror', None) in _FATAL_WINERRORS
+
+
 def _is_within(path: Path, root: Path) -> bool:
     try:
         path.resolve().relative_to(root.resolve())
@@ -350,11 +394,25 @@ def _norm_key(p: Path) -> str:
     return os.path.normcase(os.path.normpath(str(p)))
 
 
-def iter_media(root: Path, exclude: Sequence[Path] = ()) -> List[Path]:
-    """All media files under root (sorted), skipping our own working dirs."""
+def is_junk_name(name: str) -> bool:
+    """macOS AppleDouble files (._x.jpg), Android trash, our temp files."""
+    return name.startswith(_JUNK_PREFIXES) or '_exiftool_tmp' in name
+
+
+def iter_media(root: Path, exclude: Sequence[Path] = (),
+               errors: Optional[List[str]] = None,
+               ignored: Optional[Dict[str, int]] = None) -> List[Path]:
+    """All media files under root (sorted), skipping our own working dirs,
+    trash/thumbnail folders and junk files. Folders that can't be read are
+    appended to *errors* (when given) instead of being silently skipped."""
     excl = [_norm_key(e.resolve()) for e in exclude if e]
     out: List[Path] = []
-    for dirpath, dirnames, filenames in os.walk(root):
+
+    def onerror(e: OSError) -> None:
+        if errors is not None:
+            errors.append(f'{getattr(e, "filename", "") or ""}: {e.strerror or e}')
+
+    for dirpath, dirnames, filenames in os.walk(root, onerror=onerror):
         dp = Path(dirpath)
         keep = []
         for d in sorted(dirnames):
@@ -366,11 +424,48 @@ def iter_media(root: Path, exclude: Sequence[Path] = ()) -> List[Path]:
             keep.append(d)
         dirnames[:] = keep
         for f in sorted(filenames):
-            if f.startswith(_TMP_PREFIX):
+            if is_junk_name(f):
                 continue
-            if os.path.splitext(f)[1].lower() in ALL_MEDIA:
+            ext = os.path.splitext(f)[1].lower()
+            if ext in ALL_MEDIA:
                 out.append(dp / f)
+            elif ignored is not None and ext != '.json' and f.lower() not in _SYSTEM_FILES:
+                ignored[ext or '(no extension)'] = ignored.get(ext or '(no extension)', 0) + 1
     return out
+
+
+def count_folder(root: Path) -> dict:
+    """Fast counts for the folder hints, using exactly the same rules as
+    iter_media / analyze_folder (skip-dirs, junk, system files)."""
+    out = {'count': 0, 'size': 0, 'sidecars': 0, 'archives': 0, 'other': {}}
+    for dirpath, dirnames, filenames in os.walk(root, onerror=lambda e: None):
+        dirnames[:] = [d for d in dirnames if d.lower() not in _SKIP_DIRS and d.lower() != DUPES_DIR]
+        for f in filenames:
+            low = f.lower()
+            if is_junk_name(f):
+                continue
+            ext = os.path.splitext(low)[1]
+            if ext in ALL_MEDIA:
+                out['count'] += 1
+                try:
+                    out['size'] += os.path.getsize(os.path.join(dirpath, f))
+                except OSError:
+                    pass
+            elif ext == '.json':
+                out['sidecars'] += low not in _NON_SIDECAR_JSON
+            elif is_archive(f):
+                out['archives'] += 1
+            elif low not in _SYSTEM_FILES:
+                out['other'][ext or '(no extension)'] = out['other'].get(ext or '(no extension)', 0) + 1
+    return out
+
+
+def describe_ignored(ignored: Dict[str, int], limit: int = 6) -> str:
+    """'.pdf ×12, .txt ×3, … ' for log lines."""
+    parts = [f'{ext} ×{n:,}' for ext, n in sorted(ignored.items(), key=lambda kv: -kv[1])[:limit]]
+    if len(ignored) > limit:
+        parts.append('…')
+    return ', '.join(parts)
 
 
 _HASH_CHUNK = 1 << 16
@@ -429,6 +524,18 @@ def _unique_path(path: Path, taken: Callable[[Path], bool]) -> Path:
         if not taken(cand):
             return cand
     raise OSError(f'No free name for {path}')
+
+
+_TYPE_EXT = {'JPEG': '.jpg', 'JPG': '.jpg', 'PNG': '.png', 'GIF': '.gif', 'TIFF': '.tif', 'HEIC': '.heic',
+             'HEIF': '.heic', 'WEBP': '.webp', 'MP4': '.mp4', 'MOV': '.mov', 'AVIF': '.avif', 'BMP': '.bmp',
+             'M4V': '.m4v', '3GP': '.3gp'}
+
+
+def _real_extension(exiftool_msg: str) -> Optional[str]:
+    """'Not a valid PNG (looks more like a JPEG)' → '.jpg' (None if not that error)."""
+    m = re.search(r'looks more like an? (\w+)', exiftool_msg or '')
+    ext = _TYPE_EXT.get(m.group(1).upper()) if m else None
+    return ext if ext and ext not in NON_WRITABLE_EXTS else None
 
 
 def _set_file_times(path: Path, pd: PhotoDate) -> None:
@@ -1067,7 +1174,7 @@ class Job:
 
     def _progress(self, cur: int, total: int, name: str, force: bool = False) -> None:
         now = time.monotonic()
-        if not force and now - self._last_emit < 0.1 and cur < total:
+        if not force and now - self._last_emit < 0.1:
             return
         self._last_emit = now
         elapsed = now - self._t0
@@ -1172,8 +1279,9 @@ class Processor(Job):
                  options: Optional[ProcessOptions] = None,
                  workers: int = 0, on_event=None):
         super().__init__(on_log, on_progress, on_stats, on_done, on_file_result, on_event, workers)
-        self.src = Path(src)
-        self.dst = Path(dst)
+        self.src = Path(os.path.abspath(src))
+        self.dst = Path(os.path.abspath(dst))
+        self.fatal = ''                          # set when the run must stop (disk full, drive gone)
         self.opts = options or ProcessOptions(output_mode=output_mode, copy_undated=copy_unmatched)
         if self.opts.output_mode not in OUTPUT_MODES:
             self.opts.output_mode = 'date'
@@ -1187,6 +1295,9 @@ class Processor(Job):
         self.manifest: Optional[Manifest] = None
         self._claims: Dict[str, Path] = {}       # dest key → source
         self._fp_cache: Dict[str, str] = {}
+        self._dir_fps: Dict[Tuple[str, str], Path] = {}   # (dest dir, fingerprint) → source
+        self._done_fps: Dict[Tuple[str, str], str] = {}  # (dest dir, fingerprint) → path, earlier runs
+        self._nodate_fps: Dict[str, str] = {}               # fingerprint → path under no-date/
 
     # -- helpers -------------------------------------------------------------
 
@@ -1207,12 +1318,42 @@ class Processor(Job):
         if mode == 'flat':
             return self.dst
         if date is None:
-            return self.dst / NO_DATE_DIR
+            # Keep the original sub-folders so undated files keep their context
+            # (no-date/Holiday 2015/IMG_123.jpg rather than one giant pile).
+            return self.dst / NO_DATE_DIR / src.parent.relative_to(self.src)
         return self.dst / date_subdir(date.dt, numeric=(mode == 'date_numeric'))
 
     def _claim(self, src: Path, desired: Path) -> Tuple[Optional[Path], str]:
-        """Reserve an output path. Returns (path, '') or (None, reason)."""
+        """Reserve an output path. Returns (path, '') or (None, reason).
+
+        Identical content headed for the same folder is only kept once, even
+        under a different name ("copy of IMG_1.jpg"); a different photo that
+        happens to share a name gets an _1 suffix instead."""
         fp = self._fp(src)
+        dir_key = _norm_key(desired.parent)
+        try:
+            rel_dir = Manifest.key(desired.parent.relative_to(self.dst))
+        except ValueError:
+            rel_dir = ''
+        if rel_dir == '.':
+            rel_dir = ''
+        if self.opts.skip_existing:
+            done = self._done_fps.get((rel_dir, fp))
+            if not done and rel_dir.split('/', 1)[0] == NO_DATE_DIR:
+                done = self._nodate_fps.get(fp)      # earlier versions used a flat no-date/
+            if done and os.path.lexists(_fs(self.dst / done)):
+                return None, 'already in output'
+        with self._lock:
+            twin = self._dir_fps.get((dir_key, fp))
+            if twin is None:
+                self._dir_fps[(dir_key, fp)] = src  # first of its content here: claim below
+        if twin is not None and _norm_key(twin) != _norm_key(src):
+            # Full hashes are read outside the lock so big videos don't stall other workers.
+            try:
+                if full_hash(twin) == full_hash(src):
+                    return None, f'identical to {twin.name}'
+            except OSError:
+                pass
         with self._lock:
             cand = desired
             for i in range(0, 100000):
@@ -1243,12 +1384,31 @@ class Processor(Job):
                 return cand, ''
         raise OSError(f'No free file name for {desired.name}')
 
+    def _release(self, src: Path, dest: Path) -> None:
+        """Undo a claim whose copy failed, so an identical twin can take its place."""
+        with self._lock:
+            self._claims.pop(_norm_key(dest), None)
+            for k, v in list(self._dir_fps.items()):
+                if v == src and k[0] == _norm_key(dest.parent):
+                    del self._dir_fps[k]
+
+    def _fatal(self, e: BaseException) -> None:
+        """Stop the whole run on errors that would fail every remaining file."""
+        if not self.fatal:
+            self.fatal = friendly_os_error(e)
+            if not self.dst.exists():
+                self.fatal = 'The output drive or folder is no longer available (was it disconnected?)'
+            self.on_log('error', f'Stopping: {self.fatal}. Files done so far are safe; '
+                                 'fix the problem and press Start again to continue.')
+            self.stop()
+
     def _copy_to_error(self, src: Path) -> str:
-        if self.opts.dry_run:
+        """Last-resort copy so a problem file still lands in the output."""
+        if self.opts.dry_run or self.fatal:
             return ''
         try:
-            d = self.dst / ERROR_DIR
-            d.mkdir(parents=True, exist_ok=True)
+            d = self.dst / ERROR_DIR / src.parent.relative_to(self.src)
+            os.makedirs(_fs(d), exist_ok=True)
             with self._lock:
                 target = _unique_path(d / src.name,
                                       lambda p: os.path.lexists(_fs(p)) or _norm_key(p) in self._claims)
@@ -1292,13 +1452,25 @@ class Processor(Job):
     # -- per file --------------------------------------------------------------
 
     def _safe_process(self, src: Path) -> None:
+        if self._stop.is_set():
+            return
         try:
             self._process_one(src)
         except Exception as e:             # one bad file must not stop the run
+            if isinstance(e, OSError) and is_fatal_os_error(e):
+                self._fatal(e)
             rel = str(src.relative_to(self.src))
+            msg = friendly_os_error(e) if isinstance(e, OSError) else f'{type(e).__name__}: {e}'
+            err_dest = self._copy_to_error(src)
             self._count('error')
-            self._record(FileRecord(rel, 'error', error=f'{type(e).__name__}: {e}'))
-            self.on_log('error', f'  ✗ {rel}: {type(e).__name__}: {e}')
+            self._record(FileRecord(rel, 'error', dest=err_dest, error=msg))
+            self.on_log('error', f'  ✗ {rel}: {msg}' + (f' (copied to {err_dest})' if err_dest else ''))
+
+    def _fail(self, src: Path, rel_s: str, msg: str) -> None:
+        err_dest = self._copy_to_error(src)
+        self._count('error')
+        self._record(FileRecord(rel_s, 'error', dest=err_dest, error=msg))
+        self.on_log('error', f'  ✗ {rel_s}: {msg}' + (f' (copied to {err_dest})' if err_dest else ''))
 
     def _process_one(self, src: Path) -> None:
         rel = src.relative_to(self.src)
@@ -1306,6 +1478,15 @@ class Processor(Job):
         ext = src.suffix.lower()
         is_video = ext in VIDEO_EXTS
         opts = self.opts
+
+        try:
+            size = os.path.getsize(_fs(src))
+        except OSError as e:
+            self._fail(src, rel_s, f'Cannot read the file: {friendly_os_error(e)}')
+            return
+        if size == 0:
+            self._fail(src, rel_s, 'The file is empty (0 bytes), probably a failed download or copy')
+            return
 
         meta = Meta()
         if opts.use_sidecars:
@@ -1359,7 +1540,7 @@ class Processor(Job):
             name = f'{place.dt:%Y-%m-%d_%H-%M-%S}{ext}'
         dest, reason = self._claim(src, self._dest_dir(src, place) / name)
         if dest is None:
-            status = 'duplicate' if reason.startswith('duplicate') else 'exists'
+            status = 'duplicate' if reason.startswith(('duplicate', 'identical')) else 'exists'
             self._count(status)
             self._record(FileRecord(rel_s, status, note=reason))
             self.on_log('file', f'  = {rel_s}: skipped ({reason})')
@@ -1387,17 +1568,17 @@ class Processor(Job):
 
         tmp = dest.with_name(_TMP_PREFIX + dest.name)
         try:
-            dest.parent.mkdir(parents=True, exist_ok=True)
+            os.makedirs(_fs(dest.parent), exist_ok=True)
             shutil.copy2(_fs(src), _fs(tmp))
         except OSError as e:
             try:
                 os.unlink(_fs(tmp))
             except OSError:
                 pass
-            err_dest = self._copy_to_error(src)
-            self._count('error')
-            self._record(FileRecord(rel_s, 'error', dest=err_dest, error=f'Copy failed: {e}'))
-            self.on_log('error', f'  ✗ {rel_s}: copy failed: {e}' + (f' (→ {err_dest})' if err_dest else ''))
+            self._release(src, dest)
+            if is_fatal_os_error(e) or not self.dst.exists():
+                self._fatal(e)
+            self._fail(src, rel_s, f'Copy failed: {friendly_os_error(e)}')
             return
 
         note = ''
@@ -1411,6 +1592,25 @@ class Processor(Job):
                     ok, msg = self.pool.get().write(tmp, tag_args)
                 except ExifToolError as e:
                     ok, msg = False, str(e)
+                real_ext = _real_extension(msg) if not ok else None
+                if real_ext and real_ext != ext:
+                    # e.g. a JPEG saved as .png (common with downloads/screenshots):
+                    # give the copy its real extension, then write the date again.
+                    new_dest, why = self._claim(src, dest.with_suffix(real_ext))
+                    if new_dest is not None:
+                        new_tmp = new_dest.with_name(_TMP_PREFIX + new_dest.name)
+                        try:
+                            os.replace(_fs(tmp), _fs(new_tmp))
+                            self._release(src, dest)
+                            fp = self._fp(src)             # (takes the lock itself)
+                            with self._lock:   # keep the twin index pointing at this file
+                                self._dir_fps.setdefault((_norm_key(new_dest.parent), fp), src)
+                            tmp, dest = new_tmp, new_dest
+                            rel_dst = str(dest.relative_to(self.dst))
+                            ok, msg = self.pool.get().write(tmp, tag_args)
+                            note = f'file extension corrected from {ext} to {real_ext}'
+                        except (OSError, ExifToolError) as e:
+                            ok, msg = False, str(e)
                 if not ok:
                     status, note = 'meta_failed', f'ExifTool: {msg}'
         if opts.set_file_times and place is not None:
@@ -1422,9 +1622,10 @@ class Processor(Job):
                 os.unlink(_fs(tmp))
             except OSError:
                 pass
-            self._count('error')
-            self._record(FileRecord(rel_s, 'error', error=f'Could not finalise file: {e}'))
-            self.on_log('error', f'  ✗ {rel_s}: {e}')
+            self._release(src, dest)
+            if is_fatal_os_error(e) or not self.dst.exists():
+                self._fatal(e)
+            self._fail(src, rel_s, f'Could not finish writing the file: {friendly_os_error(e)}')
             return
 
         if self.manifest:
@@ -1468,12 +1669,26 @@ class Processor(Job):
             self.on_log('error', 'Source and output must be different folders.')
             return False
 
-        title = 'Sort by filename date' if not self.opts.use_sidecars else 'Process Google Takeout'
+        if _is_within(self.src, self.dst) and self.opts.output_mode in ('preserve', 'flat'):
+            self.on_log('error', 'The source folder is inside the output folder. Choose a different '
+                                 'output folder, or use the "By date" layout.')
+            return False
+
+        title = 'Organize by date' if not self.opts.use_sidecars else 'Process Google Takeout'
         self.on_log('info', f'{title} — ExifTool v{ver}, {self.workers} worker(s)'
-                    + ('  [DRY RUN — nothing will be written]' if self.opts.dry_run else ''))
+                    + ('  [PREVIEW — nothing will be written]' if self.opts.dry_run else ''))
         self.on_log('info', f'Scanning source: {self.src}')
         self.on_event({'type': 'phase', 'phase': 'scanning'})
-        files = iter_media(self.src, exclude=[self.dst])
+        scan_errors: List[str] = []
+        ignored: Dict[str, int] = {}
+        files = iter_media(self.src, exclude=[self.dst], errors=scan_errors, ignored=ignored)
+        for err in scan_errors[:10]:
+            self.on_log('warn', f'Could not open folder {err}')
+        if len(scan_errors) > 10:
+            self.on_log('warn', f'… and {len(scan_errors) - 10} more folders that could not be opened')
+        if ignored:
+            self.on_log('info', f'Ignoring {sum(ignored.values()):,} file(s) that are not photos or videos: '
+                                + describe_ignored(ignored))
         if self.opts.kinds in ('photos', 'videos'):
             keep = IMAGE_EXTS if self.opts.kinds == 'photos' else VIDEO_EXTS
             before = len(files)
@@ -1500,6 +1715,12 @@ class Processor(Job):
             self._check_space(files)
             self.dst.mkdir(parents=True, exist_ok=True)
         self.manifest = Manifest(self.dst, enabled=not self.opts.dry_run)
+        if self.opts.skip_existing:
+            # Previously written files (any name) by folder + content, so a
+            # renamed copy of something already sorted isn't added again.
+            m = Manifest(self.dst)
+            self._done_fps = {(k.rsplit('/', 1)[0] if '/' in k else '', v): k for k, v in m._data.items()}
+            self._nodate_fps = {v: k for k, v in m._data.items() if k.split('/', 1)[0] == NO_DATE_DIR}
         self.pool = ExifToolPool()
         self.on_event({'type': 'phase', 'phase': 'processing'})
         try:
@@ -1508,7 +1729,9 @@ class Processor(Job):
             self.pool.close()
             self.manifest.save()
 
-        if self._stop.is_set():
+        if self.fatal:
+            self.on_log('error', f'Run stopped early: {self.fatal}.')
+        elif self._stop.is_set():
             self.on_log('warn', 'Stopped by user — files done so far are complete; '
                                 'run again to continue (finished files are skipped).')
         self._finish()
@@ -1561,46 +1784,86 @@ class DriveFixStats:
     errors: int = 0
 
 
+def _list_dir(d: Path, notes: Optional[List[str]] = None) -> Tuple[List[Path], List[Path]]:
+    """(sub-folders, files) of *d*, sorted; unreadable folders become a note."""
+    dirs: List[Path] = []
+    files: List[Path] = []
+    try:
+        with os.scandir(_fs(d)) as it:
+            for e in it:
+                try:
+                    if e.is_dir(follow_symlinks=False):
+                        dirs.append(d / e.name)
+                    elif e.is_file():
+                        files.append(d / e.name)
+                except OSError:
+                    continue
+    except OSError as e:
+        if notes is not None:
+            notes.append(f'could not open {d}: {friendly_os_error(e)}')
+    return sorted(dirs), sorted(files)
+
+
+_OWN_DIRS = {APP_DIR.lower(), DUPES_DIR, NO_DATE_DIR, ERROR_DIR}
+
+
+def _media_in(d: Path, notes: List[str]) -> List[Path]:
+    """Media files in *d* and any sub-folders below it (bursts, edits…)."""
+    out: List[Path] = []
+    dirs, files = _list_dir(d, notes)
+    out += [f for f in files if f.suffix.lower() in ALL_MEDIA and not is_junk_name(f.name)]
+    for sub in dirs:
+        if sub.name.lower() not in _SKIP_DIRS and sub.name.lower() not in _OWN_DIRS:
+            out += _media_in(sub, notes)
+    return out
+
+
 def collect_dated_files(root: Path) -> Tuple[List[Tuple[Path, datetime]], List[str]]:
     """Media files in year/month/day folders → (file, folder date).
 
     Accepts January/January_07, January/January 7 and 01/07 layouts, and a
-    year folder selected directly as the root (same as ExifFixer.kt)."""
+    year folder selected directly as the root (same as ExifFixer.kt).
+    Files in sub-folders of a day folder count for that day; files whose
+    day can't be known (loose in a year or month folder) are reported."""
     items: List[Tuple[Path, datetime]] = []
     notes: List[str] = []
     root_year = parse_year_folder(root.name)
-    years = [(root, root_year)] if root_year else []
+    years: List[Tuple[Path, int]] = [(root, root_year)] if root_year else []
     if not years:
-        try:
-            for d in sorted(root.iterdir()):
-                if d.is_dir():
-                    y = parse_year_folder(d.name)
-                    if y:
-                        years.append((d, y))
-                    elif d.name.lower() not in _SKIP_DIRS:
-                        notes.append(f'skipped non-year folder: {d.name}')
-        except OSError as e:
-            notes.append(f'cannot list {root}: {e}')
+        dirs, _ = _list_dir(root, notes)
+        for d in dirs:
+            y = parse_year_folder(d.name)
+            if y:
+                years.append((d, y))
+            elif d.name.lower() not in _SKIP_DIRS and d.name.lower() not in _OWN_DIRS:
+                notes.append(f'skipped folder that is not a year: {d.name}')
     for ydir, year in years:
-        for mdir in sorted(p for p in ydir.iterdir() if p.is_dir()):
+        mdirs, yfiles = _list_dir(ydir, notes)
+        loose = [f for f in yfiles if f.suffix.lower() in ALL_MEDIA and not is_junk_name(f.name)]
+        if loose:
+            notes.append(f'{len(loose)} file(s) directly in {ydir.name}/ have no month/day folder; left as they are')
+        for mdir in mdirs:
             month = parse_month_folder(mdir.name)
             if month is None:
-                notes.append(f'skipped non-month folder: {ydir.name}/{mdir.name}')
+                if mdir.name.lower() not in _SKIP_DIRS and mdir.name.lower() not in _OWN_DIRS:
+                    notes.append(f'skipped folder that is not a month: {ydir.name}/{mdir.name}')
                 continue
-            for ddir in sorted(p for p in mdir.iterdir() if p.is_dir()):
+            ddirs, mfiles = _list_dir(mdir, notes)
+            loose = [f for f in mfiles if f.suffix.lower() in ALL_MEDIA and not is_junk_name(f.name)]
+            if loose:
+                notes.append(f'{len(loose)} file(s) directly in {ydir.name}/{mdir.name}/ have no day folder; '
+                             'left as they are')
+            for ddir in ddirs:
                 day = parse_day_folder(ddir.name)
                 if day is None:
-                    notes.append(f'skipped non-day folder: {ydir.name}/{mdir.name}/{ddir.name}')
+                    notes.append(f'skipped folder that is not a day: {ydir.name}/{mdir.name}/{ddir.name}')
                     continue
                 try:
                     folder_date = datetime(year, month, day, 12, 0, 0)
                 except ValueError:
-                    notes.append(f'invalid date folder: {ydir.name}/{mdir.name}/{ddir.name}')
+                    notes.append(f'not a real date: {ydir.name}/{mdir.name}/{ddir.name}')
                     continue
-                for f in sorted(ddir.iterdir()):
-                    if f.is_file() and f.suffix.lower() in ALL_MEDIA \
-                            and not f.name.startswith(_TMP_PREFIX):
-                        items.append((f, folder_date))
+                items += [(f, folder_date) for f in _media_in(ddir, notes)]
     return items, notes
 
 
@@ -1616,7 +1879,7 @@ class DriveFixer(Job):
     def __init__(self, root: str, *, dry_run: bool = False, set_file_times: bool = True,
                  filename_tz: str = 'local', fix_mismatched: bool = False, **kw):
         super().__init__(**kw)
-        self.root = Path(root)
+        self.root = Path(os.path.abspath(root))
         self.dry_run = dry_run
         self.fix_mismatched = fix_mismatched
         self.set_file_times = set_file_times
@@ -1773,14 +2036,14 @@ def plan_folder_renames(root: Path) -> List[Tuple[Path, str]]:
     2024/January/January_07 (fixes the old un-padded format too)."""
     plan: List[Tuple[Path, str]] = []
     years = [root] if parse_year_folder(root.name) else \
-        [d for d in sorted(root.iterdir()) if d.is_dir() and parse_year_folder(d.name)]
+        [d for d in _list_dir(root)[0] if parse_year_folder(d.name)]
     for ydir in years:
-        for mdir in sorted(p for p in ydir.iterdir() if p.is_dir()):
+        for mdir in _list_dir(ydir)[0]:
             month = parse_month_folder(mdir.name)
             if month is None:
                 continue
             mname = MONTHS[month - 1]
-            for ddir in sorted(p for p in mdir.iterdir() if p.is_dir()):
+            for ddir in _list_dir(mdir)[0]:
                 day = parse_day_folder(ddir.name)
                 if day is None:
                     continue
@@ -1800,7 +2063,7 @@ class FolderRenamer(Job):
 
     def __init__(self, root: str, *, dry_run: bool = False, **kw):
         super().__init__(**kw)
-        self.root = Path(root)
+        self.root = Path(os.path.abspath(root))
         self.dry_run = dry_run
         self.stats = RenameStats()     # type: ignore[assignment]
 
@@ -2003,7 +2266,7 @@ class DuplicateFinder(Job):
 
     def __init__(self, roots: Sequence[str], *, move: bool = False, **kw):
         super().__init__(**kw)
-        self.roots = [Path(r) for r in roots]
+        self.roots = [Path(os.path.abspath(r)) for r in roots]
         self.move = move
         self.stats = DupStats()        # type: ignore[assignment]
         self.groups: List[List[Path]] = []
@@ -2046,7 +2309,8 @@ class DuplicateFinder(Job):
                         sidecar = index.find(dup)
                         os.rename(_fs(dup), _fs(target))
                         if sidecar is not None and sidecar.exists():
-                            os.rename(_fs(sidecar), _fs(target.parent / sidecar.name))
+                            # Copy, never move: the kept file may share this sidecar.
+                            shutil.copy2(_fs(sidecar), _fs(target.parent / sidecar.name))
                         rec.status, rec.dest = 'moved', str(target.relative_to(root))
                         s.moved += 1
                     except OSError as e:
@@ -2072,6 +2336,422 @@ class DuplicateFinder(Job):
         return not self._stop.is_set()
 
 
+
+# ── Archives (Google Takeout downloads) ───────────────────────────────────────
+
+def is_archive(name: str) -> bool:
+    n = name.lower()
+    return n.endswith(ARCHIVE_EXTS) and not n.startswith('._')
+
+
+def find_archives(root: Path) -> List[Path]:
+    """Archives anywhere under *root* (same rules as analyze_folder)."""
+    out: List[Path] = []
+    for dirpath, dirnames, filenames in os.walk(root, onerror=lambda e: None):
+        dirnames[:] = [d for d in dirnames if d.lower() not in _SKIP_DIRS and d.lower() != DUPES_DIR]
+        out += [Path(dirpath) / f for f in sorted(filenames) if is_archive(f)]
+    return sorted(out)
+
+
+_BAD_CHARS = re.compile(r'[<>:"|?*\x00-\x1f]')
+
+
+def safe_member_path(name: str) -> Optional[Path]:
+    """Archive member name → safe relative path (None = skip it).
+
+    Blocks absolute paths and '..' (zip-slip) and cleans characters
+    Windows can't store, so every entry lands inside the target folder."""
+    parts = []
+    for part in name.replace('\\', '/').split('/'):
+        if part in ('', '.'):
+            continue
+        if part == '..':
+            return None
+        part = _BAD_CHARS.sub('_', part).rstrip(' .')
+        if not part:
+            continue
+        parts.append(part)
+    if not parts or re.fullmatch(r'[A-Za-z]_?', parts[0]) and len(parts) > 1 and ':' in name[:3]:
+        parts = parts[1:]                      # drop a 'C:' drive prefix
+    return Path(*parts) if parts else None
+
+
+@dataclass
+class ExtractStats:
+    total: int = 0          # archives
+    archives_ok: int = 0
+    archives_bad: int = 0
+    files: int = 0          # entries seen
+    extracted: int = 0
+    skipped: int = 0        # already unpacked earlier
+    errors: int = 0
+    bytes_written: int = 0
+
+
+class ArchiveExtractor(Job):
+    """Unpacks Takeout .zip / .tgz files into one folder. Multi-part
+    exports (takeout-…-001.zip, -002.zip…) merge naturally because every
+    part contains the same Takeout/ top folder. Re-running skips files
+    that are already there, so an interrupted unpack can be resumed."""
+
+    kind = 'unpack'
+
+    def __init__(self, archives: Sequence[str], dest: str, **kw):
+        super().__init__(**kw)
+        self.archives = [Path(os.path.abspath(a)) for a in archives]
+        self.dest = Path(os.path.abspath(dest))
+        self.stats = ExtractStats()          # type: ignore[assignment]
+        self.fatal = ''
+
+    # Each reader yields (name, size, mtime, opener) for regular files only.
+    @staticmethod
+    def _zip_entries(path: Path):
+        import zipfile
+        zf = zipfile.ZipFile(_fs(path))
+        try:
+            for info in zf.infolist():
+                if info.is_dir():
+                    continue
+                try:
+                    mtime = time.mktime(info.date_time + (0, 0, -1))
+                except (OverflowError, ValueError):
+                    mtime = None
+                yield info.filename, info.file_size, mtime, (lambda i=info: zf.open(i))
+        finally:
+            zf.close()
+
+    @staticmethod
+    def _tar_entries(path: Path):
+        import tarfile
+        tf = tarfile.open(_fs(path), 'r:*')
+        try:
+            for m in tf:
+                if not m.isreg():
+                    continue
+                yield m.name, m.size, m.mtime, (lambda mm=m: tf.extractfile(mm))
+        finally:
+            tf.close()
+
+    def _entries(self, path: Path):
+        return self._zip_entries(path) if path.name.lower().endswith('.zip') else self._tar_entries(path)
+
+    def _remaining_size(self, path: Path) -> int:
+        """Bytes still to write for *path* (entries already unpacked don't count)."""
+        try:
+            if path.name.lower().endswith('.zip'):
+                import zipfile
+                need = 0
+                with zipfile.ZipFile(_fs(path)) as zf:
+                    for i in zf.infolist():
+                        rel = safe_member_path(i.filename)
+                        if i.is_dir() or rel is None:
+                            continue
+                        t = self.dest / rel
+                        try:
+                            if os.path.getsize(_fs(t)) == i.file_size:
+                                continue
+                        except OSError:
+                            pass
+                        need += i.file_size
+                return need
+            return os.path.getsize(_fs(path)) * 2      # tar.gz: rough guess
+        except Exception:
+            return 0
+
+    def _extract_one(self, path: Path) -> None:
+        import tarfile
+        import zipfile
+        name = path.name
+        self.on_log('info', f'Unpacking {name} …')
+        s = self.stats
+        try:
+            for member, size, mtime, opener in self._entries(path):
+                if self._stop.is_set():
+                    return
+                self._wait_if_paused()
+                s.files += 1
+                rel = safe_member_path(member)
+                if rel is None:
+                    s.errors += 1
+                    self._record(FileRecord(member, 'error', note=name, error='Unsafe path in archive; skipped'))
+                    continue
+                target = self.dest / rel
+                tmp = target.with_name(_TMP_PREFIX + target.name)
+                try:
+                    if target.is_file() and os.path.getsize(_fs(target)) == size:
+                        s.skipped += 1
+                        continue
+                    os.makedirs(_fs(target.parent), exist_ok=True)
+                    with opener() as src, open(_fs(tmp), 'wb') as out:
+                        shutil.copyfileobj(src, out, 1 << 20)
+                    if mtime:
+                        try:
+                            os.utime(_fs(tmp), (mtime, mtime))
+                        except (OSError, OverflowError, ValueError):
+                            pass
+                    os.replace(_fs(tmp), _fs(target))
+                    s.extracted += 1
+                    s.bytes_written += size
+                except OSError as e:
+                    s.errors += 1
+                    self._record(FileRecord(str(rel), 'error', note=name, error=friendly_os_error(e)))
+                    self.on_log('error', f'  ✗ {rel}: {friendly_os_error(e)}')
+                    if is_fatal_os_error(e):
+                        self.fatal = friendly_os_error(e)
+                        self.stop()
+                        return
+                except Exception as e:              # zlib.error, Deflate64, encrypted…
+                    s.errors += 1
+                    if isinstance(e, NotImplementedError):
+                        why = 'Compressed with a method Python can\'t read (e.g. Deflate64); unzip it with Windows Explorer'
+                    elif isinstance(e, RuntimeError) and 'encrypt' in str(e).lower():
+                        why = 'Password-protected entry; unzip it manually'
+                    else:
+                        why = f'Damaged entry in the archive ({e})'
+                    self._record(FileRecord(str(rel), 'error', note=name, error=why))
+                    self.on_log('error', f'  ✗ {rel}: {why}')
+                finally:
+                    if os.path.lexists(_fs(tmp)):
+                        try:
+                            os.unlink(_fs(tmp))
+                        except OSError:
+                            pass
+                self._total_entries = max(self._total_entries, s.files)
+                self._progress(s.files, self._total_entries, str(rel))
+            s.archives_ok += 1
+            self._record(FileRecord(name, 'unpacked', dest=str(self.dest)))
+            self.on_log('ok', f'  ✓ {name}')
+        except Exception as e:                      # unreadable / truncated archive
+            s.archives_bad += 1
+            msg = ('This archive looks incomplete or damaged; download it again from Google Takeout'
+                   if not isinstance(e, OSError) or not is_fatal_os_error(e) else friendly_os_error(e))
+            self._record(FileRecord(name, 'error', error=msg))
+            self.on_log('error', f'  ✗ {name}: {msg}')
+
+    def _count_entries(self, path: Path) -> int:
+        """Entries in the archive; compressed tars are estimated from their size."""
+        try:
+            if path.name.lower().endswith('.zip'):
+                import zipfile
+                with zipfile.ZipFile(_fs(path)) as zf:
+                    return sum(1 for i in zf.infolist() if not i.is_dir())
+            return max(1, os.path.getsize(_fs(path)) // 1_500_000)
+        except Exception:
+            return 1
+
+    def _run(self) -> bool:
+        if not self.archives:
+            self.on_log('error', 'No archives to unpack.')
+            return False
+        missing = [a for a in self.archives if not a.is_file()]
+        if missing:
+            self.on_log('error', f'Archive not found: {missing[0]}')
+            return False
+        self.stats.total = len(self.archives)
+        self._total_entries = sum(self._count_entries(a) for a in self.archives) or 1
+        need = sum(self._remaining_size(a) for a in self.archives)
+        try:
+            self.dest.mkdir(parents=True, exist_ok=True)
+            free = shutil.disk_usage(str(self.dest)).free
+            self.on_log('info', f'Unpacking {len(self.archives)} archive(s) (about {_fmt_size(need)} still to '
+                                f'write) into {self.dest}; {_fmt_size(free)} free')
+            if need > free:
+                self.on_log('error', 'Not enough free space to unpack everything. Free up space or '
+                                     'choose a folder on a bigger drive.')
+                return False
+        except OSError as e:
+            self.on_log('error', f'Cannot use {self.dest}: {friendly_os_error(e)}')
+            return False
+        self.on_stats(self.stats)
+        for a in self.archives:
+            if self._stop.is_set():
+                break
+            self._extract_one(a)
+            self.on_stats(self.stats)
+        self._progress(self.stats.files, max(self.stats.files, self._total_entries), '', force=True)
+        s = self.stats
+        self.report_path = write_report(
+            self.dest, 'unpack', {'dest': str(self.dest), 'archives': [str(a) for a in self.archives], **asdict(s)},
+            [r.as_dict() for r in self.records], ('file', 'status', 'dest', 'note', 'error'))
+        self.on_log('info', '─' * 55)
+        self.on_log('info', f'Finished. Archives unpacked: {s.archives_ok}/{s.total} | Files written: '
+                            f'{s.extracted:,} | Already there: {s.skipped:,} | Problems: {s.errors + s.archives_bad:,}')
+        if self.fatal:
+            self.on_log('error', f'Stopped early: {self.fatal}.')
+            return False
+        return not self._stop.is_set() and s.archives_bad == 0
+
+
+# ── Folder analysis (the "Start here" guide) ──────────────────────────────────
+
+def _dated_parts(parts: Sequence[str]) -> Optional[Tuple[bool]]:
+    """If the path ends with (or contains) year/month/day folders, return
+    (is_legacy,) — legacy = numeric month or non-canonical day name."""
+    for i in range(len(parts) - 2):
+        y, m, d = parts[i], parts[i + 1], parts[i + 2]
+        if parse_year_folder(y) and parse_month_folder(m) and parse_day_folder(d):
+            month = parse_month_folder(m)
+            want = f'{MONTHS[month - 1]}_{parse_day_folder(d):02d}'
+            return (m != MONTHS[month - 1] or d != want,)
+    return None
+
+
+def analyze_folder(root: Path, time_limit: float = 45.0, sample: int = 40) -> dict:
+    """Look at any folder and describe what's in it, plus what to do next."""
+    root = Path(os.path.abspath(root))
+    t0 = time.monotonic()
+    info = {
+        'root': str(root), 'media': 0, 'photos': 0, 'videos': 0, 'size': 0,
+        'sidecars': 0, 'archives': [], 'archive_size': 0, 'other': {}, 'junk': 0, 'empty': 0,
+        'name_dated': 0, 'dated_media': 0, 'legacy_media': 0, 'folders': 0,
+        'years': {}, 'unreadable': [], 'takeout_marker': False, 'partial': False,
+        'possible_dupes': 0, 'sample_checked': 0, 'sample_dated': 0, 'top_exts': {},
+    }
+    seen_name_size: Dict[Tuple[str, int], int] = {}
+    undated_sample: List[Path] = []
+    root_parts = (root.name,)
+
+    def onerror(e: OSError) -> None:
+        info['unreadable'].append(f'{getattr(e, "filename", "")}: {friendly_os_error(e)}')
+
+    for dirpath, dirnames, filenames in os.walk(root, onerror=onerror):
+        if time.monotonic() - t0 > time_limit:
+            info['partial'] = True
+            break
+        dp = Path(dirpath)
+        dirnames[:] = sorted(d for d in dirnames if d.lower() not in _SKIP_DIRS and d.lower() != DUPES_DIR)
+        info['folders'] += 1
+        rel_parts = root_parts + dp.relative_to(root).parts
+        low = [p.lower() for p in rel_parts]
+        if 'takeout' in low or 'google photos' in low or any(p.startswith('photos from ') for p in low):
+            info['takeout_marker'] = True
+        dated = _dated_parts(rel_parts)
+        for f in filenames:
+            lf = f.lower()
+            if is_junk_name(f):
+                info['junk'] += 1
+                continue
+            if is_archive(f):
+                try:
+                    sz = os.path.getsize(_fs(dp / f))
+                except OSError:
+                    sz = 0
+                info['archives'].append({'path': str(dp / f), 'name': f, 'size': sz})
+                info['archive_size'] += sz
+                continue
+            ext = os.path.splitext(lf)[1]
+            if ext == '.json':
+                if lf not in _NON_SIDECAR_JSON:
+                    info['sidecars'] += 1
+                continue
+            if ext not in ALL_MEDIA:
+                if lf not in _SYSTEM_FILES:
+                    key = ext or '(no extension)'
+                    info['other'][key] = info['other'].get(key, 0) + 1
+                continue
+            try:
+                sz = os.path.getsize(_fs(dp / f))
+            except OSError:
+                continue
+            if sz == 0:
+                info['empty'] += 1
+            info['media'] += 1
+            info['size'] += sz
+            info['top_exts'][ext] = info['top_exts'].get(ext, 0) + 1
+            if ext in VIDEO_EXTS:
+                info['videos'] += 1
+            else:
+                info['photos'] += 1
+            k = (lf, sz)
+            seen_name_size[k] = seen_name_size.get(k, 0) + 1
+            year = None
+            if dated:
+                info['dated_media'] += 1
+                if dated[0]:
+                    info['legacy_media'] += 1
+            pd = date_from_filename(f)
+            if pd:
+                info['name_dated'] += 1
+                year = pd.dt.year
+            elif not dated and len(undated_sample) < sample:
+                undated_sample.append(dp / f)
+            if year is None and dated:
+                for part in rel_parts:
+                    if parse_year_folder(part):
+                        year = int(part)
+            if year:
+                info['years'][year] = info['years'].get(year, 0) + 1
+
+    info['possible_dupes'] = sum(n - 1 for n in seen_name_size.values() if n > 1)
+    if undated_sample and find_exiftool():
+        try:
+            with ExifTool(batch=False) as et:
+                tags = et.read_tags(undated_sample, _DATE_TAGS)
+            info['sample_checked'] = len(undated_sample)
+            for p in undated_sample:
+                pd = parse_embedded_date(tags.get(_norm_key(p)) or {}, p.suffix.lower() in VIDEO_EXTS)
+                if pd:
+                    info['sample_dated'] += 1
+                    info['years'][pd.dt.year] = info['years'].get(pd.dt.year, 0) + 1
+        except ExifToolError:
+            pass
+    info['years'] = dict(sorted(info['years'].items()))
+    info['top_exts'] = dict(sorted(info['top_exts'].items(), key=lambda kv: -kv[1])[:8])
+    info['other_total'] = sum(info['other'].values())
+    info['other_desc'] = describe_ignored(info['other'])
+    info['unreadable'] = info['unreadable'][:20]
+    info['kind'], info['recommendations'] = _recommend(info)
+    return info
+
+
+def _recommend(i: dict) -> Tuple[str, List[dict]]:
+    """Pick what this folder most likely is, and the steps to take."""
+    recs: List[dict] = []
+    media = i['media']
+    root = i['root']
+
+    def add(tool, title, why, primary=False, **prefill):
+        recs.append({'tool': tool, 'title': title, 'why': why, 'primary': primary, 'prefill': prefill})
+
+    if i['archives'] and (media < 50 or i['archive_size'] > i['size']):
+        n = len(i['archives'])
+        add('unpack', f'Unpack {n} Takeout archive{"s" if n != 1 else ""} first',
+            'Google Takeout downloads come as zip files. Unpack them into one folder, then process that folder.',
+            primary=True, src=root)
+        return 'archives', recs
+    if media == 0:
+        return 'empty', recs
+
+    takeoutish = i['sidecars'] >= max(5, media * 0.2) or (i['takeout_marker'] and i['sidecars'] > 0)
+    dated_share = i['dated_media'] / media
+    if takeoutish:
+        add('takeout', 'Process this Google Takeout export',
+            f'Found {i["sidecars"]:,} Google JSON files with the real dates and locations of your photos.',
+            primary=True, src=root)
+        kind = 'takeout'
+    elif dated_share >= 0.5:
+        kind = 'drive'
+        if i['legacy_media']:
+            add('rename', 'Rename the old-style folders',
+                'Some folders use the old 2024/01/15 layout. Renaming first gives one consistent layout.',
+                primary=True, root=root)
+        add('fixdrive', 'Fix missing dates on this drive',
+            f'{i["dated_media"]:,} of {media:,} files are already in year/month/day folders; '
+            'files with no date inside get their folder\'s date.',
+            primary=not i['legacy_media'], root=root)
+    else:
+        kind = 'unorganized'
+        share = (i['sample_dated'] / i['sample_checked']) if i['sample_checked'] else None
+        why = f'{i["name_dated"]:,} of {media:,} files have a date in their name'
+        if share is not None:
+            why += f', and about {round(share * 100)}% of the others have a date stored inside'
+        why += '. Each file is copied into a year/month/day folder; anything without a date goes to no-date.'
+        add('filename', 'Organize these photos into dated folders', why, primary=True, src=root)
+    if i['possible_dupes'] >= 5:
+        add('dupes', 'Check for duplicates',
+            f'About {i["possible_dupes"]:,} files have the same name and size as another file.', a=root)
+    return kind, recs
+
 __all__ = [
     'ALL_MEDIA', 'IMAGE_EXTS', 'VIDEO_EXTS', 'MONTHS', 'OUTPUT_MODES',
     'Stats', 'FileRecord', 'Meta', 'DupMatch', 'PhotoDate', 'ProcessOptions',
@@ -2081,4 +2761,5 @@ __all__ = [
     'date_subdir', 'parse_day_folder', 'parse_month_folder', 'parse_year_folder',
     'build_tag_args', 'build_exiftool_args', 'find_exiftool', 'find_duplicates',
     'find_duplicate_groups', 'collect_dated_files', 'plan_folder_renames', 'iter_media',
+    'ArchiveExtractor', 'find_archives', 'safe_member_path', 'analyze_folder', 'friendly_os_error',
 ]

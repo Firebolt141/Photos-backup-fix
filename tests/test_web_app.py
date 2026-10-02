@@ -125,3 +125,37 @@ def test_rejects_bad_date_range(client, tmp_path):
     r = client.post('/api/run', json={'tool': 'filename', 'src': str(tmp_path), 'dst': str(tmp_path / 'o'),
                                       'date_from': 'yesterday'}, headers=H)
     assert r.status_code == 400
+
+
+def test_analyze_endpoint(client, tmp_path):
+    jpeg(tmp_path / 'Phone/IMG_20200101_101010.jpg')
+    d = client.post('/api/analyze', json={'root': str(tmp_path)}, headers=H).json
+    assert d['ok'] and d['kind'] == 'unorganized' and d['recommendations'][0]['tool'] == 'filename'
+    assert d['recommendations'][0]['prefill'] == {'src': str(tmp_path)}
+    assert not client.post('/api/analyze', json={'root': str(tmp_path / 'missing')}, headers=H).json['ok']
+
+
+def test_unpack_job_via_api(client, tmp_path):
+    from test_core import _make_takeout_zips
+    _make_takeout_zips(tmp_path / 'dl')
+    d = client.post('/api/archives', json={'src': str(tmp_path / 'dl')}, headers=H).json
+    assert d['ok'] and len(d['archives']) == 4
+    r = client.post('/api/run', json={'tool': 'unpack', 'src': str(tmp_path / 'dl'), 'dst': str(tmp_path / 'out')},
+                    headers=H)
+    assert r.status_code == 200
+    st = _wait_done(client)
+    assert st['last']['kind'] == 'unpack' and st['stats']['archives_ok'] == 3 and st['stats']['archives_bad'] == 1
+    assert (tmp_path / 'out/Takeout/Google Photos/Photos from 2019/IMG_1.jpg').exists()
+    r = client.post('/api/run', json={'tool': 'unpack', 'src': str(tmp_path / 'out'), 'dst': str(tmp_path / 'x')},
+                    headers=H)
+    assert r.status_code == 400 and 'No .zip' in r.json['error']
+
+
+def test_preflight_reports_archives_and_other_files(client, tmp_path):
+    jpeg(tmp_path / 'a.jpg')
+    (tmp_path / 'takeout-001.zip').write_bytes(b'PK')
+    (tmp_path / 'notes.txt').write_text('x')
+    d = client.post('/api/preflight', json={'src': str(tmp_path)}, headers=H).json
+    assert d['count'] == 1 and d['archives'] == 1 and d['other'] == 1
+    d = client.post('/api/preflight', json={'src': str(tmp_path / 'nope')}, headers=H).json
+    assert d.get('missing')
