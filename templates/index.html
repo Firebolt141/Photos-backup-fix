@@ -3,7 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Google Takeout EXIF Restoration</title>
+<meta name="api-token" content="{{ token }}">
+<title>Photos Backup Fix</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E📷%3C/text%3E%3C/svg%3E">
 <style>
 /* ── Reset & base ──────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -676,19 +678,82 @@ input:checked ~ .toggle::after    { transform: translateX(16px); }
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* ── v2 layout: tool nav + controls + output ─────────────────────────────── */
+.main { grid-template-columns: 210px 380px 1fr; max-width: 1600px; }
+.nav { display: flex; flex-direction: column; gap: 2px; }
+.nav-section {
+  font-size: .66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .1em;
+  color: var(--muted); padding: 14px 12px 6px;
+}
+.nav-section:first-child { padding-top: 4px; }
+.nav-item {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 9px 12px; border-radius: 9px; border: 1px solid transparent;
+  background: transparent; color: var(--subtle); font-size: .84rem; font-weight: 600;
+  cursor: pointer; text-align: left; transition: all .15s;
+}
+.nav-item:hover { background: var(--surface); color: var(--text); }
+.nav-item.active { background: rgba(59,130,246,.14); border-color: rgba(59,130,246,.35); color: #bfdbfe; }
+.nav-item .nav-ico { width: 20px; text-align: center; }
+.nav-item .nav-run { margin-left: auto; width: 7px; height: 7px; border-radius: 50%; background: var(--green);
+  display: none; animation: pulse-dot 1.5s infinite; }
+.nav-item.running .nav-run { display: block; }
+.tool-intro { font-size: .8rem; color: var(--subtle); line-height: 1.5; margin-bottom: 4px; }
+.tool-intro code { background: var(--input); padding: 1px 5px; border-radius: 4px; font-size: .74rem; color: #c4b5fd; }
+.tool { display: none; }
+.tool.active { display: block; }
+.tool-title { font-size: 1rem; font-weight: 700; margin-bottom: 6px; }
+.folder-label { width: 58px; }
+.field-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.field-row select, .field-row input[type=number] {
+  background: var(--input); border: 1px solid var(--border); border-radius: 8px;
+  color: var(--text); padding: 6px 8px; font-size: .8rem;
+}
+.field-row input[type=number] { width: 70px; }
+.preflight { font-size: .74rem; color: var(--muted); margin-top: 8px; min-height: 1em; }
+.btn-warn { background: linear-gradient(135deg, #d97706, var(--amber)); color: #111; }
+.stats-row { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
+.stat-card.violet::before { background: #a78bfa; }
+.stat-card.violet .stat-value { color: #a78bfa; }
+.stat-card.slate::before { background: var(--subtle); }
+.stat-card.slate .stat-value { color: var(--subtle); }
+.stat-value { font-size: 1.7rem; }
+.log-scroll.problems-only .log-line:not(.log-warn):not(.log-error) { display: none; }
+.btn-clear.on { background: rgba(245,158,11,.15); border-color: rgba(245,158,11,.4); color: #fcd34d; }
+.done-banner {
+  display: none; margin-top: 10px; padding: 10px 12px; border-radius: 8px; font-size: .8rem;
+  background: rgba(34,197,94,.08); border: 1px solid rgba(34,197,94,.25); color: #bbf7d0;
+  align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.done-banner.show { display: flex; }
+.done-banner.bad { background: rgba(239,68,68,.08); border-color: rgba(239,68,68,.25); color: #fecaca; }
+.done-banner .btn-clear { margin-left: 0; }
+.records-search {
+  flex: 1; background: var(--input); border: 1px solid var(--border); border-radius: 8px;
+  padding: 7px 10px; color: var(--text); font-size: .8rem; max-width: 280px;
+}
+.st-ok { color: #4ade80; font-weight: 600; }
+.st-warn { color: #fb923c; font-weight: 600; }
+.st-err { color: #f87171; font-weight: 600; }
+.st-muted { color: var(--muted); font-weight: 600; }
+@media (max-width: 1180px) {
+  .main { grid-template-columns: 1fr; }
+  .nav { flex-direction: row; flex-wrap: wrap; }
+  .nav-section { display: none; }
+  .nav-item { width: auto; }
+}
 </style>
 </head>
 <body>
 
-<!-- Top progress bar -->
 <div class="status-bar"><div class="status-bar-fill" id="top-bar"></div></div>
 
-<!-- Header -->
 <header>
   <div class="header-icon">📷</div>
   <div>
-    <div class="header-title">Google Takeout EXIF Restoration</div>
-    <div class="header-sub">Restores dates, times &amp; GPS from Google Takeout JSON sidecars</div>
+    <div class="header-title">Photos Backup Fix</div>
+    <div class="header-sub">Restore dates &amp; GPS from Google Takeout · sort photos into dated folders · fix your backup drive</div>
   </div>
   <div class="header-spacer"></div>
   <div id="exiftool-badge">
@@ -701,129 +766,239 @@ input:checked ~ .toggle::after    { transform: translateX(16px); }
   </div>
 </header>
 
-<!-- Main -->
 <div class="main">
 
-  <!-- LEFT: controls -->
+  <!-- NAV -->
+  <nav class="nav" id="nav">
+    <div class="nav-section">Import</div>
+    <button class="nav-item" data-tool="takeout"><span class="nav-ico">📦</span>Process Takeout<span class="nav-run"></span></button>
+    <button class="nav-item" data-tool="filename"><span class="nav-ico">🗓️</span>Sort by Filename Date<span class="nav-run"></span></button>
+    <div class="nav-section">Drive Utilities</div>
+    <button class="nav-item" data-tool="fixdrive"><span class="nav-ico">✨</span>Fix Missing Dates<span class="nav-run"></span></button>
+    <button class="nav-item" data-tool="rename"><span class="nav-ico">🏷️</span>Rename Old Folders<span class="nav-run"></span></button>
+    <button class="nav-item" data-tool="dupes"><span class="nav-ico">🧬</span>Find Duplicates<span class="nav-run"></span></button>
+  </nav>
+
+  <!-- CONTROLS -->
   <div class="left">
 
-    <!-- Folders -->
-    <div class="card">
-      <div class="card-title">Folders</div>
-      <div class="folder-row">
-        <span class="folder-label">Source</span>
-        <input id="src" class="folder-input" type="text" placeholder="Path to unzipped Takeout folder…">
-        <button class="btn-browse" onclick="browse('src')">Browse</button>
+    <!-- Takeout -->
+    <section class="tool" data-tool="takeout">
+      <div class="card">
+        <div class="tool-title">Process Google Takeout</div>
+        <div class="tool-intro">Copies every photo &amp; video from an unzipped Takeout export into dated folders
+          (<code>2024/March/March_15</code>) and writes the date, GPS and caption from Google's JSON sidecars into the files.
+          Your source folder is never modified.</div>
       </div>
-      <div class="folder-row">
-        <span class="folder-label">Output</span>
-        <input id="dst" class="folder-input" type="text" placeholder="Where to save fixed files…">
-        <button class="btn-browse" onclick="browse('dst')">Browse</button>
+      <div class="card">
+        <div class="card-title">Folders</div>
+        <div class="folder-row"><span class="folder-label">Source</span>
+          <input id="takeout-src" class="folder-input persist" type="text" placeholder="Unzipped Takeout folder…">
+          <button class="btn-browse" data-browse="takeout-src">Browse</button></div>
+        <div class="folder-row"><span class="folder-label">Output</span>
+          <input id="takeout-dst" class="folder-input persist" type="text" placeholder="Where to save fixed files…">
+          <button class="btn-browse" data-browse="takeout-dst">Browse</button></div>
+        <div class="preflight" id="takeout-pre"></div>
       </div>
-    </div>
-
-    <!-- Options -->
-    <div class="card">
-      <div class="card-title">Options</div>
-
-      <div class="option-label" style="margin-bottom:8px">Output organisation</div>
-      <div class="radio-pill">
-        <input type="radio" name="mode" id="mode-date" value="date" checked>
-        <label for="mode-date">By date</label>
-        <input type="radio" name="mode" id="mode-preserve" value="preserve">
-        <label for="mode-preserve">Preserve</label>
-        <input type="radio" name="mode" id="mode-flat" value="flat">
-        <label for="mode-flat">Flat</label>
-      </div>
-
-      <div class="divider"></div>
-
-      <label class="option-row">
-        <input type="checkbox" id="opt-dupes">
-        <span class="toggle"></span>
-        <div>
-          <div class="option-label">Scan for duplicates before processing</div>
-          <div class="option-sub">Recommended when source has multiple Takeout exports</div>
+      <div class="card">
+        <div class="card-title">Options</div>
+        <div class="option-label" style="margin-bottom:6px">Output folders</div>
+        <div class="radio-pill">
+          <input type="radio" name="takeout-mode" id="takeout-mode-date" value="date" class="persist" checked><label for="takeout-mode-date" title="2024/March/March_15 — same as the Android app">By date</label>
+          <input type="radio" name="takeout-mode" id="takeout-mode-num" value="date_numeric" class="persist"><label for="takeout-mode-num" title="2024/03/15 — the old layout">Numeric</label>
+          <input type="radio" name="takeout-mode" id="takeout-mode-pres" value="preserve" class="persist"><label for="takeout-mode-pres" title="Keep Takeout's own folder structure">Preserve</label>
+          <input type="radio" name="takeout-mode" id="takeout-mode-flat" value="flat" class="persist"><label for="takeout-mode-flat" title="Everything in one folder">Flat</label>
         </div>
-      </label>
-    </div>
+        <div class="divider"></div>
+        <label class="option-row"><input type="checkbox" id="takeout-keep" class="persist" checked><span class="toggle"></span>
+          <div><div class="option-label">Keep dates already in the file</div>
+          <div class="option-sub">Camera dates are kept; only missing GPS/caption is added</div></div></label>
+        <label class="option-row"><input type="checkbox" id="takeout-dupes" class="persist"><span class="toggle"></span>
+          <div><div class="option-label">Review duplicates first</div>
+          <div class="option-sub">Finds identical files with different names (same-name copies are skipped automatically)</div></div></label>
+        <label class="option-row"><input type="checkbox" id="takeout-gps" class="persist" checked><span class="toggle"></span>
+          <div><div class="option-label">Write GPS location</div></div></label>
+        <label class="option-row"><input type="checkbox" id="takeout-extras" class="persist" checked><span class="toggle"></span>
+          <div><div class="option-label">Write caption, people &amp; favourites</div>
+          <div class="option-sub">Description, people names (XMP), favourite → 5★ rating</div></div></label>
+        <label class="option-row"><input type="checkbox" id="takeout-ftime" class="persist" checked><span class="toggle"></span>
+          <div><div class="option-label">Set file modified time to the photo date</div></div></label>
+        <label class="option-row"><input type="checkbox" id="takeout-undated" class="persist" checked><span class="toggle"></span>
+          <div><div class="option-label">Copy undated files to <code>no-date/</code></div></div></label>
+        <div class="divider"></div>
+        <div class="field-row"><span class="option-label">Times in filenames are</span>
+          <select id="takeout-tz" class="persist"><option value="local">this PC's time zone</option><option value="utc">UTC</option></select></div>
+        <div class="field-row"><span class="option-label">Parallel workers</span>
+          <input type="number" id="takeout-workers" class="persist" min="0" max="16" value="0"><span class="option-sub">0 = auto</span></div>
+        <div class="divider"></div>
+        <label class="option-row"><input type="checkbox" id="takeout-dry" class="persist dry"><span class="toggle"></span>
+          <div><div class="option-label">Dry run (preview only)</div>
+          <div class="option-sub">Shows where every file would go — writes nothing but a report</div></div></label>
+      </div>
+    </section>
+
+    <!-- Filename -->
+    <section class="tool" data-tool="filename">
+      <div class="card">
+        <div class="tool-title">Sort by Filename Date</div>
+        <div class="tool-intro">For Screenshots, WhatsApp, Signal and camera folders: reads the date from names like
+          <code>IMG_20240315_143022.jpg</code>, copies each file into <code>2024/March/March_15</code> and writes the date into it.
+          Files that already contain a date are sorted by it. JSON sidecars are ignored.</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Folders</div>
+        <div class="folder-row"><span class="folder-label">Source</span>
+          <input id="filename-src" class="folder-input persist" type="text" placeholder="Folder of photos…">
+          <button class="btn-browse" data-browse="filename-src">Browse</button></div>
+        <div class="folder-row"><span class="folder-label">Output</span>
+          <input id="filename-dst" class="folder-input persist" type="text" placeholder="Where to save sorted files…">
+          <button class="btn-browse" data-browse="filename-dst">Browse</button></div>
+        <div class="preflight" id="filename-pre"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Options</div>
+        <div class="option-label" style="margin-bottom:6px">Output folders</div>
+        <div class="radio-pill">
+          <input type="radio" name="filename-mode" id="filename-mode-date" value="date" class="persist" checked><label for="filename-mode-date">By date</label>
+          <input type="radio" name="filename-mode" id="filename-mode-num" value="date_numeric" class="persist"><label for="filename-mode-num">Numeric</label>
+          <input type="radio" name="filename-mode" id="filename-mode-flat" value="flat" class="persist"><label for="filename-mode-flat">Flat</label>
+        </div>
+        <div class="divider"></div>
+        <label class="option-row"><input type="checkbox" id="filename-keep" class="persist" checked><span class="toggle"></span>
+          <div><div class="option-label">Keep dates already in the file</div></div></label>
+        <label class="option-row"><input type="checkbox" id="filename-ftime" class="persist" checked><span class="toggle"></span>
+          <div><div class="option-label">Set file modified time to the photo date</div></div></label>
+        <label class="option-row"><input type="checkbox" id="filename-undated" class="persist" checked><span class="toggle"></span>
+          <div><div class="option-label">Copy undated files to <code>no-date/</code></div></div></label>
+        <div class="field-row"><span class="option-label">Times in filenames are</span>
+          <select id="filename-tz" class="persist"><option value="local">this PC's time zone</option><option value="utc">UTC</option></select></div>
+        <div class="divider"></div>
+        <label class="option-row"><input type="checkbox" id="filename-dry" class="persist dry"><span class="toggle"></span>
+          <div><div class="option-label">Dry run (preview only)</div></div></label>
+      </div>
+    </section>
+
+    <!-- Fix drive -->
+    <section class="tool" data-tool="fixdrive">
+      <div class="card">
+        <div class="tool-title">Fix Missing Dates</div>
+        <div class="tool-intro">Walks a backup drive organised as <code>year/month/day</code> and writes the folder's date into
+          every photo or video that has none — <b>in place</b>. Files that already have a date are never changed; ones whose
+          date disagrees with their folder are listed. Works on JPEG, PNG, HEIC, RAW and MP4/MOV.</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Drive</div>
+        <div class="folder-row"><span class="folder-label">Folder</span>
+          <input id="fixdrive-root" class="folder-input persist" type="text" placeholder="Drive root or a year folder…">
+          <button class="btn-browse" data-browse="fixdrive-root">Browse</button></div>
+        <div class="option-sub" style="margin-top:6px">Accepts <code>January_07</code>, <code>January 7</code> and <code>01/07</code> folders.</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Options</div>
+        <label class="option-row"><input type="checkbox" id="fixdrive-ftime" class="persist" checked><span class="toggle"></span>
+          <div><div class="option-label">Set file modified time too</div></div></label>
+        <div class="field-row"><span class="option-label">Times in filenames are</span>
+          <select id="fixdrive-tz" class="persist"><option value="local">this PC's time zone</option><option value="utc">UTC</option></select></div>
+        <div class="divider"></div>
+        <label class="option-row"><input type="checkbox" id="fixdrive-dry" class="persist dry" checked><span class="toggle"></span>
+          <div><div class="option-label">Dry run (preview only)</div>
+          <div class="option-sub">Recommended first — this tool edits files in place</div></div></label>
+      </div>
+    </section>
+
+    <!-- Rename -->
+    <section class="tool" data-tool="rename">
+      <div class="card">
+        <div class="tool-title">Rename Old Folders</div>
+        <div class="tool-intro">Converts the old numeric layout <code>2024/01/15</code> (and <code>January 7</code>) into the
+          layout the Android app and this tool now use: <code>2024/January/January_15</code>. If both layouts exist, folders
+          are merged — nothing is overwritten; byte-identical extras go to <code>_duplicates/</code>.</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Drive</div>
+        <div class="folder-row"><span class="folder-label">Folder</span>
+          <input id="rename-root" class="folder-input persist" type="text" placeholder="Drive root or a year folder…">
+          <button class="btn-browse" data-browse="rename-root">Browse</button></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Options</div>
+        <label class="option-row"><input type="checkbox" id="rename-dry" class="persist dry" checked><span class="toggle"></span>
+          <div><div class="option-label">Dry run (preview only)</div></div></label>
+      </div>
+    </section>
+
+    <!-- Duplicates -->
+    <section class="tool" data-tool="dupes">
+      <div class="card">
+        <div class="tool-title">Find Duplicates</div>
+        <div class="tool-intro">Finds byte-identical photos and videos (any name, any folder) by content hash. The copy with a
+          Takeout sidecar / in a <code>Photos from YYYY</code> folder / shortest path is kept. Nothing is ever deleted.</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Folders</div>
+        <div class="folder-row"><span class="folder-label">Folder</span>
+          <input id="dupes-a" class="folder-input persist" type="text" placeholder="Folder to scan…">
+          <button class="btn-browse" data-browse="dupes-a">Browse</button></div>
+        <div class="folder-row"><span class="folder-label">Also</span>
+          <input id="dupes-b" class="folder-input persist" type="text" placeholder="(optional) second folder…">
+          <button class="btn-browse" data-browse="dupes-b">Browse</button></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Options</div>
+        <label class="option-row"><input type="checkbox" id="dupes-move" class="persist"><span class="toggle"></span>
+          <div><div class="option-label">Move extra copies to <code>_duplicates/</code></div>
+          <div class="option-sub">Off = report only. Moved files keep their folder structure.</div></div></label>
+      </div>
+    </section>
 
     <!-- Controls -->
     <div class="card">
       <div class="controls">
-        <button class="btn btn-primary" id="btn-start" onclick="startProcessing()">
-          <span>▶</span> Start Processing
-        </button>
-        <button class="btn btn-danger" id="btn-stop" onclick="stopProcessing()" disabled>
-          <span>■</span> Stop
-        </button>
-        <button class="btn btn-secondary" id="btn-open" onclick="openOutput()">
-          📂 Open Output
-        </button>
+        <button class="btn btn-primary" id="btn-start"><span>▶</span> <span id="start-label">Start</span></button>
+        <button class="btn btn-secondary" id="btn-pause" disabled>⏸ Pause</button>
+        <button class="btn btn-danger" id="btn-stop" disabled><span>■</span> Stop</button>
+        <button class="btn btn-secondary" id="btn-open">📂 Open folder</button>
       </div>
+      <div class="option-sub" style="margin-top:10px">Stopped runs can be resumed: finished files are skipped next time.</div>
     </div>
+  </div>
 
-  </div><!-- /left -->
-
-  <!-- RIGHT: stats + progress + log -->
+  <!-- OUTPUT -->
   <div class="right">
+    <div class="stats-row" id="stats-row"></div>
 
-    <!-- Stats -->
-    <div class="stats-row">
-      <div class="stat-card blue" onclick="showRecords('all')">
-        <div class="stat-value" id="s-total">0</div>
-        <div class="stat-label">Total</div>
-        <div class="stat-hint">click to view all</div>
-      </div>
-      <div class="stat-card green" onclick="showRecords('fixed')">
-        <div class="stat-value" id="s-fixed">0</div>
-        <div class="stat-label">Fixed</div>
-        <div class="stat-hint">click to view</div>
-      </div>
-      <div class="stat-card amber" onclick="showRecords('no_json')">
-        <div class="stat-value" id="s-nojson">0</div>
-        <div class="stat-label">No JSON</div>
-        <div class="stat-hint">click to view</div>
-      </div>
-      <div class="stat-card red" onclick="showRecords('errors')">
-        <div class="stat-value" id="s-errors">0</div>
-        <div class="stat-label">Errors</div>
-        <div class="stat-hint">click to view</div>
-      </div>
-    </div>
-
-    <!-- Progress -->
     <div class="card progress-card">
       <div class="progress-header">
-        <span class="progress-label" id="prog-label">Ready — select folders and press Start</span>
+        <span class="progress-label" id="prog-label">Ready — choose folders and press Start</span>
         <span class="progress-pct" id="prog-pct"></span>
       </div>
-      <div class="progress-track">
-        <div class="progress-fill" id="prog-fill"></div>
-      </div>
+      <div class="progress-track"><div class="progress-fill" id="prog-fill"></div></div>
       <div class="progress-meta">
         <span class="progress-file" id="prog-file"></span>
         <span class="progress-eta" id="prog-eta"></span>
         <span class="progress-speed" id="prog-speed"></span>
       </div>
+      <div class="done-banner" id="done-banner">
+        <span id="done-text"></span>
+        <button class="btn-clear" id="btn-report-csv">⬇ Report (CSV)</button>
+        <button class="btn-clear" id="btn-report-json">⬇ JSON</button>
+        <button class="btn-clear" id="btn-report-open">📂 Report folder</button>
+      </div>
     </div>
 
-    <!-- Log -->
     <div class="card log-card">
       <div class="log-header">
         <span class="card-title" style="margin:0">Activity Log</span>
         <div style="display:flex;gap:6px">
-          <button class="btn-clear" onclick="copyLog()">Copy</button>
-          <button class="btn-clear" onclick="clearLog()">Clear</button>
+          <button class="btn-clear" id="btn-problems">Problems only</button>
+          <button class="btn-clear" id="btn-copy-log">Copy</button>
+          <button class="btn-clear" id="btn-clear-log">Clear</button>
         </div>
       </div>
-      <div class="log-scroll" id="log">
-        <div class="log-line log-empty">Waiting to start…</div>
-      </div>
+      <div class="log-scroll" id="log"><div class="log-line log-empty">Waiting to start…</div></div>
     </div>
-
-  </div><!-- /right -->
-</div><!-- /main -->
+  </div>
+</div>
 
 <!-- Scan overlay -->
 <div class="scan-overlay" id="scan-overlay">
@@ -831,6 +1006,7 @@ input:checked ~ .toggle::after    { transform: translateX(16px); }
     <div class="scan-spinner"></div>
     <div class="scan-title">Scanning for duplicates…</div>
     <div class="scan-sub" id="scan-sub">Analysing files</div>
+    <button class="btn btn-secondary" style="margin-top:16px" id="btn-scan-cancel">Cancel</button>
   </div>
 </div>
 
@@ -839,270 +1015,412 @@ input:checked ~ .toggle::after    { transform: translateX(16px); }
   <div class="modal">
     <div class="modal-head">
       <div class="modal-icon">⚠️</div>
-      <div>
-        <div class="modal-title" id="dup-title">Duplicate Files Found</div>
-        <div class="modal-sub" id="dup-sub"></div>
-      </div>
+      <div><div class="modal-title" id="dup-title">Duplicate Files Found</div><div class="modal-sub" id="dup-sub"></div></div>
     </div>
     <div class="modal-body">
-      <div class="modal-info">
-        These files appear more than once across your Takeout exports.
-        <strong>Skip Duplicates</strong> keeps Copy 1 and ignores Copy 2 for every pair.
-        <strong>Keep All</strong> processes every file normally.
-      </div>
+      <div class="modal-info">These files are byte-for-byte identical (content hash). <strong>Skip duplicates</strong> processes
+        one copy of each; <strong>Keep all</strong> processes every file (identical files that would land on the same name are still skipped).</div>
       <table class="dup-table">
-        <thead>
-          <tr>
-            <th>Copy 1 — kept</th>
-            <th>Copy 2 — skipped if dedup</th>
-            <th>Size</th>
-            <th>Match</th>
-          </tr>
-        </thead>
+        <thead><tr><th>Kept</th><th>Duplicate — skipped</th><th>Size</th></tr></thead>
         <tbody id="dup-tbody"></tbody>
       </table>
     </div>
     <div class="modal-foot">
-      <button class="btn btn-primary"   id="btn-dup-skip"   onclick="decideDupes('skip_dupes')">✓ Skip Duplicates</button>
-      <button class="btn btn-secondary" id="btn-dup-keep"   onclick="decideDupes('keep_all')">Keep All Copies</button>
-      <button class="btn btn-secondary" id="btn-dup-cancel" onclick="decideDupes(null)">✕ Cancel</button>
+      <button class="btn btn-primary" data-decide="skip_dupes">✓ Skip duplicates</button>
+      <button class="btn btn-secondary" data-decide="keep_all">Keep all</button>
+      <button class="btn btn-secondary" data-decide="cancel" style="margin-left:auto">✕ Cancel run</button>
     </div>
   </div>
 </div>
 
-<!-- Toast area -->
-<div class="toast-area" id="toasts"></div>
-
-<!-- File records modal -->
+<!-- Records modal -->
 <div class="modal-backdrop" id="records-modal">
-  <div class="modal" style="max-width:1100px">
+  <div class="modal" style="max-width:1200px">
     <div class="modal-head">
       <div class="modal-icon" id="records-icon">📋</div>
-      <div>
-        <div class="modal-title" id="records-title">File Records</div>
-        <div class="modal-sub" id="records-sub"></div>
-      </div>
+      <div><div class="modal-title" id="records-title">Files</div><div class="modal-sub" id="records-sub"></div></div>
+      <input class="records-search" id="records-search" placeholder="Filter by name…" style="margin-left:auto">
     </div>
     <div class="modal-body">
-      <div class="modal-info" id="records-empty" style="display:none">
-        No records yet — run processing first, then click a stat card.
-      </div>
+      <div class="modal-info" id="records-empty" style="display:none">No files here yet.</div>
       <table class="dup-table" id="records-table">
-        <thead>
-          <tr>
-            <th>Source File</th>
-            <th>Output Path</th>
-            <th>Date Written</th>
-            <th>GPS</th>
-            <th>Status / Note</th>
-          </tr>
-        </thead>
+        <thead><tr><th>File</th><th>Destination</th><th>Date</th><th>Status</th><th>Details</th></tr></thead>
         <tbody id="records-tbody"></tbody>
       </table>
     </div>
     <div class="modal-foot">
       <span id="records-count" style="color:var(--muted);font-size:.82rem"></span>
-      <button class="btn btn-secondary" onclick="copyRecordsTsv()" style="margin-left:12px">Copy as TSV</button>
-      <button class="btn btn-secondary" id="btn-records-close" onclick="closeRecords()">Close</button>
+      <button class="btn btn-secondary" id="btn-records-more" style="margin-left:12px">Load more</button>
+      <button class="btn btn-secondary" id="btn-records-tsv">Copy as TSV</button>
+      <button class="btn btn-secondary" id="btn-records-close" style="margin-left:auto">Close</button>
     </div>
   </div>
 </div>
 
-<script>
-// ── State ──────────────────────────────────────────────────────────────────
+<div class="toast-area" id="toasts"></div>
 
-const state = {
-  running:    false,
-  total:      0,
-  autoScroll: true,
-  es:         null,
+<script>
+'use strict';
+const TOKEN = document.querySelector('meta[name=api-token]').content;
+const $ = (id) => document.getElementById(id);
+const MAX_LOG_LINES = 4000;
+
+// ── Tool definitions ───────────────────────────────────────────────────────
+const S = (k) => (st) => (st && st[k]) || 0;
+const TOOLS = {
+  takeout: {
+    folder: () => $('takeout-dst').value.trim(),
+    cards: [
+      { label: 'Total',          color: 'blue',   value: S('total'),         statuses: [] },
+      { label: 'Dates written',  color: 'green',  value: S('processed'),     statuses: ['fixed', 'from_filename'] },
+      { label: 'Kept existing',  color: 'violet', value: S('kept_existing'), statuses: ['kept_existing'] },
+      { label: 'No date',        color: 'amber',  value: S('no_json'),       statuses: ['no_date', 'no_date_skipped'] },
+      { label: 'Skipped',        color: 'slate',  value: S('skipped'),       statuses: ['exists', 'duplicate'] },
+      { label: 'Needs attention', color: 'red',    value: (s) => S('errors')(s) + S('meta_failed')(s) + S('unsupported')(s),
+        statuses: ['error', 'meta_failed', 'unsupported'] },
+    ],
+    body: () => ({
+      src: $('takeout-src').value.trim(), dst: $('takeout-dst').value.trim(),
+      output_mode: document.querySelector('input[name=takeout-mode]:checked').value,
+      keep_existing: $('takeout-keep').checked, check_dupes: $('takeout-dupes').checked,
+      write_gps: $('takeout-gps').checked, write_extras: $('takeout-extras').checked,
+      set_file_times: $('takeout-ftime').checked, copy_undated: $('takeout-undated').checked,
+      filename_tz: $('takeout-tz').value, workers: +$('takeout-workers').value || 0,
+      dry_run: $('takeout-dry').checked,
+    }),
+    validate: (b) => !b.src ? 'Choose a source folder.' : !b.dst ? 'Choose an output folder.'
+      : b.src === b.dst ? 'Source and output must be different.' : '',
+  },
+  filename: {
+    folder: () => $('filename-dst').value.trim(),
+    cards: null,   // filled below (same as takeout)
+    body: () => ({
+      src: $('filename-src').value.trim(), dst: $('filename-dst').value.trim(),
+      output_mode: document.querySelector('input[name=filename-mode]:checked').value,
+      keep_existing: $('filename-keep').checked, set_file_times: $('filename-ftime').checked,
+      copy_undated: $('filename-undated').checked, filename_tz: $('filename-tz').value,
+      dry_run: $('filename-dry').checked,
+    }),
+    validate: (b) => !b.src ? 'Choose a source folder.' : !b.dst ? 'Choose an output folder.'
+      : b.src === b.dst ? 'Source and output must be different.' : '',
+  },
+  fixdrive: {
+    folder: () => $('fixdrive-root').value.trim(),
+    cards: [
+      { label: 'Total',         color: 'blue',   value: S('total'),         statuses: [] },
+      { label: 'Fixed',         color: 'green',  value: S('fixed'),         statuses: ['fixed'] },
+      { label: 'Already dated', color: 'violet', value: S('already_dated'), statuses: [] },
+      { label: 'Date ≠ folder', color: 'amber',  value: S('mismatched'),    statuses: ['mismatched'] },
+      { label: 'Unsupported',   color: 'slate',  value: S('unsupported'),   statuses: ['unsupported'] },
+      { label: 'Errors',        color: 'red',    value: S('errors'),        statuses: ['error'] },
+    ],
+    body: () => ({ root: $('fixdrive-root').value.trim(), set_file_times: $('fixdrive-ftime').checked,
+                   filename_tz: $('fixdrive-tz').value, dry_run: $('fixdrive-dry').checked }),
+    validate: (b) => !b.root ? 'Choose the drive folder.' : '',
+  },
+  rename: {
+    folder: () => $('rename-root').value.trim(),
+    cards: [
+      { label: 'To rename',   color: 'blue',  value: S('total'),     statuses: [] },
+      { label: 'Renamed',     color: 'green', value: S('renamed'),   statuses: ['rename'] },
+      { label: 'Merged',      color: 'violet',value: S('merged'),    statuses: ['merge'] },
+      { label: 'Identical extras', color: 'amber', value: S('conflicts'), statuses: ['merge'] },
+      { label: 'Errors',      color: 'red',   value: S('errors'),    statuses: ['error'] },
+    ],
+    body: () => ({ root: $('rename-root').value.trim(), dry_run: $('rename-dry').checked }),
+    validate: (b) => !b.root ? 'Choose the drive folder.' : '',
+  },
+  dupes: {
+    folder: () => $('dupes-a').value.trim(),
+    cards: [
+      { label: 'Files scanned', color: 'blue',  value: S('total'),      statuses: [] },
+      { label: 'Groups',        color: 'violet',value: S('groups'),     statuses: ['keep'] },
+      { label: 'Extra copies',  color: 'amber', value: S('duplicates'), statuses: ['duplicate', 'moved'] },
+      { label: 'Moved',         color: 'green', value: S('moved'),      statuses: ['moved'] },
+      { label: 'Errors',        color: 'red',   value: S('errors'),     statuses: ['error'] },
+    ],
+    body: () => ({ roots: [$('dupes-a').value.trim(), $('dupes-b').value.trim()].filter(Boolean),
+                   move: $('dupes-move').checked }),
+    validate: (b) => !b.roots.length ? 'Choose a folder to scan.' : '',
+  },
+};
+TOOLS.filename.cards = TOOLS.takeout.cards;
+
+const STATUS_TEXT = {
+  fixed: ['✓ Date/GPS from sidecar', 'st-ok'], from_filename: ['✓ Date from filename', 'st-ok'],
+  kept_existing: ['✓ Kept existing date', 'st-ok'], no_date: ['! No date → no-date/', 'st-warn'],
+  no_date_skipped: ['! No date — not copied', 'st-warn'], unsupported: ['→ Sorted, format has no metadata', 'st-warn'],
+  exists: ['= Already in output', 'st-muted'], duplicate: ['= Duplicate', 'st-muted'],
+  meta_failed: ['✗ Copied, metadata failed', 'st-err'], error: ['✗ Error', 'st-err'],
+  mismatched: ['≠ Date differs from folder', 'st-warn'], rename: ['✓ Renamed', 'st-ok'],
+  merge: ['✓ Merged', 'st-ok'], keep: ['✓ Kept', 'st-ok'], moved: ['→ Moved to _duplicates', 'st-warn'],
 };
 
-const counters   = { total: 0, fixed: 0, noJson: 0, errors: 0 };
-const allRecords = [];   // accumulates file_result events
+// ── State ──────────────────────────────────────────────────────────────────
+const state = { tool: 'takeout', running: false, runningTool: '', paused: false,
+                autoScroll: true, es: null, stats: null, records: { statuses: [], offset: 0, rows: [] } };
+
+// ── API helper (every call carries the per-launch token) ──────────────────
+async function api(path, body) {
+  const opts = { headers: { 'X-Token': TOKEN } };
+  if (body !== undefined) {
+    opts.method = 'POST';
+    opts.headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(body);
+  }
+  const r = await fetch(path, opts);
+  let d = {};
+  try { d = await r.json(); } catch (e) { /* non-JSON */ }
+  if (!r.ok && !d.error) d.error = `Request failed (${r.status})`;
+  return d;
+}
+
+function store(k, v) { try { localStorage.setItem('pbf:' + k, v); } catch (e) { /* storage blocked */ } }
+function load(k) { try { return localStorage.getItem('pbf:' + k); } catch (e) { return null; } }
 
 // ── Init ───────────────────────────────────────────────────────────────────
-
 document.addEventListener('DOMContentLoaded', () => {
-  // Restore last-used paths
-  const savedSrc = localStorage.getItem('exif_src');
-  const savedDst = localStorage.getItem('exif_dst');
-  if (savedSrc) document.getElementById('src').value = savedSrc;
-  if (savedDst) document.getElementById('dst').value = savedDst;
+  restoreInputs();
+  document.querySelectorAll('.nav-item').forEach(b => b.addEventListener('click', () => selectTool(b.dataset.tool)));
+  document.querySelectorAll('[data-browse]').forEach(b => b.addEventListener('click', () => browse(b.dataset.browse)));
+  document.querySelectorAll('[data-decide]').forEach(b => b.addEventListener('click', () => decideDupes(b.dataset.decide)));
+  document.querySelectorAll('input.dry').forEach(c => c.addEventListener('change', updateStartLabel));
+  ['takeout-src', 'takeout-dst', 'filename-src', 'filename-dst'].forEach(id =>
+    $(id).addEventListener('change', () => preflight(id.split('-')[0])));
+  $('btn-start').addEventListener('click', start);
+  $('btn-stop').addEventListener('click', stop);
+  $('btn-pause').addEventListener('click', togglePause);
+  $('btn-open').addEventListener('click', () => openFolder(TOOLS[state.tool].folder()));
+  $('btn-report-csv').addEventListener('click', () => download('csv'));
+  $('btn-report-json').addEventListener('click', () => download('json'));
+  $('btn-report-open').addEventListener('click', () => api('/api/open', { what: 'report' }));
+  $('btn-problems').addEventListener('click', toggleProblems);
+  $('btn-copy-log').addEventListener('click', copyLog);
+  $('btn-clear-log').addEventListener('click', clearLog);
+  $('btn-scan-cancel').addEventListener('click', () => decideDupes('cancel'));
+  $('btn-records-close').addEventListener('click', () => $('records-modal').classList.remove('open'));
+  $('btn-records-more').addEventListener('click', () => loadRecords(false));
+  $('btn-records-tsv').addEventListener('click', copyRecordsTsv);
+  let searchT;
+  $('records-search').addEventListener('input', () => { clearTimeout(searchT); searchT = setTimeout(() => loadRecords(true), 250); });
 
-  // Persist paths on change
-  document.getElementById('src').addEventListener('input', () => {
-    localStorage.setItem('exif_src', document.getElementById('src').value);
+  const log = $('log');
+  log.addEventListener('scroll', () => {
+    state.autoScroll = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
   });
-  document.getElementById('dst').addEventListener('input', () => {
-    localStorage.setItem('exif_dst', document.getElementById('dst').value);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      if ($('records-modal').classList.contains('open')) $('records-modal').classList.remove('open');
+      else if (state.running) stop();
+    }
   });
 
+  selectTool(load('tool') || 'takeout');
   checkExifTool();
   connectSSE();
-  syncStatus();
-
-  // Pause auto-scroll when user scrolls up
-  const log = document.getElementById('log');
-  log.addEventListener('scroll', () => {
-    const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
-    state.autoScroll = atBottom;
-  });
-
-  // Keyboard shortcuts: Enter to start (when focused on an input), Escape to stop
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey && !state.running) {
-      const active = document.activeElement;
-      if (active && active.tagName === 'INPUT' && active.type === 'text') {
-        const src = document.getElementById('src').value.trim();
-        const dst = document.getElementById('dst').value.trim();
-        if (src && dst) startProcessing();
-      }
-    }
-    if (e.key === 'Escape' && state.running) {
-      stopProcessing();
-    }
-  });
 });
 
-// ── Status sync (recover UI on page refresh mid-run) ───────────────────────
-
-async function syncStatus() {
-  try {
-    const r = await fetch('/api/status');
-    const d = await r.json();
-    if (d.running) {
-      state.running = true;
-      setRunning(true);
-      document.getElementById('prog-label').textContent = 'Processing… (reconnected)';
+function restoreInputs() {
+  document.querySelectorAll('.persist').forEach(el => {
+    const v = load(el.id || el.name);
+    if (el.type === 'radio') {
+      if (load(el.name) === el.value) el.checked = true;
+      el.addEventListener('change', () => el.checked && store(el.name, el.value));
+    } else if (el.type === 'checkbox') {
+      if (v !== null) el.checked = v === '1';
+      el.addEventListener('change', () => store(el.id, el.checked ? '1' : '0'));
+    } else {
+      if (v !== null) el.value = v;
+      el.addEventListener('input', () => store(el.id, el.value));
+      el.addEventListener('change', () => store(el.id, el.value));
     }
-  } catch(e) { /* ignore */ }
+  });
+}
+
+function selectTool(tool) {
+  if (!TOOLS[tool]) tool = 'takeout';
+  state.tool = tool;
+  store('tool', tool);
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.tool === tool));
+  document.querySelectorAll('section.tool').forEach(s => s.classList.toggle('active', s.dataset.tool === tool));
+  renderCards(state.running ? state.runningTool : tool);
+  updateStartLabel();
+  setRunning(state.running);
+}
+
+function updateStartLabel() {
+  const dry = document.querySelector(`section.tool[data-tool=${state.tool}] input.dry`);
+  const label = { takeout: 'Start processing', filename: 'Start sorting', fixdrive: 'Fix dates',
+                  rename: 'Rename folders', dupes: 'Scan' }[state.tool];
+  $('start-label').textContent = dry && dry.checked ? 'Preview (dry run)' : label;
+  $('btn-start').classList.toggle('btn-warn', state.tool === 'fixdrive' && !(dry && dry.checked));
+}
+
+// ── Stats cards ────────────────────────────────────────────────────────────
+function renderCards(tool) {
+  const row = $('stats-row');
+  row.innerHTML = '';
+  TOOLS[tool].cards.forEach((c, i) => {
+    const div = document.createElement('div');
+    div.className = `stat-card ${c.color}`;
+    div.innerHTML = `<div class="stat-value" data-card="${i}">0</div><div class="stat-label"></div><div class="stat-hint">click to view</div>`;
+    div.querySelector('.stat-label').textContent = c.label;
+    div.addEventListener('click', () => showRecords(c.label, c.statuses));
+    row.appendChild(div);
+  });
+  row.dataset.tool = tool;
+  if (state.stats) updateStats(state.stats);
+}
+
+function updateStats(st) {
+  state.stats = st;
+  const tool = $('stats-row').dataset.tool;
+  TOOLS[tool].cards.forEach((c, i) => {
+    const el = document.querySelector(`[data-card="${i}"]`);
+    if (!el) return;
+    const to = c.value(st);
+    const from = +(el.dataset.v || 0);
+    el.dataset.v = to;
+    animateCounter(el, from, to);
+  });
+}
+
+function animateCounter(el, from, to) {
+  // One animation per element; a newer update cancels the older one, and a
+  // timer guarantees the final value even when rAF is paused (background tab).
+  const id = (el._anim = (el._anim || 0) + 1);
+  const final = () => { if (el._anim === id) el.textContent = to.toLocaleString(); };
+  if (from === to || document.hidden) { final(); return; }
+  const t0 = performance.now();
+  const tick = (now) => {
+    if (el._anim !== id) return;
+    const t = Math.min(1, (now - t0) / 250);
+    el.textContent = Math.round(from + (to - from) * (1 - Math.pow(1 - t, 3))).toLocaleString();
+    if (t < 1) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+  setTimeout(final, 300);
 }
 
 // ── ExifTool badge ─────────────────────────────────────────────────────────
-
 async function checkExifTool() {
-  try {
-    const r = await fetch('/api/exiftool');
-    const d = await r.json();
-    const badge = document.getElementById('exiftool-badge');
-    const label = document.getElementById('exiftool-label');
-    if (d.ok) {
-      badge.className = 'ok';
-      label.textContent = `ExifTool v${d.version}`;
-      appendLog('ok', `ExifTool v${d.version} — ready.`);
-    } else {
-      badge.className = 'fail';
-      label.textContent = 'ExifTool not found';
-      appendLog('error', 'ExifTool not found — install it to enable processing.');
-    }
-  } catch(e) {
-    console.error('ExifTool check failed', e);
+  const d = await api('/api/exiftool').catch(() => ({}));
+  const badge = $('exiftool-badge'), label = $('exiftool-label');
+  if (d.ok) {
+    badge.className = 'ok';
+    label.textContent = `ExifTool v${d.version}`;
+    badge.title = d.path;
+  } else {
+    badge.className = 'fail';
+    label.textContent = 'ExifTool not found';
+    appendLog('error', 'ExifTool not found — run Start.bat (it downloads ExifTool) or install it from exiftool.org.');
   }
 }
 
 // ── SSE ────────────────────────────────────────────────────────────────────
-
 function connectSSE() {
-  if (state.es) { state.es.close(); }
-  state.es = new EventSource('/api/stream');
-  state.es.onopen = () => setConnBadge(true);
-  state.es.onmessage = (e) => {
-    try { handleEvent(JSON.parse(e.data)); } catch(err) { console.error(err); }
-  };
-  state.es.onerror = () => {
-    setConnBadge(false);
-    setTimeout(connectSSE, 2000);
-  };
+  if (state.es) state.es.close();
+  state.es = new EventSource('/api/stream?t=' + encodeURIComponent(TOKEN));
+  state.es.onopen = () => setConn(true);
+  state.es.onmessage = (e) => { try { handleEvent(JSON.parse(e.data)); } catch (err) { console.error(err); } };
+  state.es.onerror = () => { setConn(false); state.es.close(); setTimeout(connectSSE, 2000); };
 }
 
-function setConnBadge(live) {
-  const badge = document.getElementById('conn-badge');
-  const label = document.getElementById('conn-label');
-  if (live) {
-    badge.className = 'conn-badge live';
-    label.textContent = 'Live';
-  } else {
-    badge.className = 'conn-badge reconnecting';
-    label.textContent = 'Reconnecting…';
-  }
+function setConn(live) {
+  $('conn-badge').className = 'conn-badge ' + (live ? 'live' : 'reconnecting');
+  $('conn-label').textContent = live ? 'Live' : 'Reconnecting…';
 }
 
 function handleEvent(ev) {
   switch (ev.type) {
+    case 'hello':            onHello(ev); break;
+    case 'reset':            resetOutput(); break;
+    case 'started':          onStarted(ev.kind); break;
     case 'log':              appendLog(ev.level, ev.text); break;
     case 'progress':         updateProgress(ev); break;
-    case 'stats':            updateStats(ev); break;
+    case 'stats':            updateStats(ev.stats); break;
+    case 'phase':            if (ev.phase === 'scanning') $('prog-label').textContent = 'Scanning folders…'; break;
+    case 'paused':           state.paused = ev.paused; setRunning(state.running); break;
     case 'done':             onDone(ev); break;
-    case 'scan_start':       onScanStart(); break;
-    case 'scan_progress':    onScanProgress(ev); break;
-    case 'scan_done':        onScanDone(); break;
+    case 'scan_start':       $('scan-overlay').classList.add('open'); $('scan-sub').textContent = 'Analysing files…'; break;
+    case 'scan_progress':    $('scan-sub').textContent = `${ev.current.toLocaleString()} / ${ev.total.toLocaleString()} files`; break;
+    case 'scan_done':        $('scan-overlay').classList.remove('open'); $('dup-modal').classList.remove('open'); break;
     case 'duplicates_found': onDuplicatesFound(ev); break;
-    case 'file_result':      allRecords.push(ev.record); break;
   }
 }
 
-// ── Log ────────────────────────────────────────────────────────────────────
+function onHello(ev) {
+  // Fresh connection: the server replays the log after this, so start clean.
+  clearLog(true);
+  state.paused = ev.paused;
+  if (ev.running) {
+    onStarted(ev.kind, true);
+    if (ev.stats) updateStats(ev.stats);
+  } else {
+    state.running = false;
+    setRunning(false);
+    if (ev.last && ev.last.kind) showDone(ev.last);
+  }
+}
 
+function onStarted(kind, quiet) {
+  state.running = true;
+  state.runningTool = kind;
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('running', b.dataset.tool === kind));
+  if (!quiet) { renderCards(kind); }
+  else if ($('stats-row').dataset.tool !== kind) renderCards(kind);
+  $('done-banner').classList.remove('show');
+  $('prog-label').textContent = 'Working…';
+  setRunning(true);
+}
+
+// ── Log ────────────────────────────────────────────────────────────────────
 function appendLog(level, text) {
-  const log = document.getElementById('log');
+  const log = $('log');
   const empty = log.querySelector('.log-empty');
   if (empty) empty.remove();
-
   const div = document.createElement('div');
   div.className = `log-line log-${level}`;
   div.textContent = text;
   log.appendChild(div);
-
-  if (state.autoScroll) {
-    log.scrollTop = log.scrollHeight;
-  }
+  while (log.childElementCount > MAX_LOG_LINES) log.firstElementChild.remove();
+  if (state.autoScroll) log.scrollTop = log.scrollHeight;
 }
 
-function clearLog() {
-  const log = document.getElementById('log');
-  log.innerHTML = '<div class="log-line log-empty">Log cleared.</div>';
+function clearLog(silent) {
+  $('log').innerHTML = silent ? '' : '<div class="log-line log-empty">Log cleared.</div>';
   state.autoScroll = true;
 }
 
+function toggleProblems() {
+  const on = $('log').classList.toggle('problems-only');
+  $('btn-problems').classList.toggle('on', on);
+}
+
 async function copyLog() {
-  const log = document.getElementById('log');
-  const text = Array.from(log.querySelectorAll('.log-line'))
-    .map(el => el.textContent)
-    .join('\n');
-  try {
-    await navigator.clipboard.writeText(text);
-    toast('Log copied to clipboard.', 'success');
-  } catch(e) {
-    toast('Clipboard not available.', 'error');
-  }
+  const text = Array.from($('log').querySelectorAll('.log-line')).map(el => el.textContent).join('\n');
+  try { await navigator.clipboard.writeText(text); toast('Log copied.', 'success'); }
+  catch (e) { toast('Clipboard not available.', 'error'); }
 }
 
 // ── Progress ───────────────────────────────────────────────────────────────
-
 function updateProgress(ev) {
-  const pct  = ev.total > 0 ? Math.round(ev.current / ev.total * 100) : 0;
-  const fill = document.getElementById('prog-fill');
+  if (!state.running) return;      // stale replay after a finished run
+  const pct = ev.total > 0 ? Math.floor(ev.current / ev.total * 100) : 0;
+  const fill = $('prog-fill');
   fill.style.width = pct + '%';
   fill.className = 'progress-fill active';
-  document.getElementById('top-bar').style.width = pct + '%';
-  document.getElementById('prog-label').textContent =
-    `Processing ${ev.current.toLocaleString()} of ${ev.total.toLocaleString()}`;
-  document.getElementById('prog-pct').textContent = pct + '%';
-  document.getElementById('prog-file').textContent = ev.file ? shortPath(ev.file) : '';
-  document.getElementById('prog-speed').textContent =
-    ev.fps > 0.05 ? `${ev.fps.toFixed(1)} files/s` : '';
-
-  if (ev.fps > 0.05 && ev.total > ev.current) {
-    document.getElementById('prog-eta').textContent =
-      'ETA ' + fmtEta((ev.total - ev.current) / ev.fps);
-  } else {
-    document.getElementById('prog-eta').textContent = '';
-  }
+  $('top-bar').style.width = pct + '%';
+  $('prog-label').textContent = (state.paused ? 'Paused at ' : 'Working: ') +
+    `${ev.current.toLocaleString()} of ${ev.total.toLocaleString()}`;
+  $('prog-pct').textContent = pct + '%';
+  $('prog-file').textContent = ev.file ? shortPath(ev.file) : '';
+  $('prog-speed').textContent = ev.fps > 0.05 ? `${ev.fps.toFixed(1)} files/s` : '';
+  $('prog-eta').textContent = ev.fps > 0.05 && ev.total > ev.current ? 'ETA ' + fmtEta((ev.total - ev.current) / ev.fps) : '';
 }
 
 function fmtEta(secs) {
-  if (secs < 60)   return `${Math.ceil(secs)}s`;
+  if (secs < 60) return `${Math.ceil(secs)}s`;
   if (secs < 3600) return `${Math.floor(secs / 60)}m ${Math.ceil(secs % 60)}s`;
   return `${Math.floor(secs / 3600)}h ${Math.floor((secs % 3600) / 60)}m`;
 }
@@ -1112,324 +1430,209 @@ function shortPath(p) {
   return parts.length > 2 ? '…/' + parts.slice(-2).join('/') : p;
 }
 
-// ── Stats ──────────────────────────────────────────────────────────────────
-
-function updateStats(ev) {
-  const prev = { ...counters };
-  counters.total  = ev.total;
-  counters.fixed  = ev.processed;
-  counters.noJson = ev.no_json;
-  counters.errors = ev.errors;
-
-  animateCounter('s-total',  prev.total,  counters.total);
-  animateCounter('s-fixed',  prev.fixed,  counters.fixed);
-  animateCounter('s-nojson', prev.noJson, counters.noJson);
-  animateCounter('s-errors', prev.errors, counters.errors);
+function resetOutput() {
+  clearLog(true);
+  const fill = $('prog-fill');
+  fill.style.width = '0%';
+  fill.className = 'progress-fill';
+  $('top-bar').style.width = '0%';
+  ['prog-pct', 'prog-file', 'prog-speed', 'prog-eta'].forEach(id => $(id).textContent = '');
+  $('prog-label').textContent = 'Starting…';
+  $('done-banner').classList.remove('show');
+  state.stats = null;
+  document.querySelectorAll('[data-card]').forEach(el => { el.textContent = '0'; el.dataset.v = 0; });
 }
-
-function animateCounter(id, from, to) {
-  if (from === to) return;
-  const el  = document.getElementById(id);
-  const dur = 300;
-  const t0  = performance.now();
-  const tick = (now) => {
-    const t = Math.min(1, (now - t0) / dur);
-    el.textContent = Math.round(from + (to - from) * easeOut(t)).toLocaleString();
-    if (t < 1) requestAnimationFrame(tick);
-    else el.textContent = to.toLocaleString();
-  };
-  requestAnimationFrame(tick);
-}
-
-function easeOut(t) { return 1 - Math.pow(1 - t, 3); }
 
 // ── Done ───────────────────────────────────────────────────────────────────
-
 function onDone(ev) {
   state.running = false;
+  state.paused = false;
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('running'));
   setRunning(false);
-
-  document.getElementById('prog-eta').textContent = '';
-  const fill = document.getElementById('prog-fill');
+  $('prog-eta').textContent = '';
+  $('prog-speed').textContent = '';
+  $('prog-file').textContent = '';
+  const fill = $('prog-fill');
   if (ev.ok) {
-    fill.style.width    = '100%';
-    fill.className      = 'progress-fill done';
-    document.getElementById('top-bar').style.width = '100%';
-    document.getElementById('prog-label').textContent = 'Done ✔';
-    document.getElementById('prog-pct').textContent  = '100%';
-    document.getElementById('prog-file').textContent  = '';
-    document.getElementById('prog-speed').textContent = '';
-    toast('Processing complete!', 'success');
-    if (ev.report) {
-      appendLog('info', `Report saved → ${ev.report}`);
-    }
+    fill.style.width = '100%';
+    fill.className = 'progress-fill done';
+    $('top-bar').style.width = '100%';
+    $('prog-pct').textContent = '100%';
+    toast('Finished!', 'success');
   } else {
     fill.className = 'progress-fill';
-    document.getElementById('prog-label').textContent = 'Stopped or error — check the log';
-    toast('Processing stopped with errors.', 'error');
+    toast(ev.stopped ? 'Stopped.' : 'Finished with errors — check the log.', 'error');
   }
+  showDone(ev);
 }
 
-// ── Start / Stop ───────────────────────────────────────────────────────────
-
-async function startProcessing() {
-  const src = document.getElementById('src').value.trim();
-  const dst = document.getElementById('dst').value.trim();
-
-  if (!src) { toast('Please enter a source folder.', 'error'); return; }
-  if (!dst) { toast('Please enter an output folder.', 'error'); return; }
-  if (src === dst) { toast('Source and output must be different.', 'error'); return; }
-
-  // Persist on explicit start
-  localStorage.setItem('exif_src', src);
-  localStorage.setItem('exif_dst', dst);
-
-  resetUI();
-  state.running = true;
-  setRunning(true);
-
-  const body = {
-    src,
-    dst,
-    output_mode: document.querySelector('input[name=mode]:checked').value,
-    check_dupes: document.getElementById('opt-dupes').checked,
-  };
-
-  try {
-    const r = await fetch('/api/start', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const d = await r.json();
-    if (!r.ok || d.error) {
-      toast(d.error || 'Could not start.', 'error');
-      state.running = false;
-      setRunning(false);
-    }
-  } catch(e) {
-    toast('Could not reach server.', 'error');
-    state.running = false;
-    setRunning(false);
-  }
+function showDone(ev) {
+  $('prog-label').textContent = ev.ok ? 'Done ✔' : (ev.stopped ? 'Stopped — run again to continue' : 'Stopped or failed — check the log');
+  const banner = $('done-banner');
+  banner.classList.toggle('bad', !ev.ok);
+  $('done-text').textContent = ev.report ? 'Report saved:' : (ev.ok ? 'Done.' : '');
+  ['btn-report-csv', 'btn-report-json', 'btn-report-open'].forEach(id => $(id).style.display = ev.report ? '' : 'none');
+  banner.classList.toggle('show', !!(ev.report || !ev.ok));
 }
 
-async function stopProcessing() {
-  await fetch('/api/stop', { method: 'POST' });
-  toast('Stop signal sent…', 'error');
+function download(fmt) {
+  // A link can't send headers, so the token goes in the query string.
+  const a = document.createElement('a');
+  a.href = `/api/report?fmt=${fmt}&t=${encodeURIComponent(TOKEN)}`;
+  a.click();
+}
+
+// ── Start / Stop / Pause ───────────────────────────────────────────────────
+async function start() {
+  if (state.running) return;
+  const tool = TOOLS[state.tool];
+  const body = tool.body();
+  const err = tool.validate(body);
+  if (err) { toast(err, 'error'); return; }
+  if (state.tool === 'fixdrive' && !body.dry_run &&
+      !confirm('Fix Missing Dates edits files on the drive in place.\n\nFiles that already have a date are never changed. Continue?')) return;
+  if (state.tool === 'rename' && !body.dry_run &&
+      !confirm('Rename (and merge) folders on the drive now?')) return;
+  body.tool = state.tool;
+  $('btn-start').disabled = true;
+  const d = await api('/api/run', body).catch(() => ({ error: 'Could not reach the server — is the window still open?' }));
+  if (d.error) { toast(d.error, 'error'); setRunning(state.running); }
+}
+
+async function stop() {
+  await api('/api/stop', {});
+  toast('Stopping — finishing files in progress…', 'error');
+}
+
+async function togglePause() {
+  await api(state.paused ? '/api/resume' : '/api/pause', {});
 }
 
 function setRunning(running) {
-  document.getElementById('btn-start').disabled = running;
-  document.getElementById('btn-stop').disabled  = !running;
+  $('btn-start').disabled = running;
+  $('btn-stop').disabled = !running;
+  $('btn-pause').disabled = !running;
+  $('btn-pause').textContent = state.paused ? '▶ Resume' : '⏸ Pause';
 }
 
-function resetUI() {
-  clearLog();
-  const fill = document.getElementById('prog-fill');
-  fill.style.width = '0%';
-  fill.className   = 'progress-fill';
-  document.getElementById('top-bar').style.width    = '0%';
-  document.getElementById('prog-label').textContent = 'Starting…';
-  document.getElementById('prog-pct').textContent   = '';
-  document.getElementById('prog-file').textContent  = '';
-  document.getElementById('prog-speed').textContent = '';
-  document.getElementById('prog-eta').textContent   = '';
-  ['s-total','s-fixed','s-nojson','s-errors'].forEach(id => {
-    document.getElementById(id).textContent = '0';
-  });
-  Object.keys(counters).forEach(k => { counters[k] = 0; });
-  allRecords.length = 0;
-}
-
-// ── Browse ─────────────────────────────────────────────────────────────────
-
+// ── Folders ────────────────────────────────────────────────────────────────
 async function browse(field) {
-  try {
-    const r = await fetch('/api/browse', { method: 'POST' });
-    const d = await r.json();
-    if (d.path) {
-      document.getElementById(field).value = d.path;
-      localStorage.setItem('exif_' + field, d.path);
-    }
-  } catch(e) {
-    toast('Browse dialog unavailable.', 'error');
+  const label = field.split('-')[1];
+  const titles = { src: 'Select the source folder', dst: 'Select the output folder', root: 'Select the drive folder',
+                   a: 'Select a folder to scan', b: 'Select a second folder' };
+  const d = await api('/api/browse', { title: titles[label] || 'Select folder' }).catch(() => ({}));
+  if (d.path) {
+    $(field).value = d.path;
+    store(field, d.path);
+    $(field).dispatchEvent(new Event('change'));
+  } else if (d.error) {
+    toast('Folder dialog unavailable — paste the path instead.', 'error');
   }
 }
 
-async function openOutput() {
-  const dst = document.getElementById('dst').value.trim();
-  if (!dst) { toast('No output folder set.', 'error'); return; }
-  await fetch('/api/open-output', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path: dst }),
-  });
+async function preflight(tool) {
+  const src = $(tool + '-src').value.trim(), dst = $(tool + '-dst').value.trim();
+  const el = $(tool + '-pre');
+  if (!src) { el.textContent = ''; return; }
+  el.textContent = 'Counting files…';
+  const d = await api('/api/preflight', { src, dst }).catch(() => ({}));
+  if (d.count === undefined) { el.textContent = 'Source folder not found.'; return; }
+  let t = `${d.count.toLocaleString()} photos/videos · ${d.size_h}`;
+  if (d.free_h) t += ` · ${d.free_h} free at output` + (d.free < d.size ? ' ⚠ may not fit' : '');
+  el.textContent = t;
 }
 
-// ── Duplicate scan ─────────────────────────────────────────────────────────
-
-function onScanStart() {
-  document.getElementById('scan-overlay').classList.add('open');
-  document.getElementById('scan-sub').textContent = 'Analysing files…';
+async function openFolder(path) {
+  if (!path) { toast('No folder set.', 'error'); return; }
+  const d = await api('/api/open', { path });
+  if (d.error) toast(d.error, 'error');
 }
 
-function onScanDone() {
-  document.getElementById('scan-overlay').classList.remove('open');
-}
-
-function onScanProgress(ev) {
-  const pct = ev.total > 0 ? Math.round(ev.current / ev.total * 100) : 0;
-  document.getElementById('scan-sub').textContent =
-    `${ev.current.toLocaleString()} / ${ev.total.toLocaleString()} files (${pct}%)`;
-}
-
+// ── Duplicate review ───────────────────────────────────────────────────────
 function onDuplicatesFound(ev) {
-  document.getElementById('scan-overlay').classList.remove('open');
-
-  // Re-enable buttons (may have been disabled in a previous run this session)
-  ['btn-dup-skip', 'btn-dup-keep', 'btn-dup-cancel'].forEach(id => {
-    document.getElementById(id).disabled = false;
-  });
-
-  document.getElementById('dup-title').textContent =
-    `${ev.count} Duplicate Pair${ev.count !== 1 ? 's' : ''} Found`;
-
-  const exact  = ev.matches.filter(m => m.confidence === 'exact').length;
-  const strong = ev.count - exact;
-  document.getElementById('dup-sub').textContent =
-    `${exact} identical (MD5)  ·  ${strong} same name + size`;
-
-  const tbody = document.getElementById('dup-tbody');
+  $('scan-overlay').classList.remove('open');
+  document.querySelectorAll('[data-decide]').forEach(b => b.disabled = false);
+  $('dup-title').textContent = `${ev.count.toLocaleString()} duplicate file${ev.count !== 1 ? 's' : ''} found`;
+  $('dup-sub').textContent = `${ev.groups.toLocaleString()} group(s) of identical files` +
+    (ev.matches.length < ev.count ? ` — showing the first ${ev.matches.length.toLocaleString()}` : '');
+  const tbody = $('dup-tbody');
   tbody.innerHTML = '';
   ev.matches.forEach(m => {
     const tr = document.createElement('tr');
-    const conf = m.confidence === 'exact'
-      ? '<span class="badge-exact">✓✓ exact</span>'
-      : '<span class="badge-strong">✓ strong</span>';
-    tr.innerHTML = `
-      <td title="${m.a}">${m.a}</td>
-      <td title="${m.b}">${m.b}</td>
-      <td>${m.size}</td>
-      <td>${conf}</td>`;
+    [m.a, m.b, m.size].forEach(v => {
+      const td = document.createElement('td');
+      td.textContent = v;
+      td.title = v;
+      tr.appendChild(td);
+    });
     tbody.appendChild(tr);
   });
-
-  document.getElementById('dup-modal').classList.add('open');
+  $('dup-modal').classList.add('open');
 }
 
 async function decideDupes(action) {
-  ['btn-dup-skip', 'btn-dup-keep', 'btn-dup-cancel'].forEach(id => {
-    document.getElementById(id).disabled = true;
-  });
-  document.getElementById('dup-modal').classList.remove('open');
-  if (!action) {
-    await fetch('/api/decide', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'keep_all' }),
-    });
-    await fetch('/api/stop', { method: 'POST' });
-    state.running = false;
-    setRunning(false);
-    document.getElementById('prog-label').textContent = 'Cancelled.';
-    toast('Processing cancelled.', 'error');
-    return;
-  }
-  await fetch('/api/decide', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action }),
-  });
+  document.querySelectorAll('[data-decide]').forEach(b => b.disabled = true);
+  $('dup-modal').classList.remove('open');
+  $('scan-overlay').classList.remove('open');
+  await api('/api/decide', { action });
+  if (action === 'cancel') toast('Run cancelled.', 'error');
 }
 
-// ── File records panel ─────────────────────────────────────────────────────
-
-function showRecords(filter) {
-  const cfg = {
-    all:     { title: 'All Files',                  icon: '📋', test: () => true },
-    fixed:   { title: 'Fixed Files',                icon: '✅', test: r => r.status === 'fixed' },
-    no_json: { title: 'No JSON Sidecar',            icon: '⚠️', test: r => r.status && r.status.startsWith('no_json') },
-    errors:  { title: 'Errors',                     icon: '❌', test: r => r.status === 'error' },
-  };
-  const { title, icon, test } = cfg[filter] || cfg.all;
-  const filtered = allRecords.filter(test);
-
-  document.getElementById('records-title').textContent = title;
-  document.getElementById('records-icon').textContent  = icon;
-
-  const tbody = document.getElementById('records-tbody');
-  const empty = document.getElementById('records-empty');
-  const count = document.getElementById('records-count');
-
-  if (allRecords.length === 0) {
-    tbody.innerHTML    = '';
-    empty.style.display = '';
-    count.textContent  = '';
-  } else {
-    empty.style.display = 'none';
-    count.textContent   = `${filtered.length.toLocaleString()} of ${allRecords.length.toLocaleString()} file${allRecords.length !== 1 ? 's' : ''}`;
-    tbody.innerHTML = '';
-    filtered.forEach(r => {
-      const tr  = document.createElement('tr');
-      let statusCell;
-      if (r.status === 'fixed') {
-        statusCell = '<span class="badge-exact">✓ Metadata written</span>';
-      } else if (r.status === 'error') {
-        statusCell = `<span class="log-error" title="${escHtml(r.error || '')}">✗ ${escHtml((r.error || 'Error').substring(0, 80))}</span>`;
-      } else {
-        statusCell = '<span class="log-warn">! Copied, no metadata</span>';
-      }
-      tr.innerHTML = `
-        <td title="${escHtml(r.file)}" style="max-width:260px">${escHtml(r.file)}</td>
-        <td title="${escHtml(r.dest || '')}" style="max-width:220px">${escHtml(r.dest || '—')}</td>
-        <td style="white-space:nowrap">${escHtml(r.date || '—')}</td>
-        <td style="white-space:nowrap">${escHtml(r.gps  || '—')}</td>
-        <td>${statusCell}</td>`;
-      tbody.appendChild(tr);
-    });
-  }
-
-  document.getElementById('records-sub').textContent =
-    allRecords.length === 0 ? 'Run processing first' : `${filtered.length.toLocaleString()} file${filtered.length !== 1 ? 's' : ''}`;
-
-  document.getElementById('records-modal').classList.add('open');
+// ── Records ────────────────────────────────────────────────────────────────
+function showRecords(title, statuses) {
+  $('records-title').textContent = title;
+  $('records-search').value = '';
+  state.records = { statuses, offset: 0, rows: [] };
+  $('records-modal').classList.add('open');
+  loadRecords(true);
 }
 
-function closeRecords() {
-  document.getElementById('records-modal').classList.remove('open');
+async function loadRecords(reset) {
+  const r = state.records;
+  if (reset) { r.offset = 0; r.rows = []; $('records-tbody').innerHTML = ''; }
+  const q = encodeURIComponent($('records-search').value.trim());
+  const d = await api(`/api/records?status=${r.statuses.join(',')}&offset=${r.offset}&limit=500&q=${q}`).catch(() => ({ records: [] }));
+  const tbody = $('records-tbody');
+  (d.records || []).forEach(rec => {
+    r.rows.push(rec);
+    const [stText, stCls] = STATUS_TEXT[rec.status] || [rec.status, 'st-muted'];
+    const details = [rec.gps && 'GPS ' + rec.gps, rec.source && 'from ' + rec.source, rec.error || rec.note].filter(Boolean).join(' · ');
+    const tr = document.createElement('tr');
+    [[rec.file], [rec.dest || '—'], [rec.date || '—'], [stText, stCls], [details || '—']].forEach(([v, cls]) => {
+      const td = document.createElement('td');
+      td.textContent = v;
+      td.title = v;
+      if (cls) td.className = cls;
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  r.offset += (d.records || []).length;
+  const total = d.total || 0;
+  $('records-empty').style.display = total ? 'none' : '';
+  $('records-count').textContent = total ? `${r.offset.toLocaleString()} of ${total.toLocaleString()} shown` : '';
+  $('records-sub').textContent = d.all ? `${total.toLocaleString()} of ${d.all.toLocaleString()} files` : 'Run a task first';
+  $('btn-records-more').style.display = r.offset < total ? '' : 'none';
 }
 
 async function copyRecordsTsv() {
-  const rows  = document.querySelectorAll('#records-tbody tr');
-  const lines = ['Source File\tOutput Path\tDate Written\tGPS\tStatus'];
-  rows.forEach(tr => {
-    const cells = Array.from(tr.querySelectorAll('td')).map(td => td.textContent.trim());
-    lines.push(cells.join('\t'));
-  });
-  try {
-    await navigator.clipboard.writeText(lines.join('\n'));
-    toast('Records copied as tab-separated text.', 'success');
-  } catch(e) {
-    toast('Clipboard not available.', 'error');
-  }
-}
-
-function escHtml(s) {
-  return String(s)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const lines = ['File\tDestination\tDate\tStatus\tDetails'];
+  state.records.rows.forEach(r => lines.push([r.file, r.dest || '', r.date || '', r.status, r.error || r.note || ''].join('\t')));
+  try { await navigator.clipboard.writeText(lines.join('\n')); toast('Copied as tab-separated text.', 'success'); }
+  catch (e) { toast('Clipboard not available.', 'error'); }
 }
 
 // ── Toast ──────────────────────────────────────────────────────────────────
-
 function toast(msg, type = 'success') {
-  const area = document.getElementById('toasts');
-  const el   = document.createElement('div');
+  const el = document.createElement('div');
   el.className = `toast ${type}`;
-  el.innerHTML = `<span>${type === 'success' ? '✅' : '❌'}</span><span>${msg}</span>`;
-  area.appendChild(el);
-  setTimeout(() => el.remove(), 4000);
+  const icon = document.createElement('span');
+  icon.textContent = type === 'success' ? '✅' : '⚠️';
+  const text = document.createElement('span');
+  text.textContent = msg;
+  el.append(icon, text);
+  $('toasts').appendChild(el);
+  setTimeout(() => el.remove(), 4500);
 }
 </script>
 </body>

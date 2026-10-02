@@ -10,6 +10,8 @@ This project has two independent tools in the same repo. Read this before making
 Photos-backup-fix/
 ├── web_app.py              ← Flask entry point (Windows tool)
 ├── core.py                 ← Processing logic shared by all Python frontends
+├── cli.py                  ← Command-line interface
+├── tests/                  ← pytest suite for core.py / web_app.py
 ├── templates/index.html    ← Browser UI (SSE, no build step)
 ├── Start.bat / setup.ps1   ← Windows launchers
 ├── android-app/            ← Android app (**Übertrag**)
@@ -24,22 +26,34 @@ Photos-backup-fix/
 
 | File | Purpose |
 |---|---|
-| `core.py` | All media processing — `find_json()`, `parse_meta()`, `Processor`, `find_duplicates()` |
-| `web_app.py` | Flask routes, SSE event queue, folder picker, worker thread |
-| `templates/index.html` | Browser UI; listens to `/api/stream` SSE events |
+| `core.py` | All processing logic, stdlib only. `Job` base class + `Processor` (Takeout / sort-by-filename), `DriveFixer`, `FolderRenamer`, `DuplicateFinder`; `ExifTool` (stay_open wrapper), `SidecarIndex`, `Manifest`, date helpers |
+| `web_app.py` | Flask routes, `Hub` (SSE fan-out + replay), `Runner` (one job at a time), security guard, folder picker |
+| `cli.py` | argparse CLI over the same jobs (`takeout`, `sort`, `fix-dates`, `rename`, `dupes`) |
+| `templates/index.html` | Browser UI — tool sidebar, per-tool forms, `TOOLS` table drives stat cards; no build step |
+| `tests/` | pytest suite (`python -m pytest tests/`); ExifTool/ffmpeg tests auto-skip when missing |
+| `app.py` | Legacy tkinter UI (Takeout only) — must keep importing from `core.py` |
 
 ### Architecture
 
-- `Processor.run()` iterates source files, finds JSON sidecars, calls ExifTool via subprocess
-- SSE events (`log`, `progress`, `stats`, `scan_start`, `scan_done`, `duplicates_found`, `done`) flow from worker thread → `_event_q` → browser
-- Folder picker uses tkinter subprocess first (works cross-platform), falls back to PowerShell `-Sta` on Windows, then zenity/kdialog on Linux
+- Every tool is a `core.Job`: callbacks `on_log/on_progress/on_stats/on_done/on_file_result/on_event`, `stop()/pause()/resume()`, `_run_parallel()` worker pool, and `self.records` (`FileRecord`) + `self.report_path`
+- Each worker thread gets its own `exiftool -stay_open` process via `ExifToolPool`. Commands are fenced with `-echo4 {readyN}` / `-execute{N}`; a timeout kills and restarts the process
+- Web flow: `POST /api/run {tool, …}` → `Runner` thread → job callbacks → `hub.publish()` → `/api/stream` SSE to every tab. New tabs get the recent log + latest progress/stats replayed. Records are fetched on demand via `/api/records` (not streamed)
+- Takeout + "Review duplicates" pauses in `_dup_review()` until `/api/decide` (`skip_dupes`, `keep_all`, or anything else = cancel)
+- Security: 127.0.0.1 only, `Host` header must be localhost:<port>, every `/api/*` needs the per-launch `TOKEN` (`X-Token` header, or `?t=` for SSE/downloads), POSTs must be JSON
 
 ### Key invariants
 
-- `_ts_from_filename()` is used when there is no JSON sidecar — it extracts a date and both picks the output folder AND writes EXIF
-- `Stats.no_json` counts files with no JSON AND no filename date (truly undateable); filename-dated files count toward `processed`
-- ExifTool subprocess gets `-charset filename=UTF8` on Windows to handle non-ASCII paths
-- The `OffsetTimeOriginal=+00:00` tag is always set alongside DateTimeOriginal — critical for Google Photos
+- Output layout matches Android: `YYYY/Month/Month_DD` (`date_subdir()`), plus `no-date/`, `error/`; reports + `manifest.json` live in `_photofix/`
+- Date priority in `Processor`: embedded date (if `keep_existing_dates`) → sidecar `photoTakenTime` → filename → sidecar `creationTime` → embedded (if not kept) → `no-date/`
+- Sidecar timestamps are written as UTC with `OffsetTimeOriginal=+00:00` (critical for Google Photos). Filename dates without a time → 12:00 `+00:00` (Android parity); with a time → local wall time + this PC's offset (`filename_tz='utc'` to opt out)
+- QuickTime video date tags are always written in **UTC**; `Keys:CreationDate` carries the local time + offset
+- Copies go to `.~photofix~<name>` first and are `os.replace()`d into place only when complete; `_claim()` reserves output names under a lock and decides skip (same content / manifest hit) vs `_1` suffix (different photo, same name)
+- `Stats.no_json` means "no date at all"; `Stats.processed` = sidecar + filename dates written; `kept_existing` / `unsupported` / `meta_failed` are separate counters
+- Formats in `NON_WRITABLE_EXTS` (AVI, MKV, BMP, …) are sorted and get file times, but ExifTool is never asked to write them
+- ExifTool args are passed with `-ec`; user text (captions, names) must go through `_esc()` so newlines/backslashes survive the line-based argfile
+- `-charset filename=UTF8` and `-api WindowsLongPath=1` are added on Windows (`_common_args()`)
+- Never delete user files: duplicate handling *moves* to `_duplicates/`
+- `core.py` stays stdlib-only and Python 3.7-compatible (no 3.9+ APIs like `Path.is_relative_to`)
 
 ---
 
@@ -199,5 +213,7 @@ Merge target: `main`
 - **Do not** rename month/day folders before renaming the day folders inside them — `renameLegacyFolders` handles ordering correctly (day → month)
 - **Do not** add `FolderPickerCard` as `private` to a single screen file — it lives in `SharedComponents.kt`
 - The `Stats.no_json` Python field now means "no date at all" not "no sidecar" — filename-dated files are counted in `processed`
+- **Do not** spawn one ExifTool process per file in Python — use `ExifToolPool().get()` (stay_open)
+- **Do not** stream per-file records over SSE — the UI pages them from `/api/records`
 - SAF `openOutputStream(uri, "wt")` requires API 26+ — matches our `minSdk`
 - Day folders use `Month_DD` format (`January_07`), not `Month D` (`January 7`) — parsers accept both

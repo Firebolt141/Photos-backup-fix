@@ -10,6 +10,8 @@ You are working on **firebolt141/photos-backup-fix**, a tool that restores EXIF 
 | `web_app.py` | **Primary entry point.** Flask server + SSE streaming. Opens browser at `localhost:5000`. |
 | `templates/index.html` | Full browser UI — dark theme, animated stats, real-time log, duplicate modal. |
 | `app.py` | Legacy tkinter desktop UI. Imports from `core.py`. Not launched by default. |
+| `cli.py` | Command-line interface over the same `core.py` jobs. |
+| `tests/` | pytest suite. |
 | `Start.bat` | Windows double-click launcher → `setup.ps1` → `web_app.py` |
 | `setup.ps1` | PowerShell setup: installs ExifTool + Python + Flask, launches `web_app.py` |
 | `install_exiftool.sh` | Linux/macOS ExifTool installer helper |
@@ -42,7 +44,7 @@ $ARGUMENTS
 
 1. **Understand** — read the relevant code before changing anything.
 2. **Implement** — make the smallest correct change. No refactors beyond what's asked.
-3. **Verify** — run `python3 -m py_compile core.py web_app.py app.py` to catch syntax errors. Logic that touches `core.py` can be smoke-tested via `python3 -c "from core import Processor, _check_exiftool; print('OK')"`.
+3. **Verify** — run `python3 -m pytest tests/` (needs ExifTool + Flask; ffmpeg for the video test) and `python3 -m py_compile core.py web_app.py cli.py app.py`.
 4. **Commit** — clear message explaining *why*, not just *what*. Session URL at the end.
 5. **Push** — `git push -u origin claude/fix-startup-exiftool-iR2c0`
 

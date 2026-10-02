@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    One-shot setup and launcher for the Google Takeout EXIF Restoration Tool.
+    One-shot setup and launcher for Photos Backup Fix.
 
 .DESCRIPTION
     1. Checks for ExifTool; downloads the portable Windows build if missing.
@@ -26,7 +26,7 @@ $AppScript = Join-Path $AppDir  'web_app.py'
 function Write-Header {
     Write-Host ''
     Write-Host '  ╔══════════════════════════════════════════════════╗' -ForegroundColor DarkCyan
-    Write-Host '  ║   Google Takeout EXIF Restoration Tool           ║' -ForegroundColor White
+    Write-Host '  ║   Photos Backup Fix                              ║' -ForegroundColor White
     Write-Host '  ║   First-run setup                                ║' -ForegroundColor DarkGray
     Write-Host '  ╚══════════════════════════════════════════════════╝' -ForegroundColor DarkCyan
     Write-Host ''
@@ -78,20 +78,42 @@ if (-not $exifCmd) {
         # ver.txt always contains the current stable version number
         $version = (Invoke-WebRequest -Uri 'https://exiftool.org/ver.txt' `
                         -UseBasicParsing).Content.Trim()
-        $zipUrl  = "https://exiftool.org/exiftool-$version.zip"
         $zipFile = Join-Path $ToolsDir 'exiftool.zip'
 
-        Write-Warn "  Fetching ExifTool $version from exiftool.org ..."
-        Invoke-WebRequest -Uri $zipUrl -OutFile $zipFile -UseBasicParsing
+        # Since 12.88 the Windows build is exiftool-<ver>_64.zip / _32.zip and
+        # contains a sub-folder with "exiftool(-k).exe" plus "exiftool_files\".
+        # Older releases were a single exiftool-<ver>.zip with just the exe.
+        $names = @("exiftool-${version}_64.zip", "exiftool-${version}_32.zip", "exiftool-$version.zip")
+        if (-not [Environment]::Is64BitOperatingSystem) {
+            $names = @("exiftool-${version}_32.zip", "exiftool-$version.zip")
+        }
+        $downloaded = $false
+        foreach ($name in $names) {
+            try {
+                Write-Warn "  Fetching $name from exiftool.org ..."
+                Invoke-WebRequest -Uri "https://exiftool.org/$name" -OutFile $zipFile -UseBasicParsing
+                $downloaded = $true
+                break
+            } catch { }
+        }
+        if (-not $downloaded) { throw "Could not download ExifTool $version" }
 
-        Expand-Archive -Path $zipFile -DestinationPath $ToolsDir -Force
+        $extract = Join-Path $ToolsDir '_extract'
+        if (Test-Path $extract) { Remove-Item $extract -Recurse -Force }
+        Expand-Archive -Path $zipFile -DestinationPath $extract -Force
         Remove-Item $zipFile -Force
 
-        # The zip ships the exe as "exiftool(-k).exe"; rename it
-        $found = Get-ChildItem $ToolsDir -Filter '*.exe' | Select-Object -First 1
-        if ($found -and ($found.Name -ne 'exiftool.exe')) {
-            Rename-Item $found.FullName 'exiftool.exe' -Force
+        $exe = Get-ChildItem $extract -Recurse -Filter '*.exe' |
+               Where-Object { $_.Name -like 'exiftool*' } | Select-Object -First 1
+        if (-not $exe) { throw 'ExifTool executable not found in the download' }
+        $support = Join-Path $exe.DirectoryName 'exiftool_files'
+        if (Test-Path $support) {
+            $dest = Join-Path $ToolsDir 'exiftool_files'
+            if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }
+            Move-Item $support $ToolsDir -Force
         }
+        Move-Item $exe.FullName $ExifExe -Force
+        Remove-Item $extract -Recurse -Force
 
         $ver     = & $ExifExe -ver 2>$null
         $exifCmd = $ExifExe
@@ -103,7 +125,7 @@ if (-not $exifCmd) {
         Write-Host '  Install ExifTool manually then re-run this script:' -ForegroundColor Yellow
         Write-Host '    1. Go to  https://exiftool.org' -ForegroundColor Yellow
         Write-Host '    2. Download the Windows Executable zip' -ForegroundColor Yellow
-        Write-Host '    3. Extract, rename exiftool(-k).exe -> exiftool.exe' -ForegroundColor Yellow
+        Write-Host '    3. Extract, rename exiftool(-k).exe -> exiftool.exe (keep the exiftool_files folder next to it)' -ForegroundColor Yellow
         Write-Host "    4. Place exiftool.exe in:  $ToolsDir" -ForegroundColor Yellow
         Write-Host ''
         Read-Host 'Press Enter to exit'

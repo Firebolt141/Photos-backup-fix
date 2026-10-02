@@ -4,75 +4,112 @@ Two tools for rescuing Google Photos metadata and backing up your phone photos �
 
 ---
 
-## Tool 1 — Windows: Google Takeout EXIF Restoration
+## Tool 1 — Windows: Photos Backup Fix (desktop)
 
-Fixes broken dates, GPS, and descriptions on photos exported via **Google Takeout** by reading each file's `.json` sidecar and writing the correct metadata using **ExifTool**.
+A local browser app (Flask + ExifTool) with five tools. It shares the Android app's folder layout, so both can work on the same backup drive.
 
-When Google Takeout archives a photo it strips the EXIF and puts the real date in a JSON sidecar. Most upload tools ignore these sidecars, so years of photos end up stamped with today's date. This tool reads the sidecars and writes everything back.
+| Tool | What it does |
+|---|---|
+| 📦 **Process Takeout** | Copies a Google Takeout export into dated folders and writes the date, GPS, caption, people and favourite rating from Google's JSON sidecars |
+| 🗓️ **Sort by Filename Date** | For Screenshots/WhatsApp/camera folders: takes the date from names like `IMG_20240315_143022.jpg`, sorts the files and writes the date into them |
+| ✨ **Fix Missing Dates** | Walks an existing `year/month/day` drive and writes the folder's date **in place** into files that have none (JPEG, PNG, HEIC, RAW, MP4/MOV) |
+| 🏷️ **Rename Old Folders** | `2024/01/15` → `2024/January/January_15`, merging safely when both layouts exist |
+| 🧬 **Find Duplicates** | Finds byte-identical photos/videos by content hash; can move the extra copies to `_duplicates/` (never deletes) |
+
+Every tool has a **dry run**, and every run writes a JSON + CSV report to `_photofix/` in the output or drive folder.
 
 ### Quick start (Windows)
 
-1. Download the latest release zip and extract it anywhere.
-2. Double-click **`Start.bat`** — it downloads ExifTool, installs Flask, and opens the browser.
-3. Select your Takeout folder as **Source** and choose an **Output** folder.
-4. Press **Start Processing**.
+1. Download the repo zip and extract it anywhere.
+2. Double-click **`Start.bat`**. It downloads ExifTool, installs Flask and opens the browser.
+3. Pick a tool in the sidebar, choose your folders and press **Start** (or tick **Dry run** first).
+
+### Output layout
+
+```
+Output/
+├── 2024/March/March_15/IMG_20240315_143022.jpg   ← same layout as the Android app
+├── no-date/      ← files with no date anywhere (sidecar, filename or embedded)
+├── error/        ← files that could not be copied
+└── _photofix/    ← reports (report-*.json/.csv) + manifest.json for safe re-runs
+```
+
+Choose **Numeric** for the old `2024/03/15` layout, or **Preserve** / **Flat**.
+
+### Where the date comes from (in order)
+
+1. A date **already embedded** in the file (kept unless you turn off *Keep dates already in the file*; only missing GPS/caption is added)
+2. Takeout `photoTakenTime`
+3. The **filename**: `IMG_20240315_143022`, `PXL_…`, `Screenshot_2024-03-15-14-30-22`, `VID-20240315-WA0001`, epoch-millisecond names. Times in filenames are read as this PC's local time; a date with no time becomes 12:00 UTC, the same as the Android app.
+4. Takeout `creationTime` (upload date, the last resort)
 
 ### What it writes
 
 | Tag | Why it matters |
 |---|---|
-| `DateTimeOriginal` + `OffsetTimeOriginal=+00:00` | Primary "taken on" date in Google Photos |
-| `CreateDate`, `ModifyDate` | Secondary dates (Explorer, Lightroom) |
-| `Keys:CreationDate` (MP4/MOV) | Apple Photos / QuickTime |
-| `GPSLatitude/Longitude/Altitude` | Location on map |
-| `ImageDescription` | Caption from Takeout JSON |
+| `DateTimeOriginal` + `OffsetTimeOriginal` (`+00:00` for sidecar dates) | Primary "taken on" date in Google Photos |
+| `CreateDate`, `ModifyDate`, `OffsetTime*` | Secondary dates (Explorer, Lightroom) |
+| QuickTime `CreateDate` (UTC) + `Keys:CreationDate` (MP4/MOV) | Video dates in Google/Apple Photos |
+| `GPSLatitude/Longitude/Altitude` / `Keys:GPSCoordinates` (video) | Location on the map |
+| `ImageDescription`, `XMP:PersonInImage`, `XMP:Rating=5` | Caption, people, favourites |
+| File modified time | Sorting in Explorer and apps that ignore EXIF |
 
-The `OffsetTimeOriginal=+00:00` tag is critical — without it, timezone-aware apps shift the photo to the wrong day.
+### Highlights
 
-### Features
+- **Fast:** one long-running ExifTool process per worker (`-stay_open`), with parallel workers. That is roughly 10–50× faster than starting ExifTool once per file.
+- **Safe re-runs:** stop at any time, then press Start again to continue. Files already in the output are skipped (tracked in `_photofix/manifest.json`) instead of being copied again as `photo_1.jpg`. Files are written under a temporary name and renamed when complete, so an interrupted run never leaves half-written photos behind.
+- **Duplicates handled:** the same photo appearing in "Photos from 2019" and in an album is copied once. Different photos with the same name both survive (`IMG_1.jpg`, `IMG_1_1.jpg`). Optional pre-scan for identical files with different names.
+- **Better sidecar matching:** truncated `.supplemental-metad.json` names, `(1)` numbering, the 46-character limit, `-edited` in 15 languages, Live Photo videos (`IMG_1.MP4` uses `IMG_1.HEIC.json`), and the JSON `title` field as a last resort.
+- **UI:** pause/resume, stop, per-file records browser (filter and search), "problems only" log filter, CSV/JSON report download, a preflight count of files, size and free space, and a log that survives a page refresh.
+- **Locked down:** listens on 127.0.0.1 only. Every API call needs a random per-launch token and a localhost `Host` header, so other websites can't drive it.
 
-- **Filename fallback** — if no JSON sidecar exists, extracts date from the filename (`IMG_20240315_…`)
-- **Duplicate scanner** — optional pre-scan with a review modal to skip or keep pairs
-- **Real-time browser log** — SSE-streamed progress with color-coded lines
-- **Native folder picker** — Browse buttons open the OS folder dialog
-- **Processing report** — `_processing_report.json` written to output folder
+### Command line
 
-### Supported formats
+The same engine is available without the browser:
 
-**Images:** JPG · PNG · GIF · BMP · TIFF · WEBP · HEIC · RAW · CR2 · NEF · ARW · DNG · ORF · and more
-
-**Videos:** MP4 · MOV · AVI · M4V · MKV · WMV · 3GP · MTS · M2TS · WEBM · and more
+```bat
+python cli.py takeout  D:\Takeout E:\Photos --dry-run
+python cli.py sort     D:\Screenshots E:\Photos
+python cli.py fix-dates E:\Photos
+python cli.py rename   E:\Photos
+python cli.py dupes    E:\Photos --move
+python cli.py takeout --help        &:: all options
+```
 
 ### Manual setup
 
-Requires Python 3.7+, Flask (`pip install flask`), and ExifTool.
+Requires Python 3.7+, Flask (`pip install flask`) and ExifTool (on PATH or in `.\tools\`).
 
 ```bat
-python web_app.py       # Windows
-python3 web_app.py      # Linux / macOS
+python web_app.py [--port 5000] [--no-browser]
 ```
+
+Tests: `pip install pytest` and then `python -m pytest tests/`. The integration tests need ExifTool, and the video test needs ffmpeg.
 
 ### Project layout
 
 ```
 Photos-backup-fix/
 ├── web_app.py          ← Flask web server (entry point)
-├── core.py             ← Processing logic (no GUI deps, unit-testable)
-├── templates/
-│   └── index.html      ← Browser UI
+├── core.py             ← All processing logic (no GUI deps)
+├── cli.py              ← Command-line interface
+├── templates/index.html← Browser UI
+├── tests/              ← pytest suite
+├── app.py              ← Legacy tkinter UI (Takeout only)
 ├── Start.bat           ← Windows launcher
 └── setup.ps1           ← PowerShell setup script
 ```
 
 ### How sidecar matching works
 
-| Photo filename | JSON candidates tried |
+| Photo filename | JSON tried |
 |---|---|
-| `photo.jpg` | `photo.jpg.json` → `photo.json` |
-| `photo(1).jpg` | `photo.jpg(1).json` → `photo(1).json` |
-| `photo-edited.jpg` | `photo.jpg.json` (strips `-edited`) |
-| Name > 46 chars | Truncated at 46 chars (Google's limit) |
-| Newer exports | `photo.jpg.supplemental-metadata.json` |
+| `photo.jpg` | `photo.jpg.json` → `photo.json` → `photo.jpg.supplemental-metadata.json` → any truncation like `photo.jpg.suppl.json` |
+| `photo(1).jpg` | `photo.jpg(1).json` → `photo(1).json` → `photo.jpg.supplemental-metadata(1).json` |
+| `photo-edited.jpg` | the original's sidecar (`-edited`, `-bearbeitet`, `-modifié`, …) |
+| Name > 46 chars | truncated at 46 chars (Google's limit) |
+| `IMG_1.MP4` (Live Photo) | `IMG_1.HEIC.json` |
+| anything else | the sidecar whose `title` field equals the filename |
 
 ---
 
@@ -202,13 +239,13 @@ Tests cover `TakeoutProcessor`'s pure functions: JSON sidecar name generation, s
 
 **Windows — "ExifTool not found"** — Run `Start.bat` which downloads it automatically.
 
-**Windows — Browser doesn't open** — Navigate to `http://127.0.0.1:5000` manually.
+**Windows — Browser doesn't open** — Open the URL printed in the console window (usually `http://127.0.0.1:5000`; another port is picked if 5000 is busy). Opening the bare URL is fine — the page carries its own access token.
 
 **Android — Drive not showing as connected** — Disconnect and reconnect the drive, then tap "Change Drive" to re-grant SAF permission.
 
 **Android — Fix EXIF returns 0 files on a flat folder** — Switch to **Filename Date mode** (the toggle at the top of the Fix Missing EXIF Dates screen). Drive-structure mode requires `year/month/day` subfolders.
 
-**Android — HEIC / video files not getting dates** — This is a platform limitation. The files are still copied to the correct date folder based on the Takeout JSON timestamp.
+**Android — HEIC / video files not getting dates** — This is a platform limitation. The files are still copied to the correct date folder based on the Takeout JSON timestamp. Plug the drive into a PC and run **Fix Missing Dates** in the Windows tool. It writes the folder date into HEIC, RAW and video files too.
 
 **Both tools — Some files still show wrong dates after upload** — Google Photos caches metadata. Try removing and re-adding the photos, or wait 24 h for the index to refresh.
 

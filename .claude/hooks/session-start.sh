@@ -30,6 +30,12 @@ else
   echo "[session-start] Flask $(python3 -c 'import importlib.metadata; print(importlib.metadata.version("flask"))') already installed."
 fi
 
+# ── pytest ────────────────────────────────────────────────────────────────────
+if ! python3 -c "import pytest" &>/dev/null; then
+  echo "[session-start] Installing pytest..."
+  python3 -m pip install pytest --quiet --disable-pip-version-check
+fi
+
 # ── Python sanity check ───────────────────────────────────────────────────────
 # app.py requires Python 3.7+; no third-party packages needed.
 # tkinter is a GUI library not available in headless server environments —

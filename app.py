@@ -299,7 +299,8 @@ class App(tk.Tk):
 
         self._output_mode = tk.StringVar(value='date')
         modes = [
-            ('date',     'Organise by date  —  output / 2021 / 01 / 15 / photo.jpg'),
+            ('date',     'Organise by date  —  output / 2021 / January / January_15 / photo.jpg'),
+            ('date_numeric', 'Organise by date (old numeric layout)  —  output / 2021 / 01 / 15'),
             ('preserve', 'Preserve original folder structure'),
             ('flat',     'Flat  —  all files in one folder'),
         ]

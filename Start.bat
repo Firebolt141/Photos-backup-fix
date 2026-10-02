@@ -1,5 +1,5 @@
 @echo off
-title Google Takeout EXIF Restoration Tool
+title Photos Backup Fix
 cd /d "%~dp0"
 
 :: Run the PowerShell setup+launcher with execution-policy bypass so the
