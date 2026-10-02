@@ -97,6 +97,7 @@ class Stats:
     skipped: int = 0         # already in output / duplicate of another file
     meta_failed: int = 0     # copied to its date folder, but ExifTool failed
     errors: int = 0          # could not be copied (copied to error/ if possible)
+    filtered: int = 0        # outside the chosen date range
     bytes_copied: int = 0
 
 
@@ -1139,13 +1140,25 @@ class ProcessOptions:
     filename_tz: str = 'local'         # 'local' | 'utc' for times found in filenames
     dry_run: bool = False
     skip_existing: bool = True         # skip files already in the output (re-runs)
+    kinds: str = 'all'                 # 'all' | 'photos' | 'videos'
+    date_from: str = ''                # 'YYYY-MM-DD' — only files taken on/after this day
+    date_to: str = ''                  # 'YYYY-MM-DD' — only files taken on/before this day
+    rename_to_date: bool = False       # name output files 2024-03-15_14-30-22.jpg
+
+
+def _parse_day(s: str) -> Optional[datetime]:
+    try:
+        return datetime.strptime((s or '').strip(), '%Y-%m-%d') if s and s.strip() else None
+    except ValueError:
+        return None
 
 
 class Processor(Job):
     """Copies media from src to dst, restoring dates/GPS.
 
     Record statuses: fixed | from_filename | kept_existing | no_date |
-    no_date_skipped | unsupported | exists | duplicate | meta_failed | error.
+    no_date_skipped | unsupported | exists | duplicate | meta_failed | error |
+    filtered.
     """
 
     kind = 'takeout'
@@ -1167,6 +1180,8 @@ class Processor(Job):
         if not self.opts.use_sidecars:
             self.kind = 'filename'
         self.skip_files = frozenset(_norm_key(Path(p)) for p in skip_files)
+        self._date_from = _parse_day(self.opts.date_from)
+        self._date_to = _parse_day(self.opts.date_to)
         self.sidecars = SidecarIndex()
         self.pool: Optional[ExifToolPool] = None
         self.manifest: Optional[Manifest] = None
@@ -1270,6 +1285,8 @@ class Processor(Job):
                 s.meta_failed += 1
             elif status == 'error':
                 s.errors += 1
+            elif status == 'filtered':
+                s.filtered += 1
             s.bytes_copied += nbytes
 
     # -- per file --------------------------------------------------------------
@@ -1321,13 +1338,26 @@ class Processor(Job):
         if ext in NON_WRITABLE_EXTS:
             write_mode = 'none'
 
+        if self._date_from or self._date_to:
+            day = place.dt.replace(hour=0, minute=0, second=0, microsecond=0) if place else None
+            if day is None or (self._date_from and day < self._date_from) \
+                    or (self._date_to and day > self._date_to):
+                self._count('filtered')
+                self._record(FileRecord(rel_s, 'filtered', date=place.display() if place else '',
+                                        note='outside the chosen date range'))
+                self.on_log('file', f'  - {rel_s}: outside date range')
+                return
+
         if place is None and not opts.copy_undated:
             self._count('no_date_skipped')
             self._record(FileRecord(rel_s, 'no_date_skipped', note='no date found; not copied'))
             self.on_log('warn', f'  ! {rel_s}: no date — not copied (copy undated files is off)')
             return
 
-        dest, reason = self._claim(src, self._dest_dir(src, place) / src.name)
+        name = src.name
+        if opts.rename_to_date and place is not None:
+            name = f'{place.dt:%Y-%m-%d_%H-%M-%S}{ext}'
+        dest, reason = self._claim(src, self._dest_dir(src, place) / name)
         if dest is None:
             status = 'duplicate' if reason.startswith('duplicate') else 'exists'
             self._count(status)
@@ -1444,6 +1474,15 @@ class Processor(Job):
         self.on_log('info', f'Scanning source: {self.src}')
         self.on_event({'type': 'phase', 'phase': 'scanning'})
         files = iter_media(self.src, exclude=[self.dst])
+        if self.opts.kinds in ('photos', 'videos'):
+            keep = IMAGE_EXTS if self.opts.kinds == 'photos' else VIDEO_EXTS
+            before = len(files)
+            files = [p for p in files if p.suffix.lower() in keep]
+            if before - len(files):
+                self.on_log('info', f'Only {self.opts.kinds}: ignoring {before - len(files):,} other file(s)')
+        if self._date_from or self._date_to:
+            self.on_log('info', 'Date range: ' + (f'{self._date_from:%Y-%m-%d}' if self._date_from else '…')
+                        + ' → ' + (f'{self._date_to:%Y-%m-%d}' if self._date_to else '…'))
         if self.skip_files:
             before = len(files)
             files = [p for p in files if _norm_key(p) not in self.skip_files]
@@ -1504,7 +1543,7 @@ class Processor(Job):
                     f'filename {s.from_filename:,}) | Kept existing: {s.kept_existing:,} | '
                     f'No date: {s.no_json:,} | Skipped: {s.skipped:,} | '
                     f'Unsupported: {s.unsupported:,} | Meta failed: {s.meta_failed:,} | '
-                    f'Errors: {s.errors:,}')
+                    f'Errors: {s.errors:,}' + (f' | Outside date range: {s.filtered:,}' if s.filtered else ''))
         if self.report_path:
             self.on_log('info', f'Report: {self.report_path}  (+ .csv)')
 
@@ -1517,6 +1556,7 @@ class DriveFixStats:
     fixed: int = 0
     already_dated: int = 0
     mismatched: int = 0      # has a date, but on a different day than its folder
+    corrected: int = 0       # mismatched files whose day was rewritten (fix_mismatched)
     unsupported: int = 0
     errors: int = 0
 
@@ -1574,10 +1614,11 @@ class DriveFixer(Job):
     kind = 'fixdrive'
 
     def __init__(self, root: str, *, dry_run: bool = False, set_file_times: bool = True,
-                 filename_tz: str = 'local', **kw):
+                 filename_tz: str = 'local', fix_mismatched: bool = False, **kw):
         super().__init__(**kw)
         self.root = Path(root)
         self.dry_run = dry_run
+        self.fix_mismatched = fix_mismatched
         self.set_file_times = set_file_times
         self.filename_tz = filename_tz
         self.stats = DriveFixStats()   # type: ignore[assignment]
@@ -1607,21 +1648,28 @@ class DriveFixer(Job):
         is_video = ext in VIDEO_EXTS
         existing = parse_embedded_date(tag_item, is_video) if tag_item else None
 
+        ok_status = 'fixed'
         if existing is not None:
             self._inc('already_dated')
             delta = abs((existing.dt.date() - folder_dt.date()).days)
-            if delta > 1:
-                self._inc('mismatched')
+            if delta <= 1:
+                return
+            self._inc('mismatched')
+            if not self.fix_mismatched:
                 self._record(FileRecord(rel, 'mismatched', date=existing.display(),
                                         note=f'folder says {folder_dt:%Y-%m-%d}'))
                 self.on_log('warn', f'  ≠ {rel}: has date {existing.dt:%Y-%m-%d}, '
                                     f'folder says {folder_dt:%Y-%m-%d} (left unchanged)')
-            return
-
-        date = PhotoDate(folder_dt, '+00:00', 'folder')
-        fn = date_from_filename(path.name, self.filename_tz)
-        if fn is not None and fn.dt.date() == folder_dt.date():
-            date = fn
+                return
+            # Keep the time of day, move it to the folder's day.
+            date = PhotoDate(datetime.combine(folder_dt.date(), existing.dt.time()),
+                             existing.offset or '+00:00', 'folder')
+            ok_status = 'corrected'
+        else:
+            date = PhotoDate(folder_dt, '+00:00', 'folder')
+            fn = date_from_filename(path.name, self.filename_tz)
+            if fn is not None and fn.dt.date() == folder_dt.date():
+                date = fn
 
         if ext in NON_WRITABLE_EXTS:
             self._inc('unsupported')
@@ -1632,10 +1680,12 @@ class DriveFixer(Job):
             self.on_log('warn', f'  → {rel}: format can\'t store a date — file time set')
             return
 
+        note = f'was {existing.dt:%Y-%m-%d}' if existing is not None else ''
         if self.dry_run:
-            self._inc('fixed')
-            self._record(FileRecord(rel, 'fixed', date=date.display(), source=date.source, note='dry run'))
-            self.on_log('file', f'  · {rel}: would write {date.display()}')
+            self._inc(ok_status)
+            self._record(FileRecord(rel, ok_status, date=date.display(), source=date.source,
+                                    note=(note + '; ' if note else '') + 'dry run'))
+            self.on_log('file', f'  · {rel}: would write {date.display()}' + (f' ({note})' if note else ''))
             return
         try:
             ok, msg = et.write(path, build_tag_args(is_video, date))
@@ -1644,9 +1694,9 @@ class DriveFixer(Job):
         if ok:
             if self.set_file_times:
                 _set_file_times(path, date)
-            self._inc('fixed')
-            self._record(FileRecord(rel, 'fixed', date=date.display(), source=date.source))
-            self.on_log('ok', f'  ✓ {rel}: {date.display()}')
+            self._inc(ok_status)
+            self._record(FileRecord(rel, ok_status, date=date.display(), source=date.source, note=note))
+            self.on_log('ok', f'  ✓ {rel}: {date.display()}' + (f' (corrected, {note})' if note else ''))
         else:
             self._inc('errors')
             self._record(FileRecord(rel, 'error', error=msg))
@@ -1697,7 +1747,8 @@ class DriveFixer(Job):
             [r.as_dict() for r in self.records], ('file', 'status', 'date', 'source', 'note', 'error'))
         self.on_log('info', '─' * 55)
         self.on_log('info', f'Finished. Fixed: {s.fixed:,} | Already dated: {s.already_dated:,} '
-                            f'(of which {s.mismatched:,} disagree with their folder) | '
+                            f'(of which {s.mismatched:,} disagree with their folder'
+                            + (f', {s.corrected:,} corrected' if self.fix_mismatched else '') + ') | '
                             f'Unsupported: {s.unsupported:,} | Errors: {s.errors:,}')
         if self.report_path:
             self.on_log('info', f'Report: {self.report_path}  (+ .csv)')

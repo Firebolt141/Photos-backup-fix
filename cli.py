@@ -67,6 +67,12 @@ def main(argv=None) -> int:
         p.add_argument('--skip-undated', action='store_true', help="don't copy files with no date")
         p.add_argument('--filename-tz', choices=('local', 'utc'), default='local')
         p.add_argument('--workers', type=int, default=0, help='parallel ExifTool workers (0 = auto)')
+        p.add_argument('--only', choices=('photos', 'videos'), help='process only photos or only videos')
+        p.add_argument('--from', dest='date_from', metavar='YYYY-MM-DD', default='',
+                       help='only files taken on/after this day')
+        p.add_argument('--to', dest='date_to', metavar='YYYY-MM-DD', default='',
+                       help='only files taken on/before this day')
+        p.add_argument('--rename-to-date', action='store_true', help='name files 2024-03-15_14-30-22.jpg')
         p.add_argument('--dry-run', action='store_true')
 
     p = sub.add_parser('takeout', parents=[common], help='process a Google Takeout export')
@@ -80,6 +86,8 @@ def main(argv=None) -> int:
     p.add_argument('--no-file-times', action='store_true')
     p.add_argument('--filename-tz', choices=('local', 'utc'), default='local')
     p.add_argument('--workers', type=int, default=0)
+    p.add_argument('--fix-mismatched', action='store_true',
+                   help='also move dates that disagree with their folder to the folder day')
     p.add_argument('--dry-run', action='store_true')
     p = sub.add_parser('rename', parents=[common], help='rename numeric month/day folders to January/January_07')
     p.add_argument('drive')
@@ -96,11 +104,14 @@ def main(argv=None) -> int:
             output_mode=a.layout, use_sidecars=(a.cmd == 'takeout'),
             keep_existing_dates=not a.overwrite_dates, copy_undated=not a.skip_undated,
             write_gps=not getattr(a, 'no_gps', False), write_extras=not getattr(a, 'no_extras', False),
-            set_file_times=not a.no_file_times, filename_tz=a.filename_tz, dry_run=a.dry_run)
+            set_file_times=not a.no_file_times, filename_tz=a.filename_tz, dry_run=a.dry_run,
+            kinds=a.only or 'all', date_from=a.date_from, date_to=a.date_to,
+            rename_to_date=a.rename_to_date)
         job = Processor(a.src, a.dst, options=opts, workers=a.workers, **cb)
     elif a.cmd == 'fix-dates':
         job = DriveFixer(a.drive, dry_run=a.dry_run, set_file_times=not a.no_file_times,
-                         filename_tz=a.filename_tz, workers=a.workers, **cb)
+                         filename_tz=a.filename_tz, fix_mismatched=a.fix_mismatched,
+                         workers=a.workers, **cb)
     elif a.cmd == 'rename':
         job = FolderRenamer(a.drive, dry_run=a.dry_run, **cb)
     else:

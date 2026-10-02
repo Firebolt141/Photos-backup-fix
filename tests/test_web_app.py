@@ -101,3 +101,27 @@ def test_cancel_during_duplicate_review(client, tmp_path):
     client.post('/api/decide', json={'action': 'cancel'}, headers=H)
     st = _wait_done(client)
     assert st['last']['stopped'] and not (tmp_path / 'out').exists()
+
+
+def test_inspect_drive(client, tmp_path):
+    jpeg(tmp_path / '2020/01/15/a.jpg')
+    jpeg(tmp_path / '2021/March/March_02/b.jpg')
+    d = client.post('/api/inspect', json={'root': str(tmp_path)}, headers=H).json
+    assert d['ok'] and d['files'] == 2 and d['years'] == [2020, 2021] and d['renames'] == 2
+    assert not client.post('/api/inspect', json={'root': str(tmp_path / 'x')}, headers=H).json['ok']
+
+
+def test_preflight_counts_sidecars(client, tmp_path):
+    jpeg(tmp_path / 'a.jpg')
+    sidecar(tmp_path / 'a.jpg.json', 1)
+    d = client.post('/api/preflight', json={'src': str(tmp_path), 'dst': str(tmp_path / 'new')}, headers=H).json
+    assert d['count'] == 1 and d['sidecars'] == 1 and d['exists'] is False and d['free'] > 0
+
+
+def test_rejects_bad_date_range(client, tmp_path):
+    r = client.post('/api/run', json={'tool': 'filename', 'src': str(tmp_path), 'dst': str(tmp_path / 'o'),
+                                      'date_from': '2021-01-01', 'date_to': '2020-01-01'}, headers=H)
+    assert r.status_code == 400
+    r = client.post('/api/run', json={'tool': 'filename', 'src': str(tmp_path), 'dst': str(tmp_path / 'o'),
+                                      'date_from': 'yesterday'}, headers=H)
+    assert r.status_code == 400

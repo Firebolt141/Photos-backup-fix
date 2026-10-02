@@ -16,7 +16,35 @@ A local browser app (Flask + ExifTool) with five tools. It shares the Android ap
 | 🏷️ **Rename Old Folders** | `2024/01/15` → `2024/January/January_15`, merging safely when both layouts exist |
 | 🧬 **Find Duplicates** | Finds byte-identical photos/videos by content hash; can move the extra copies to `_duplicates/` (never deletes) |
 
-Every tool has a **dry run**, and every run writes a JSON + CSV report to `_photofix/` in the output or drive folder.
+Every tool has a **Preview** mode (dry run), and every run writes a JSON + CSV report to `_photofix/` in the output or drive folder.
+
+### The app
+
+- **Overview page:** pick what you're trying to do ("I downloaded my Google Photos with Takeout", "Photos on my backup drive have no date", …). It also shows recent runs and this computer's ExifTool status.
+- **Each tool walks you through three steps:** choose folders, options, run.
+  - **Folder checks as you type:** photo count and size, Takeout sidecars found, free space at the output, and old-style folders on a drive (with a one-click jump to *Rename old folders*).
+  - **Options:** the common ones are visible, the rest sit under *Advanced options*. A live example path shows what the output layout will look like.
+  - **Preview first, then Apply:** after a preview, the results card offers **Apply for real** in one click. Tools that edit a drive in place ask for confirmation first.
+- **Activity panel:**
+  - Status, elapsed time, progress, speed and time remaining
+  - Pause/Resume and Stop
+  - A plain-English summary of the results
+  - Clickable stat tiles (hover them for an explanation) that open a searchable per-file results list, which can be copied into Excel
+  - A log filtered by warnings or errors, with search
+- **Light and dark themes** (or follow the system), a phone-width layout, and no internet needed.
+
+### Options worth knowing
+
+| Option | Tools | What it does |
+|---|---|---|
+| Folder layout | Takeout, Sort | `2024/March/March_15` (default), `2024/03/15`, keep Takeout's folders, or one folder |
+| Keep dates already in the file | Takeout, Sort | Camera dates win; only missing GPS/caption is added |
+| Rename files to their date | Takeout, Sort | `IMG_1234.JPG` → `2019-07-04_10-30-00.jpg` |
+| Which files | Takeout, Sort | Photos & videos / photos only / videos only |
+| Only photos taken between | Takeout, Sort | Process one year (or any date range) at a time |
+| Check for duplicates first | Takeout | Review renamed identical copies before processing |
+| Also correct dates that disagree with their folder | Fix missing dates | Moves a wrong date to the folder's day, keeping the time of day |
+| Move the extra copies | Find duplicates | Moves duplicates to `_duplicates/` instead of only reporting |
 
 ### Quick start (Windows)
 
@@ -60,7 +88,6 @@ Choose **Numeric** for the old `2024/03/15` layout, or **Preserve** / **Flat**.
 - **Safe re-runs:** stop at any time, then press Start again to continue. Files already in the output are skipped (tracked in `_photofix/manifest.json`) instead of being copied again as `photo_1.jpg`. Files are written under a temporary name and renamed when complete, so an interrupted run never leaves half-written photos behind.
 - **Duplicates handled:** the same photo appearing in "Photos from 2019" and in an album is copied once. Different photos with the same name both survive (`IMG_1.jpg`, `IMG_1_1.jpg`). Optional pre-scan for identical files with different names.
 - **Better sidecar matching:** truncated `.supplemental-metad.json` names, `(1)` numbering, the 46-character limit, `-edited` in 15 languages, Live Photo videos (`IMG_1.MP4` uses `IMG_1.HEIC.json`), and the JSON `title` field as a last resort.
-- **UI:** pause/resume, stop, per-file records browser (filter and search), "problems only" log filter, CSV/JSON report download, a preflight count of files, size and free space, and a log that survives a page refresh.
 - **Locked down:** listens on 127.0.0.1 only. Every API call needs a random per-launch token and a localhost `Host` header, so other websites can't drive it.
 
 ### Command line
@@ -69,8 +96,9 @@ The same engine is available without the browser:
 
 ```bat
 python cli.py takeout  D:\Takeout E:\Photos --dry-run
-python cli.py sort     D:\Screenshots E:\Photos
-python cli.py fix-dates E:\Photos
+python cli.py takeout  D:\Takeout E:\Photos --from 2019-01-01 --to 2019-12-31 --rename-to-date
+python cli.py sort     D:\Screenshots E:\Photos --only photos
+python cli.py fix-dates E:\Photos --fix-mismatched
 python cli.py rename   E:\Photos
 python cli.py dupes    E:\Photos --move
 python cli.py takeout --help        &:: all options

@@ -5,1162 +5,1176 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="api-token" content="{{ token }}">
 <title>Photos Backup Fix</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E📷%3C/text%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23D97757'/%3E%3Ccircle cx='21' cy='11' r='3.2' fill='%23FAF9F5'/%3E%3Cpath d='M5 25l7.5-9 5 6 3-3.5L27 25z' fill='%23FAF9F5'/%3E%3C/svg%3E">
+<script>
+  // Apply the saved theme before first paint (no flash).
+  (function () {
+    var t = 'system';
+    try { t = localStorage.getItem('pbf:theme') || 'system'; } catch (e) {}
+    var dark = t === 'dark' || (t === 'system' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  })();
+</script>
 <style>
-/* ── Reset & base ──────────────────────────────────────────────────────────── */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html { font-size: 15px; }
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: #0f1117;
-  color: #e2e8f0;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
-
-/* ── CSS variables ─────────────────────────────────────────────────────────── */
+/* ── Tokens ─────────────────────────────────────────────────────────────────
+   Light: warm ivory paper + slate ink + clay accent.
+   Dark: near-black canvas with a faint dot grid, warm off-white text.      */
 :root {
-  --blue:    #3b82f6;
-  --blue-d:  #2563eb;
-  --green:   #22c55e;
-  --green-d: #16a34a;
-  --amber:   #f59e0b;
-  --red:     #ef4444;
-  --red-d:   #dc2626;
-
-  --bg:      #0f1117;
-  --surface: #1a1d27;
-  --card:    #1e2130;
-  --border:  #2a2d3e;
-  --input:   #141720;
-
-  --text:    #e2e8f0;
-  --muted:   #64748b;
-  --subtle:  #94a3b8;
-
-  --radius:  10px;
+  --serif: "Tiempos Headline", "Iowan Old Style", "Charter", "Bitstream Charter", Georgia, Cambria, "Times New Roman", serif;
+  --sans: "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: "Cascadia Mono", "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+  --radius-sm: 8px;
+  --radius: 10px;
   --radius-lg: 16px;
+  --radius-xl: 22px;
+  --sidebar-w: 252px;
+  --clay: #D97757;
+}
+:root, :root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #FAF9F5;
+  --bg-sunk: #F0EEE6;
+  --surface: #FFFFFF;
+  --surface-2: #F5F4EE;
+  --surface-hover: #EFEDE4;
+  --border: #E6E3D9;
+  --border-strong: #CFCBBE;
+  --text: #141413;
+  --text-2: #5E5D59;
+  --text-3: #8A887F;
+  --accent: #D97757;
+  --accent-ink: #B9542F;
+  --accent-soft: rgba(217, 119, 87, .12);
+  --primary-bg: #141413;
+  --primary-fg: #FAF9F5;
+  --primary-hover: #30302E;
+  --ok: #5C7A3E;      --ok-soft: rgba(120, 140, 93, .14);
+  --warn: #A9631E;    --warn-soft: rgba(212, 162, 127, .22);
+  --err: #B5402F;     --err-soft: rgba(191, 77, 67, .12);
+  --info: #3D6E9E;    --info-soft: rgba(106, 155, 204, .14);
+  --shadow: 0 1px 2px rgba(20, 20, 19, .04), 0 8px 24px rgba(20, 20, 19, .05);
+  --shadow-lg: 0 24px 64px rgba(20, 20, 19, .16);
+  --log-bg: #F7F6F1;
+  --overlay: rgba(20, 20, 19, .32);
+  --dots: transparent;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #151515;
+  --bg-sunk: #101010;
+  --surface: #1B1B1A;
+  --surface-2: rgba(255, 255, 255, .05);
+  --surface-hover: rgba(255, 255, 255, .08);
+  --border: rgba(255, 255, 255, .10);
+  --border-strong: rgba(255, 255, 255, .18);
+  --text: #F0EFEC;
+  --text-2: #C3C2B7;
+  --text-3: #8F8E86;
+  --accent: #D97757;
+  --accent-ink: #E8957A;
+  --accent-soft: rgba(217, 119, 87, .16);
+  --primary-bg: #FFFFFF;
+  --primary-fg: #0B0B0B;
+  --primary-hover: #E6E5E0;
+  --ok: #A5BE84;      --ok-soft: rgba(165, 190, 132, .12);
+  --warn: #E6B27C;    --warn-soft: rgba(230, 178, 124, .12);
+  --err: #EB8A7E;     --err-soft: rgba(235, 138, 126, .12);
+  --info: #6DA7EC;    --info-soft: rgba(109, 167, 236, .12);
+  --shadow: 0 0 0 1px rgba(255, 255, 255, .02);
+  --shadow-lg: 0 24px 64px rgba(0, 0, 0, .6);
+  --log-bg: #111110;
+  --overlay: rgba(0, 0, 0, .6);
+  --dots: rgba(255, 255, 255, .055);
 }
 
-/* ── Header ────────────────────────────────────────────────────────────────── */
-header {
-  background: linear-gradient(135deg, #1e40af 0%, #4f46e5 50%, #7c3aed 100%);
-  padding: 0 28px;
-  height: 68px;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  box-shadow: 0 1px 0 rgba(255,255,255,.06), 0 4px 24px rgba(0,0,0,.4);
-  position: relative;
-  overflow: hidden;
-  flex-shrink: 0;
-}
-header::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
-  pointer-events: none;
-}
-.header-icon {
-  font-size: 26px;
-  line-height: 1;
-  filter: drop-shadow(0 2px 4px rgba(0,0,0,.3));
-}
-.header-title {
-  font-size: 1.15rem;
-  font-weight: 700;
-  color: #fff;
-  letter-spacing: -.01em;
-  text-shadow: 0 1px 3px rgba(0,0,0,.3);
-}
-.header-sub {
-  font-size: .78rem;
-  color: rgba(255,255,255,.6);
-  margin-top: 1px;
-}
-.header-spacer { flex: 1; }
-#exiftool-badge {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
-  border-radius: 20px;
-  font-size: .78rem;
-  font-weight: 600;
-  background: rgba(255,255,255,.12);
-  border: 1px solid rgba(255,255,255,.18);
-  color: rgba(255,255,255,.8);
-  transition: all .3s;
-  backdrop-filter: blur(8px);
-}
-#exiftool-badge.ok   { background: rgba(34,197,94,.2); border-color: rgba(34,197,94,.4); color: #86efac; }
-#exiftool-badge.fail { background: rgba(239,68,68,.2);  border-color: rgba(239,68,68,.4);  color: #fca5a5; }
-.badge-dot {
-  width: 6px; height: 6px;
-  border-radius: 50%;
-  background: currentColor;
-  animation: pulse-dot 2s ease-in-out infinite;
-}
-@keyframes pulse-dot {
-  0%,100% { opacity: 1; transform: scale(1); }
-  50%      { opacity: .5; transform: scale(.8); }
-}
-.conn-badge {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
-  border-radius: 20px;
-  font-size: .78rem;
-  font-weight: 600;
-  background: rgba(255,255,255,.12);
-  border: 1px solid rgba(255,255,255,.18);
-  color: rgba(255,255,255,.8);
-  backdrop-filter: blur(8px);
-}
-.conn-badge.live         { background: rgba(34,197,94,.2);  border-color: rgba(34,197,94,.4);  color: #86efac; }
-.conn-badge.reconnecting { background: rgba(245,158,11,.2); border-color: rgba(245,158,11,.4); color: #fcd34d; }
-
-/* ── Main layout ───────────────────────────────────────────────────────────── */
-.main {
-  flex: 1;
-  display: grid;
-  grid-template-columns: 360px 1fr;
-  gap: 20px;
-  padding: 20px 24px 24px;
-  max-width: 1400px;
-  width: 100%;
-  margin: 0 auto;
-}
-
-/* ── Cards ─────────────────────────────────────────────────────────────────── */
-.card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 20px;
-}
-.card + .card { margin-top: 16px; }
-.card-title {
-  font-size: .72rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: .08em;
-  color: var(--muted);
-  margin-bottom: 14px;
-}
-
-/* ── Left panel ────────────────────────────────────────────────────────────── */
-.left { display: flex; flex-direction: column; }
-
-/* Folder rows */
-.folder-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-.folder-row:last-child { margin-bottom: 0; }
-.folder-label {
-  font-size: .72rem;
-  font-weight: 600;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: .06em;
-  width: 52px;
-  flex-shrink: 0;
-}
-.folder-input {
-  flex: 1;
-  background: var(--input);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px 12px;
-  font-size: .85rem;
+/* ── Base ───────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
   color: var(--text);
-  outline: none;
-  transition: border-color .2s, box-shadow .2s;
-  min-width: 0;
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
-.folder-input:focus {
-  border-color: var(--blue);
-  box-shadow: 0 0 0 3px rgba(59,130,246,.15);
+h1, h2, h3, h4, p { margin: 0; }
+button, input, select { font: inherit; color: inherit; }
+a { color: var(--info); }
+code {
+  font-family: var(--mono); font-size: .86em;
+  background: var(--surface-2); border: 1px solid var(--border);
+  padding: 1px 5px; border-radius: 5px; color: var(--text);
 }
-.folder-input::placeholder { color: var(--muted); }
-.btn-browse {
-  padding: 8px 14px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  color: var(--subtle);
-  font-size: .78rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all .18s;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-.btn-browse:hover { background: var(--border); color: var(--text); }
+[hidden] { display: none !important; }
+svg.i { width: 18px; height: 18px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+svg.i.sm { width: 15px; height: 15px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.faint { color: var(--text-3); }
 
-/* Options */
-.option-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 7px 0;
-  cursor: pointer;
-  user-select: none;
-}
-.option-row input[type=checkbox],
-.option-row input[type=radio] { display: none; }
-.toggle {
-  width: 34px; height: 18px;
-  background: var(--border);
-  border-radius: 9px;
-  position: relative;
-  flex-shrink: 0;
-  transition: background .2s;
-}
-.toggle::after {
-  content: '';
-  position: absolute;
-  width: 12px; height: 12px;
-  background: #fff;
-  border-radius: 50%;
-  top: 3px; left: 3px;
-  transition: transform .2s;
-  box-shadow: 0 1px 3px rgba(0,0,0,.3);
-}
-input:checked ~ .toggle           { background: var(--blue); }
-input:checked ~ .toggle::after    { transform: translateX(16px); }
-
-.radio-pill {
-  display: flex;
-  gap: 0;
-  background: var(--input);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  overflow: hidden;
-  margin-top: 6px;
-}
-.radio-pill label {
-  flex: 1;
-  text-align: center;
-  padding: 7px 8px;
-  font-size: .75rem;
-  font-weight: 600;
-  color: var(--muted);
-  cursor: pointer;
-  transition: all .18s;
-}
-.radio-pill input:checked + label {
-  background: var(--blue);
-  color: #fff;
-}
-.radio-pill input { display: none; }
-
-.divider {
-  height: 1px;
-  background: var(--border);
-  margin: 12px 0;
-}
-.option-label {
-  font-size: .84rem;
-  color: var(--subtle);
-}
-.option-sub {
-  font-size: .75rem;
-  color: var(--muted);
-  margin-top: 1px;
-}
-
-/* Controls */
-.controls {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-top: 4px;
-}
-.btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 10px 20px;
-  border-radius: 8px;
-  font-size: .85rem;
-  font-weight: 700;
-  border: none;
-  cursor: pointer;
-  transition: all .18s;
-  letter-spacing: .01em;
-}
-.btn:disabled { opacity: .4; cursor: not-allowed; }
-.btn-primary {
-  background: linear-gradient(135deg, var(--green-d), var(--green));
-  color: #fff;
-  box-shadow: 0 2px 8px rgba(34,197,94,.3);
-}
-.btn-primary:not(:disabled):hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 16px rgba(34,197,94,.4);
-}
-.btn-danger {
-  background: linear-gradient(135deg, var(--red-d), var(--red));
-  color: #fff;
-  box-shadow: 0 2px 8px rgba(239,68,68,.3);
-}
-.btn-danger:not(:disabled):hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 16px rgba(239,68,68,.4);
-}
-.btn-secondary {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  color: var(--subtle);
-}
-.btn-secondary:not(:disabled):hover {
-  background: var(--border);
-  color: var(--text);
-}
-
-/* ── Right panel ───────────────────────────────────────────────────────────── */
-.right { display: flex; flex-direction: column; gap: 16px; min-height: 0; }
-
-/* Stats row */
-.stats-row {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
-}
-.stat-card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 16px 18px;
-  text-align: center;
-  position: relative;
-  overflow: hidden;
-  transition: transform .2s, box-shadow .2s;
-  cursor: pointer;
-  user-select: none;
-}
-.stat-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 8px 24px rgba(0,0,0,.35);
-}
-.stat-hint {
-  font-size: .62rem;
-  color: var(--muted);
-  margin-top: 4px;
-  letter-spacing: .04em;
-}
-.stat-card::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 3px;
-  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-}
-.stat-card.blue::before  { background: var(--blue); }
-.stat-card.green::before { background: var(--green); }
-.stat-card.amber::before { background: var(--amber); }
-.stat-card.red::before   { background: var(--red); }
-.stat-value {
-  font-size: 2rem;
-  font-weight: 800;
-  line-height: 1.1;
-  font-variant-numeric: tabular-nums;
-  margin-bottom: 4px;
-}
-.stat-card.blue  .stat-value { color: var(--blue); }
-.stat-card.green .stat-value { color: var(--green); }
-.stat-card.amber .stat-value { color: var(--amber); }
-.stat-card.red   .stat-value { color: var(--red); }
-.stat-label {
-  font-size: .68rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: .09em;
-  color: var(--muted);
-}
-
-/* Progress */
-.progress-card { flex-shrink: 0; }
-.progress-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  margin-bottom: 10px;
-}
-.progress-label {
-  font-size: .84rem;
-  color: var(--subtle);
-}
-.progress-pct {
-  font-size: .84rem;
-  font-weight: 700;
-  color: var(--blue);
-  font-variant-numeric: tabular-nums;
-}
-.progress-track {
-  height: 8px;
-  background: var(--input);
-  border-radius: 4px;
-  overflow: hidden;
-  position: relative;
-}
-.progress-fill {
-  height: 100%;
-  width: 0%;
-  border-radius: 4px;
-  background: linear-gradient(90deg, #2563eb, #60a5fa, #2563eb);
-  background-size: 200% 100%;
-  transition: width .4s ease;
-}
-.progress-fill.active {
-  animation: shimmer-bar 1.8s linear infinite;
-}
-.progress-fill.done {
-  background: var(--green);
-  animation: none;
-}
-@keyframes shimmer-bar {
-  0%   { background-position:  100% 0; }
-  100% { background-position: -100% 0; }
-}
-.progress-meta {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 8px;
-}
-.progress-file {
-  font-size: .75rem;
-  color: var(--muted);
-  font-family: 'Cascadia Code', 'Fira Mono', monospace;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 70%;
-}
-.progress-speed,
-.progress-eta {
-  font-size: .75rem;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-/* Log */
-.log-card {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 260px;
-}
-.log-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-}
-.log-scroll {
-  flex: 1;
+/* ── App shell ──────────────────────────────────────────────────────────── */
+.app { display: grid; grid-template-columns: var(--sidebar-w) minmax(0, 1fr); min-height: 100vh; }
+.sidebar {
+  position: sticky; top: 0; height: 100vh;
+  display: flex; flex-direction: column;
+  border-right: 1px solid var(--border);
+  background: var(--bg);
+  padding: 18px 14px 14px;
   overflow-y: auto;
-  background: #0d1117;
-  border-radius: 8px;
-  padding: 12px 14px;
-  font-family: 'Cascadia Code', 'Fira Mono', 'Consolas', monospace;
-  font-size: .78rem;
-  line-height: 1.7;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
 }
-.log-scroll::-webkit-scrollbar { width: 5px; }
-.log-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-.log-line {
-  animation: fade-in .15s ease;
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-@keyframes fade-in {
-  from { opacity: 0; transform: translateY(3px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-.log-info  { color: #60a5fa; }
-.log-ok    { color: #4ade80; }
-.log-warn  { color: #fb923c; }
-.log-error { color: #f87171; }
-.log-file  { color: #94a3b8; }
-.log-empty { color: var(--muted); font-style: italic; }
-
-.btn-clear {
-  padding: 4px 10px;
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--muted);
-  font-size: .72rem;
-  cursor: pointer;
-  transition: all .18s;
-}
-.btn-clear:hover { background: var(--border); color: var(--text); }
-
-/* ── Duplicate modal ───────────────────────────────────────────────────────── */
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,.7);
-  backdrop-filter: blur(6px);
-  display: none;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-  padding: 24px;
-  animation: fade-in .2s ease;
-}
-.modal-backdrop.open { display: flex; }
-.modal {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  width: 100%;
-  max-width: 860px;
-  max-height: 90vh;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 24px 80px rgba(0,0,0,.6);
-  animation: slide-up .25s ease;
-}
-@keyframes slide-up {
-  from { transform: translateY(20px); opacity: 0; }
-  to   { transform: translateY(0);    opacity: 1; }
-}
-.modal-head {
-  padding: 20px 24px;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-.modal-icon {
-  width: 40px; height: 40px;
-  background: rgba(245,158,11,.15);
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 20px;
-  flex-shrink: 0;
-}
-.modal-title { font-size: 1rem; font-weight: 700; }
-.modal-sub   { font-size: .8rem; color: var(--muted); margin-top: 2px; }
-.modal-body  { flex: 1; overflow-y: auto; padding: 16px 24px; }
-.modal-info  {
-  background: rgba(59,130,246,.08);
-  border: 1px solid rgba(59,130,246,.2);
-  border-radius: 8px;
-  padding: 10px 14px;
-  font-size: .8rem;
-  color: #93c5fd;
-  margin-bottom: 14px;
-}
-.dup-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: .78rem;
-}
-.dup-table th {
-  text-align: left;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--border);
-  color: var(--muted);
-  font-weight: 600;
-  font-size: .7rem;
-  text-transform: uppercase;
-  letter-spacing: .06em;
-}
-.dup-table td {
-  padding: 8px 12px;
-  border-bottom: 1px solid rgba(42,45,62,.6);
-  font-family: 'Cascadia Code', 'Fira Mono', monospace;
-  font-size: .74rem;
-  color: var(--subtle);
-  max-width: 280px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.dup-table tr:last-child td { border-bottom: none; }
-.dup-table tr:hover td { background: rgba(255,255,255,.02); }
-.badge-exact  { color: #4ade80; font-weight: 700; }
-.badge-strong { color: #fb923c; font-weight: 700; }
-.modal-foot {
-  padding: 16px 24px;
-  border-top: 1px solid var(--border);
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
-#btn-dup-cancel { margin-left: auto; }
-
-/* ── Scan overlay ──────────────────────────────────────────────────────────── */
-.scan-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,.5);
-  backdrop-filter: blur(4px);
-  display: none;
-  align-items: center;
-  justify-content: center;
-  z-index: 90;
-}
-.scan-overlay.open { display: flex; }
-.scan-box {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 32px 40px;
-  text-align: center;
-  min-width: 320px;
-  box-shadow: 0 16px 48px rgba(0,0,0,.5);
-}
-.scan-spinner {
-  width: 44px; height: 44px;
-  border: 3px solid var(--border);
-  border-top-color: var(--blue);
-  border-radius: 50%;
-  margin: 0 auto 16px;
-  animation: spin .8s linear infinite;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-.scan-title { font-weight: 700; margin-bottom: 6px; }
-.scan-sub   { font-size: .82rem; color: var(--muted); }
-
-/* ── Toast ─────────────────────────────────────────────────────────────────── */
-.toast-area { position: fixed; bottom: 24px; right: 24px; z-index: 200; display: flex; flex-direction: column; gap: 8px; }
-.toast {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 12px 16px;
-  font-size: .82rem;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  box-shadow: 0 8px 24px rgba(0,0,0,.4);
-  animation: slide-up .2s ease;
-  max-width: 320px;
-}
-.toast.success { border-color: rgba(34,197,94,.3); }
-.toast.error   { border-color: rgba(239,68,68,.3); }
-
-/* ── Status indicator ──────────────────────────────────────────────────────── */
-.status-bar {
-  height: 3px;
-  background: var(--border);
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 50;
-  overflow: hidden;
-}
-.status-bar-fill {
-  height: 100%;
-  width: 0%;
-  background: linear-gradient(90deg, var(--blue), #818cf8);
-  transition: width .3s ease;
-}
-
-/* ── Scrollbar global ──────────────────────────────────────────────────────── */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-
-/* ── v2 layout: tool nav + controls + output ─────────────────────────────── */
-.main { grid-template-columns: 210px 380px 1fr; max-width: 1600px; }
-.nav { display: flex; flex-direction: column; gap: 2px; }
-.nav-section {
-  font-size: .66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .1em;
-  color: var(--muted); padding: 14px 12px 6px;
-}
-.nav-section:first-child { padding-top: 4px; }
+.brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 18px; text-decoration: none; color: var(--text); }
+.brand-mark { width: 30px; height: 30px; border-radius: 8px; background: var(--clay); display: grid; place-items: center; flex: none; }
+.brand-name { font-family: var(--serif); font-size: 19px; letter-spacing: -.01em; line-height: 1.1; }
+.nav-label { font-size: 12px; color: var(--text-3); padding: 16px 10px 6px; }
 .nav-item {
   display: flex; align-items: center; gap: 10px; width: 100%;
-  padding: 9px 12px; border-radius: 9px; border: 1px solid transparent;
-  background: transparent; color: var(--subtle); font-size: .84rem; font-weight: 600;
-  cursor: pointer; text-align: left; transition: all .15s;
+  padding: 8px 10px; margin: 1px 0;
+  border: 0; border-radius: var(--radius-sm); background: transparent;
+  color: var(--text-2); font-size: 14px; text-align: left; cursor: pointer;
+  transition: background .12s, color .12s;
 }
-.nav-item:hover { background: var(--surface); color: var(--text); }
-.nav-item.active { background: rgba(59,130,246,.14); border-color: rgba(59,130,246,.35); color: #bfdbfe; }
-.nav-item .nav-ico { width: 20px; text-align: center; }
-.nav-item .nav-run { margin-left: auto; width: 7px; height: 7px; border-radius: 50%; background: var(--green);
-  display: none; animation: pulse-dot 1.5s infinite; }
-.nav-item.running .nav-run { display: block; }
-.tool-intro { font-size: .8rem; color: var(--subtle); line-height: 1.5; margin-bottom: 4px; }
-.tool-intro code { background: var(--input); padding: 1px 5px; border-radius: 4px; font-size: .74rem; color: #c4b5fd; }
-.tool { display: none; }
-.tool.active { display: block; }
-.tool-title { font-size: 1rem; font-weight: 700; margin-bottom: 6px; }
-.folder-label { width: 58px; }
-.field-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
-.field-row select, .field-row input[type=number] {
-  background: var(--input); border: 1px solid var(--border); border-radius: 8px;
-  color: var(--text); padding: 6px 8px; font-size: .8rem;
+.nav-item:hover { background: var(--surface-hover); color: var(--text); }
+.nav-item.active { background: var(--surface-2); color: var(--text); box-shadow: inset 0 0 0 1px var(--border); }
+.nav-item .run-dot { margin-left: auto; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); display: none; }
+.nav-item.running .run-dot { display: block; animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .35; } }
+.sidebar-foot { margin-top: auto; padding-top: 16px; display: flex; flex-direction: column; gap: 10px; }
+.sys-line { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text-2); padding: 0 10px; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-3); flex: none; }
+.dot.ok { background: var(--ok); }
+.dot.err { background: var(--err); }
+.dot.warn { background: var(--warn); }
+.theme-switch { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; padding: 3px; border-radius: var(--radius); background: var(--surface-2); border: 1px solid var(--border); }
+.theme-switch button { border: 0; background: transparent; border-radius: 7px; padding: 6px 0; color: var(--text-3); cursor: pointer; display: grid; place-items: center; }
+.theme-switch button:hover { color: var(--text); }
+.theme-switch button.on { background: var(--surface); color: var(--text); box-shadow: 0 0 0 1px var(--border); }
+
+.main {
+  min-width: 0;
+  background-color: var(--bg);
+  background-image: radial-gradient(var(--dots) 1px, transparent 1.2px);
+  background-size: 18px 18px;
 }
-.field-row input[type=number] { width: 70px; }
-.preflight { font-size: .74rem; color: var(--muted); margin-top: 8px; min-height: 1em; }
-.btn-warn { background: linear-gradient(135deg, #d97706, var(--amber)); color: #111; }
-.stats-row { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
-.stat-card.violet::before { background: #a78bfa; }
-.stat-card.violet .stat-value { color: #a78bfa; }
-.stat-card.slate::before { background: var(--subtle); }
-.stat-card.slate .stat-value { color: var(--subtle); }
-.stat-value { font-size: 1.7rem; }
-.log-scroll.problems-only .log-line:not(.log-warn):not(.log-error) { display: none; }
-.btn-clear.on { background: rgba(245,158,11,.15); border-color: rgba(245,158,11,.4); color: #fcd34d; }
-.done-banner {
-  display: none; margin-top: 10px; padding: 10px 12px; border-radius: 8px; font-size: .8rem;
-  background: rgba(34,197,94,.08); border: 1px solid rgba(34,197,94,.25); color: #bbf7d0;
-  align-items: center; gap: 8px; flex-wrap: wrap;
+.topbar {
+  position: sticky; top: 0; z-index: 20;
+  height: 58px; display: flex; align-items: center; gap: 12px;
+  padding: 0 36px;
+  background: var(--bg);
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
 }
-.done-banner.show { display: flex; }
-.done-banner.bad { background: rgba(239,68,68,.08); border-color: rgba(239,68,68,.25); color: #fecaca; }
-.done-banner .btn-clear { margin-left: 0; }
-.records-search {
-  flex: 1; background: var(--input); border: 1px solid var(--border); border-radius: 8px;
-  padding: 7px 10px; color: var(--text); font-size: .8rem; max-width: 280px;
+.crumbs { font-size: 13.5px; color: var(--text-3); display: flex; gap: 8px; align-items: center; }
+.crumbs b { color: var(--text); font-weight: 500; }
+.topbar .spacer { flex: 1; }
+.run-chip {
+  display: none; align-items: center; gap: 8px; padding: 5px 12px 5px 10px; border-radius: 999px;
+  background: var(--accent-soft); color: var(--accent-ink); font-size: 13px; border: 0; cursor: pointer;
 }
-.st-ok { color: #4ade80; font-weight: 600; }
-.st-warn { color: #fb923c; font-weight: 600; }
-.st-err { color: #f87171; font-weight: 600; }
-.st-muted { color: var(--muted); font-weight: 600; }
+.run-chip.show { display: inline-flex; }
+.page { max-width: 1380px; margin: 0 auto; padding: 36px 36px 64px; }
+.view { display: none; }
+.view.active { display: block; animation: fade .18s ease; }
+@keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+/* ── Buttons & inputs ───────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  height: 40px; padding: 0 18px; border-radius: var(--radius);
+  border: 1px solid transparent; font-size: 14.5px; font-weight: 500; cursor: pointer;
+  transition: background .12s, border-color .12s, color .12s, opacity .12s; white-space: nowrap;
+}
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn-primary { background: var(--primary-bg); color: var(--primary-fg); }
+.btn-primary:not(:disabled):hover { background: var(--primary-hover); }
+.btn-accent { background: var(--accent); color: #fff; }
+.btn-accent:not(:disabled):hover { filter: brightness(1.06); }
+.btn-secondary { background: var(--surface); color: var(--text); border-color: var(--border); }
+.btn-secondary:not(:disabled):hover { border-color: var(--border-strong); background: var(--surface-2); }
+.btn-ghost { background: transparent; color: var(--text-2); }
+.btn-ghost:not(:disabled):hover { background: var(--surface-hover); color: var(--text); }
+.btn-danger { background: transparent; color: var(--err); border-color: var(--err-soft); }
+.btn-danger:not(:disabled):hover { background: var(--err-soft); }
+.btn-sm { height: 32px; padding: 0 12px; font-size: 13px; border-radius: var(--radius-sm); }
+.btn-xs { height: 26px; padding: 0 9px; font-size: 12px; border-radius: 7px; gap: 5px; }
+.btn-block { width: 100%; }
+
+.input {
+  width: 100%; height: 40px; padding: 0 12px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  color: var(--text); font-size: 14px; outline: none; transition: border-color .12s, box-shadow .12s;
+}
+:root[data-theme="dark"] .input { background: rgba(255, 255, 255, .05); }
+:root[data-theme="dark"] select.input option { background: #1B1B1A; }
+.input::placeholder { color: var(--text-3); }
+.input:focus { border-color: var(--border-strong); box-shadow: 0 0 0 3px var(--accent-soft); }
+.input.mono { font-family: var(--mono); font-size: 13px; }
+
+/* switches: real checkboxes, restyled */
+input.switch {
+  appearance: none; -webkit-appearance: none; margin: 0; flex: none; cursor: pointer;
+  width: 36px; height: 20px; border-radius: 999px; position: relative;
+  background: var(--border-strong); transition: background .15s;
+}
+input.switch::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .25); transition: transform .15s;
+}
+input.switch:checked { background: var(--text); }
+:root[data-theme="dark"] input.switch:checked { background: var(--accent); }
+input.switch:checked::after { transform: translateX(16px); }
+
+.seg { display: inline-flex; padding: 3px; gap: 2px; border-radius: var(--radius); background: var(--surface-2); border: 1px solid var(--border); flex-wrap: wrap; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label { padding: 6px 12px; border-radius: 7px; font-size: 13px; color: var(--text-2); cursor: pointer; user-select: none; }
+.seg label:hover { color: var(--text); }
+.seg input:checked + label { background: var(--surface); color: var(--text); box-shadow: 0 0 0 1px var(--border), var(--shadow); }
+:root[data-theme="dark"] .seg input:checked + label { background: rgba(255, 255, 255, .12); }
+.seg input:focus-visible + label { outline: 2px solid var(--accent); }
+.seg.wide { display: flex; }
+.seg.wide label { flex: 1; text-align: center; }
+
+/* ── Overview ───────────────────────────────────────────────────────────── */
+.hero { padding: 28px 0 34px; max-width: 760px; }
+.eyebrow { font-size: 13px; color: var(--accent-ink); letter-spacing: .02em; margin-bottom: 12px; display: inline-flex; gap: 8px; align-items: center; }
+.hero h1 { font-family: var(--serif); font-weight: 400; font-size: clamp(34px, 4.2vw, 52px); line-height: 1.08; letter-spacing: -.02em; }
+.hero p { font-family: var(--serif); font-size: 19px; line-height: 1.5; color: var(--text-2); margin-top: 16px; }
+.section-title { font-family: var(--serif); font-size: 22px; font-weight: 400; letter-spacing: -.01em; margin: 8px 0 14px; }
+.tasks { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; }
+.task {
+  text-align: left; cursor: pointer; display: flex; flex-direction: column; gap: 10px;
+  padding: 20px; border-radius: var(--radius-lg); background: var(--surface);
+  border: 1px solid var(--border); box-shadow: var(--shadow); color: var(--text);
+  transition: border-color .15s, transform .15s;
+}
+.task:hover { border-color: var(--border-strong); transform: translateY(-2px); }
+.task-icon { width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent-ink); }
+.task h3 { font-family: var(--serif); font-weight: 400; font-size: 19px; line-height: 1.25; }
+.task p { color: var(--text-2); font-size: 13.5px; flex: 1; }
+.task .go { font-size: 13px; color: var(--text); display: inline-flex; gap: 6px; align-items: center; }
+.task:hover .go { color: var(--accent-ink); }
+.overview-grid { display: grid; grid-template-columns: 1.15fr 1fr; gap: 14px; margin-top: 34px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 22px; box-shadow: var(--shadow); }
+.card h3 { font-family: var(--serif); font-weight: 400; font-size: 19px; margin-bottom: 12px; }
+.ticks { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
+.ticks li { display: grid; grid-template-columns: 22px 1fr; gap: 8px; color: var(--text-2); }
+.ticks li b { color: var(--text); font-weight: 500; }
+.ticks svg { color: var(--ok); margin-top: 2px; }
+.kv { display: grid; grid-template-columns: 110px 1fr; gap: 8px 12px; font-size: 13.5px; margin: 0; }
+.kv dt { color: var(--text-3); }
+.kv dd { margin: 0; color: var(--text); overflow-wrap: anywhere; }
+.history { list-style: none; padding: 0; margin: 0; }
+.history li { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 10px 0; border-top: 1px solid var(--border); }
+.history li:first-child { border-top: 0; padding-top: 0; }
+.history .h-title { font-weight: 500; }
+.history .h-sub { font-size: 12.5px; color: var(--text-2); grid-column: 1 / -1; }
+.history .h-when { font-size: 12.5px; color: var(--text-3); }
+.pill { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; padding: 1px 8px; border-radius: 999px; background: var(--surface-2); color: var(--text-2); border: 1px solid var(--border); white-space: nowrap; }
+.pill.ok { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
+.pill.warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+.pill.err { background: var(--err-soft); color: var(--err); border-color: transparent; }
+.pill.info { background: var(--info-soft); color: var(--info); border-color: transparent; }
+.empty-note { color: var(--text-3); font-size: 13.5px; }
+
+/* ── Tool pages ─────────────────────────────────────────────────────────── */
+.tool-head { max-width: 820px; margin-bottom: 26px; }
+.tool-head h1 { font-family: var(--serif); font-weight: 400; font-size: 36px; letter-spacing: -.02em; line-height: 1.15; }
+.tool-head .lead { font-family: var(--serif); font-size: 17px; color: var(--text-2); margin-top: 10px; line-height: 1.55; }
+.facts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.fact { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--text-2); }
+.fact.ok svg { color: var(--ok); }
+.fact.warn svg { color: var(--warn); }
+.fact.info svg { color: var(--info); }
+.tool-grid { display: grid; grid-template-columns: minmax(360px, 520px) minmax(0, 1fr); gap: 22px; align-items: start; }
+.steps { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.step { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px 20px 18px; box-shadow: var(--shadow); }
+.step-head { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+.step-num { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 12.5px; font-weight: 600; background: var(--text); color: var(--bg); flex: none; }
+.step-head h2 { font-size: 15px; font-weight: 600; }
+.step-head .faint { margin-left: auto; font-size: 12.5px; }
+.field + .field { margin-top: 16px; }
+.field > label { display: block; font-size: 13.5px; font-weight: 500; margin-bottom: 6px; }
+.input-row { display: flex; gap: 8px; }
+.hint { font-size: 12.5px; color: var(--text-3); margin-top: 7px; display: flex; gap: 6px; align-items: flex-start; line-height: 1.45; }
+.hint svg { margin-top: 1px; }
+.hint.ok { color: var(--ok); }
+.hint.warn { color: var(--warn); }
+.hint.err { color: var(--err); }
+.hint .act { color: var(--info); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; white-space: nowrap; }
+.opt { display: flex; align-items: flex-start; gap: 14px; padding: 12px 0; border-top: 1px solid var(--border); cursor: pointer; }
+.step-head + .opt, details.adv > summary + .opt { border-top: 0; padding-top: 2px; }
+.opt-text { flex: 1; min-width: 0; }
+.opt-title { display: block; font-size: 14px; color: var(--text); }
+.opt-desc { display: block; font-size: 12.5px; color: var(--text-3); margin-top: 2px; }
+.opt .switch { margin-top: 2px; }
+.opt.block { display: block; cursor: default; }
+.opt.block .opt-title { margin-bottom: 8px; }
+.opt.block .opt-desc { margin-top: 6px; }
+.example { margin-top: 10px; font-family: var(--mono); font-size: 12px; color: var(--text-2); background: var(--surface-2); border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); padding: 8px 10px; overflow-wrap: anywhere; }
+details.adv { border-top: 1px solid var(--border); margin-top: 0; }
+details.adv summary { list-style: none; cursor: pointer; padding: 12px 0 10px; font-size: 13.5px; color: var(--text-2); display: flex; align-items: center; gap: 6px; }
+details.adv summary::-webkit-details-marker { display: none; }
+details.adv summary svg { transition: transform .15s; }
+details.adv[open] summary svg { transform: rotate(90deg); }
+details.adv summary:hover { color: var(--text); }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.run-box { display: flex; flex-direction: column; gap: 12px; }
+.run-explain { font-size: 13px; color: var(--text-2); background: var(--surface-2); border-radius: var(--radius-sm); padding: 10px 12px; border: 1px solid var(--border); }
+.run-explain.apply { background: var(--warn-soft); border-color: transparent; color: var(--text); }
+.kbd { font-family: var(--mono); font-size: 11px; color: var(--text-3); border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 5px; padding: 0 5px; }
+
+/* ── Activity panel ─────────────────────────────────────────────────────── */
+.activity-slot { position: sticky; top: 76px; min-width: 0; }
+.activity {
+  display: flex; flex-direction: column;
+  max-height: calc(100vh - 96px); min-height: 520px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow); overflow: hidden;
+}
+.page > .activity { display: none; }
+.act-head { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.act-head h2 { font-size: 15px; font-weight: 600; }
+.act-head .spacer { flex: 1; }
+.status-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 3px 10px; border-radius: 999px; background: var(--surface-2); color: var(--text-2); border: 1px solid var(--border); }
+.status-pill .dot { width: 6px; height: 6px; }
+.status-pill.running { background: var(--accent-soft); color: var(--accent-ink); border-color: transparent; }
+.status-pill.running .dot { background: var(--accent); animation: pulse 1.2s infinite; }
+.status-pill.paused { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+.status-pill.paused .dot { background: var(--warn); }
+.status-pill.done { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
+.status-pill.done .dot { background: var(--ok); }
+.status-pill.failed { background: var(--err-soft); color: var(--err); border-color: transparent; }
+.status-pill.failed .dot { background: var(--err); }
+.act-body { overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 16px; flex: 1; min-height: 0; }
+.act-empty { text-align: center; padding: 30px 20px 6px; color: var(--text-2); }
+.act-empty .big { font-family: var(--serif); font-size: 21px; color: var(--text); margin-bottom: 6px; }
+.progress { display: flex; flex-direction: column; gap: 8px; }
+.progress-top { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
+.progress-top b { font-weight: 500; }
+.bar { height: 6px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.bar > div { height: 100%; width: 0; background: var(--accent); border-radius: 999px; transition: width .35s ease; }
+.bar.done > div { background: var(--ok); }
+.bar.indeterminate > div { width: 30%; animation: slide 1.2s ease-in-out infinite; }
+@keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+.progress-meta { display: flex; gap: 14px; font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.progress-meta .file { font-family: var(--mono); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.metrics { display: grid; grid-template-columns: repeat(auto-fill, minmax(122px, 1fr)); gap: 8px; }
+.metric {
+  text-align: left; border: 1px solid var(--border); background: var(--bg); border-radius: var(--radius); padding: 10px 12px;
+  cursor: pointer; transition: border-color .12s; position: relative; color: var(--text);
+}
+:root[data-theme="dark"] .metric { background: rgba(255, 255, 255, .03); }
+.metric:hover { border-color: var(--border-strong); }
+.metric .v { font-size: 22px; font-weight: 600; letter-spacing: -.02em; font-variant-numeric: tabular-nums; line-height: 1.25; }
+.metric .l { font-size: 12px; color: var(--text-2); }
+.metric.tone-ok .v { color: var(--ok); }
+.metric.tone-warn .v { color: var(--warn); }
+.metric.tone-err .v { color: var(--err); }
+.metric.tone-accent .v { color: var(--accent-ink); }
+.metric.zero .v { color: var(--text-3); }
+.metric[data-tip]:hover::after {
+  content: attr(data-tip); position: absolute; left: 0; top: calc(100% + 6px); z-index: 30; width: 240px;
+  background: var(--text); color: var(--bg); font-size: 12px; line-height: 1.4; padding: 8px 10px; border-radius: 8px; box-shadow: var(--shadow-lg);
+  pointer-events: none; font-weight: 400;
+}
+.result { border-radius: var(--radius); padding: 14px; border: 1px solid var(--border); background: var(--surface-2); display: flex; flex-direction: column; gap: 10px; }
+.result.ok { background: var(--ok-soft); border-color: transparent; }
+.result.warn { background: var(--warn-soft); border-color: transparent; }
+.result.err { background: var(--err-soft); border-color: transparent; }
+.result-title { font-weight: 600; display: flex; gap: 8px; align-items: center; }
+.result-text { color: var(--text-2); font-size: 13.5px; }
+.result-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.log-wrap { display: flex; flex-direction: column; min-height: 220px; flex: 1; }
+.log-tools { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.log-tools h3 { font-size: 13px; font-weight: 600; margin-right: auto; }
+.log-tools .seg label { padding: 3px 9px; font-size: 12px; }
+.log-search { height: 28px; width: 150px; font-size: 12.5px; padding: 0 9px; border-radius: 7px; }
+.log {
+  flex: 1; min-height: 200px; max-height: 420px; overflow-y: auto;
+  background: var(--log-bg); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 10px 12px; font-family: var(--mono); font-size: 12px; line-height: 1.65;
+}
+.ll { white-space: pre-wrap; word-break: break-word; color: var(--text-2); }
+.ll.info { color: var(--text); }
+.ll.ok { color: var(--ok); }
+.ll.warn { color: var(--warn); }
+.ll.error { color: var(--err); }
+.ll.file { color: var(--text-3); }
+.log.f-warn .ll:not(.warn):not(.error) { display: none; }
+.log.f-error .ll:not(.error) { display: none; }
+.ll.hide { display: none; }
+.log:empty::before { content: "Messages will appear here."; color: var(--text-3); }
+
+/* ── Drawer / modals / toasts ───────────────────────────────────────────── */
+.overlay { position: fixed; inset: 0; background: var(--overlay); z-index: 60; display: none; }
+.overlay.open { display: block; animation: fade .15s ease; }
+.modal {
+  position: fixed; z-index: 70; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 48px);
+  display: none; flex-direction: column;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-xl); box-shadow: var(--shadow-lg);
+}
+:root[data-theme="dark"] .modal, :root[data-theme="dark"] .drawer { background: #1E1E1D; }
+.modal.open { display: flex; animation: pop .16s ease; }
+.modal.wide { width: min(980px, calc(100vw - 32px)); }
+@keyframes pop { from { opacity: 0; transform: translate(-50%, -48%) scale(.98); } }
+.modal-head { padding: 22px 24px 0; }
+.modal-head h2 { font-family: var(--serif); font-weight: 400; font-size: 24px; letter-spacing: -.01em; }
+.modal-head p { color: var(--text-2); margin-top: 6px; }
+.modal-body { padding: 16px 24px; overflow-y: auto; }
+.modal-foot { padding: 14px 24px 20px; display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.drawer {
+  position: fixed; z-index: 70; top: 0; right: 0; bottom: 0; width: min(1080px, 100vw);
+  background: var(--surface); border-left: 1px solid var(--border); box-shadow: var(--shadow-lg);
+  display: flex; flex-direction: column; transform: translateX(105%); transition: transform .2s ease;
+}
+.drawer.open { transform: none; }
+.drawer-head { padding: 20px 24px 14px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 12px; }
+.drawer-head .row { display: flex; align-items: center; gap: 10px; }
+.drawer-head h2 { font-family: var(--serif); font-weight: 400; font-size: 24px; margin-right: auto; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { border: 1px solid var(--border); background: transparent; color: var(--text-2); border-radius: 999px; padding: 4px 11px; font-size: 12.5px; cursor: pointer; }
+.chip:hover { border-color: var(--border-strong); color: var(--text); }
+.chip.on { background: var(--text); color: var(--bg); border-color: var(--text); }
+.drawer-body { flex: 1; overflow: auto; }
+.drawer-foot { padding: 12px 24px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-2); }
+table.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.tbl th { position: sticky; top: 0; background: inherit; text-align: left; font-weight: 500; color: var(--text-3); font-size: 12px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.drawer .tbl th, .modal .tbl th { background: var(--surface); }
+:root[data-theme="dark"] .drawer .tbl th, :root[data-theme="dark"] .modal .tbl th { background: #1E1E1D; }
+.tbl td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; color: var(--text-2); }
+.tbl td.path { font-family: var(--mono); font-size: 12px; color: var(--text); max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
+.tbl td.nowrap { white-space: nowrap; }
+.tbl td.wrap { min-width: 160px; font-size: 12.5px; }
+.tbl tr:hover td { background: var(--surface-2); }
+.toasts { position: fixed; right: 20px; bottom: 20px; z-index: 90; display: flex; flex-direction: column; gap: 8px; }
+.toast { display: flex; gap: 10px; align-items: center; max-width: 380px; padding: 11px 14px; border-radius: var(--radius); background: var(--text); color: var(--bg); font-size: 13.5px; box-shadow: var(--shadow-lg); animation: pop2 .18s ease; }
+@keyframes pop2 { from { opacity: 0; transform: translateY(6px); } }
+
+/* ── Responsive ─────────────────────────────────────────────────────────── */
 @media (max-width: 1180px) {
-  .main { grid-template-columns: 1fr; }
-  .nav { flex-direction: row; flex-wrap: wrap; }
-  .nav-section { display: none; }
+  .tool-grid { grid-template-columns: minmax(0, 1fr); }
+  .activity-slot { position: static; }
+  .activity { max-height: none; }
+  .overview-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 860px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .sidebar { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--border); }
+  .sidebar nav { display: flex; flex-wrap: wrap; gap: 4px; }
+  .sidebar .nav-label { display: none; }
   .nav-item { width: auto; }
+  .sidebar-foot { flex-direction: row; align-items: center; flex-wrap: wrap; }
+  .page { padding: 24px 16px 48px; }
+  .topbar { padding: 0 16px; }
+  .tool-head h1 { font-size: 30px; }
+  .input-row .btn { padding: 0 12px; }
 }
 </style>
 </head>
 <body>
 
-<div class="status-bar"><div class="status-bar-fill" id="top-bar"></div></div>
+<!-- Icon sprite -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-6h4v6"/></symbol>
+    <symbol id="i-box" viewBox="0 0 24 24"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="m3 8 9 5 9-5"/><path d="M12 13v8"/></symbol>
+    <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="16.5" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/><path d="M7.5 14h3M13.5 14h3M7.5 17.5h3"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/></symbol>
+    <symbol id="i-folders" viewBox="0 0 24 24"><path d="M3 7.5V18a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9.5a2 2 0 0 0-2-2h-7l-2-2.5H5a2 2 0 0 0-2 2z"/><path d="m9 14 2 2 4-4"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="13" height="13" rx="2.5"/><path d="M16 8V5.5A2.5 2.5 0 0 0 13.5 3h-8A2.5 2.5 0 0 0 3 5.5v8A2.5 2.5 0 0 0 5.5 16H8"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></symbol>
+    <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12.5" rx="2"/><path d="M8.5 20.5h7M12 16.5v4"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7.5V18a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9.5a2 2 0 0 0-2-2h-7l-2-2.5H5a2 2 0 0 0-2 2z"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5z"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 4v11M7 10.5 12 15.5l5-5"/><path d="M4.5 20h15"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3.5 2.5 20h19z"/><path d="M12 10v4.5M12 17.5v.01"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.5v.01"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 4.5 6v6c0 4.5 3.2 7.7 7.5 9 4.3-1.3 7.5-4.5 7.5-9V6z"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  </defs>
+</svg>
 
-<header>
-  <div class="header-icon">📷</div>
-  <div>
-    <div class="header-title">Photos Backup Fix</div>
-    <div class="header-sub">Restore dates &amp; GPS from Google Takeout · sort photos into dated folders · fix your backup drive</div>
-  </div>
-  <div class="header-spacer"></div>
-  <div id="exiftool-badge">
-    <span class="badge-dot"></span>
-    <span id="exiftool-label">Checking ExifTool…</span>
-  </div>
-  <div id="conn-badge" class="conn-badge">
-    <span class="badge-dot"></span>
-    <span id="conn-label">Connecting…</span>
-  </div>
-</header>
-
-<div class="main">
-
-  <!-- NAV -->
-  <nav class="nav" id="nav">
-    <div class="nav-section">Import</div>
-    <button class="nav-item" data-tool="takeout"><span class="nav-ico">📦</span>Process Takeout<span class="nav-run"></span></button>
-    <button class="nav-item" data-tool="filename"><span class="nav-ico">🗓️</span>Sort by Filename Date<span class="nav-run"></span></button>
-    <div class="nav-section">Drive Utilities</div>
-    <button class="nav-item" data-tool="fixdrive"><span class="nav-ico">✨</span>Fix Missing Dates<span class="nav-run"></span></button>
-    <button class="nav-item" data-tool="rename"><span class="nav-ico">🏷️</span>Rename Old Folders<span class="nav-run"></span></button>
-    <button class="nav-item" data-tool="dupes"><span class="nav-ico">🧬</span>Find Duplicates<span class="nav-run"></span></button>
-  </nav>
-
-  <!-- CONTROLS -->
-  <div class="left">
-
-    <!-- Takeout -->
-    <section class="tool" data-tool="takeout">
-      <div class="card">
-        <div class="tool-title">Process Google Takeout</div>
-        <div class="tool-intro">Copies every photo &amp; video from an unzipped Takeout export into dated folders
-          (<code>2024/March/March_15</code>) and writes the date, GPS and caption from Google's JSON sidecars into the files.
-          Your source folder is never modified.</div>
+<div class="app">
+  <!-- ── Sidebar ─────────────────────────────────────────────────────────── -->
+  <aside class="sidebar">
+    <a class="brand" href="#home" data-view="home">
+      <span class="brand-mark"><svg viewBox="0 0 32 32" width="20" height="20" aria-hidden="true"><circle cx="21" cy="11" r="3.4" fill="#FAF9F5"/><path d="M4 25l8-9.5 5.2 6.2 3.2-3.7L28 25z" fill="#FAF9F5"/></svg></span>
+      <span class="brand-name">Photos Backup Fix</span>
+    </a>
+    <nav>
+      <button class="nav-item" data-view="home"><svg class="i"><use href="#i-home"/></svg>Overview</button>
+      <div class="nav-label">Import</div>
+      <button class="nav-item" data-view="takeout"><svg class="i"><use href="#i-box"/></svg>Process Takeout<span class="run-dot"></span></button>
+      <button class="nav-item" data-view="filename"><svg class="i"><use href="#i-cal"/></svg>Sort by filename date<span class="run-dot"></span></button>
+      <div class="nav-label">Backup drive</div>
+      <button class="nav-item" data-view="fixdrive"><svg class="i"><use href="#i-spark"/></svg>Fix missing dates<span class="run-dot"></span></button>
+      <button class="nav-item" data-view="rename"><svg class="i"><use href="#i-folders"/></svg>Rename old folders<span class="run-dot"></span></button>
+      <button class="nav-item" data-view="dupes"><svg class="i"><use href="#i-copy"/></svg>Find duplicates<span class="run-dot"></span></button>
+    </nav>
+    <div class="sidebar-foot">
+      <div class="sys-line" id="sys-exif"><span class="dot"></span><span>Checking ExifTool…</span></div>
+      <div class="sys-line" id="sys-conn"><span class="dot"></span><span>Connecting…</span></div>
+      <div class="theme-switch" role="group" aria-label="Theme">
+        <button data-theme-set="light" title="Light"><svg class="i sm"><use href="#i-sun"/></svg></button>
+        <button data-theme-set="dark" title="Dark"><svg class="i sm"><use href="#i-moon"/></svg></button>
+        <button data-theme-set="system" title="Match system"><svg class="i sm"><use href="#i-monitor"/></svg></button>
       </div>
-      <div class="card">
-        <div class="card-title">Folders</div>
-        <div class="folder-row"><span class="folder-label">Source</span>
-          <input id="takeout-src" class="folder-input persist" type="text" placeholder="Unzipped Takeout folder…">
-          <button class="btn-browse" data-browse="takeout-src">Browse</button></div>
-        <div class="folder-row"><span class="folder-label">Output</span>
-          <input id="takeout-dst" class="folder-input persist" type="text" placeholder="Where to save fixed files…">
-          <button class="btn-browse" data-browse="takeout-dst">Browse</button></div>
-        <div class="preflight" id="takeout-pre"></div>
-      </div>
-      <div class="card">
-        <div class="card-title">Options</div>
-        <div class="option-label" style="margin-bottom:6px">Output folders</div>
-        <div class="radio-pill">
-          <input type="radio" name="takeout-mode" id="takeout-mode-date" value="date" class="persist" checked><label for="takeout-mode-date" title="2024/March/March_15 — same as the Android app">By date</label>
-          <input type="radio" name="takeout-mode" id="takeout-mode-num" value="date_numeric" class="persist"><label for="takeout-mode-num" title="2024/03/15 — the old layout">Numeric</label>
-          <input type="radio" name="takeout-mode" id="takeout-mode-pres" value="preserve" class="persist"><label for="takeout-mode-pres" title="Keep Takeout's own folder structure">Preserve</label>
-          <input type="radio" name="takeout-mode" id="takeout-mode-flat" value="flat" class="persist"><label for="takeout-mode-flat" title="Everything in one folder">Flat</label>
+    </div>
+  </aside>
+
+  <!-- ── Main ────────────────────────────────────────────────────────────── -->
+  <div class="main">
+    <div class="topbar">
+      <div class="crumbs" id="crumbs"><b>Overview</b></div>
+      <div class="spacer"></div>
+      <button class="run-chip" id="run-chip"><span class="dot" style="background:var(--accent)"></span><span id="run-chip-text">Running</span></button>
+    </div>
+
+    <div class="page">
+
+      <!-- ── Overview ─────────────────────────────────────────────────────── -->
+      <section class="view" data-view="home">
+        <div class="hero">
+          <div class="eyebrow"><svg class="i sm"><use href="#i-shield"/></svg>Runs entirely on this computer. Nothing is uploaded.</div>
+          <h1>Put the right dates back on your photos.</h1>
+          <p>Restore the dates and places Google Takeout stripped out, sort everything into tidy dated folders, and repair a backup drive in a few clicks.</p>
         </div>
-        <div class="divider"></div>
-        <label class="option-row"><input type="checkbox" id="takeout-keep" class="persist" checked><span class="toggle"></span>
-          <div><div class="option-label">Keep dates already in the file</div>
-          <div class="option-sub">Camera dates are kept; only missing GPS/caption is added</div></div></label>
-        <label class="option-row"><input type="checkbox" id="takeout-dupes" class="persist"><span class="toggle"></span>
-          <div><div class="option-label">Review duplicates first</div>
-          <div class="option-sub">Finds identical files with different names (same-name copies are skipped automatically)</div></div></label>
-        <label class="option-row"><input type="checkbox" id="takeout-gps" class="persist" checked><span class="toggle"></span>
-          <div><div class="option-label">Write GPS location</div></div></label>
-        <label class="option-row"><input type="checkbox" id="takeout-extras" class="persist" checked><span class="toggle"></span>
-          <div><div class="option-label">Write caption, people &amp; favourites</div>
-          <div class="option-sub">Description, people names (XMP), favourite → 5★ rating</div></div></label>
-        <label class="option-row"><input type="checkbox" id="takeout-ftime" class="persist" checked><span class="toggle"></span>
-          <div><div class="option-label">Set file modified time to the photo date</div></div></label>
-        <label class="option-row"><input type="checkbox" id="takeout-undated" class="persist" checked><span class="toggle"></span>
-          <div><div class="option-label">Copy undated files to <code>no-date/</code></div></div></label>
-        <div class="divider"></div>
-        <div class="field-row"><span class="option-label">Times in filenames are</span>
-          <select id="takeout-tz" class="persist"><option value="local">this PC's time zone</option><option value="utc">UTC</option></select></div>
-        <div class="field-row"><span class="option-label">Parallel workers</span>
-          <input type="number" id="takeout-workers" class="persist" min="0" max="16" value="0"><span class="option-sub">0 = auto</span></div>
-        <div class="divider"></div>
-        <label class="option-row"><input type="checkbox" id="takeout-dry" class="persist dry"><span class="toggle"></span>
-          <div><div class="option-label">Dry run (preview only)</div>
-          <div class="option-sub">Shows where every file would go — writes nothing but a report</div></div></label>
-      </div>
-    </section>
 
-    <!-- Filename -->
-    <section class="tool" data-tool="filename">
-      <div class="card">
-        <div class="tool-title">Sort by Filename Date</div>
-        <div class="tool-intro">For Screenshots, WhatsApp, Signal and camera folders: reads the date from names like
-          <code>IMG_20240315_143022.jpg</code>, copies each file into <code>2024/March/March_15</code> and writes the date into it.
-          Files that already contain a date are sorted by it. JSON sidecars are ignored.</div>
-      </div>
-      <div class="card">
-        <div class="card-title">Folders</div>
-        <div class="folder-row"><span class="folder-label">Source</span>
-          <input id="filename-src" class="folder-input persist" type="text" placeholder="Folder of photos…">
-          <button class="btn-browse" data-browse="filename-src">Browse</button></div>
-        <div class="folder-row"><span class="folder-label">Output</span>
-          <input id="filename-dst" class="folder-input persist" type="text" placeholder="Where to save sorted files…">
-          <button class="btn-browse" data-browse="filename-dst">Browse</button></div>
-        <div class="preflight" id="filename-pre"></div>
-      </div>
-      <div class="card">
-        <div class="card-title">Options</div>
-        <div class="option-label" style="margin-bottom:6px">Output folders</div>
-        <div class="radio-pill">
-          <input type="radio" name="filename-mode" id="filename-mode-date" value="date" class="persist" checked><label for="filename-mode-date">By date</label>
-          <input type="radio" name="filename-mode" id="filename-mode-num" value="date_numeric" class="persist"><label for="filename-mode-num">Numeric</label>
-          <input type="radio" name="filename-mode" id="filename-mode-flat" value="flat" class="persist"><label for="filename-mode-flat">Flat</label>
+        <h2 class="section-title">What do you want to do?</h2>
+        <div class="tasks">
+          <button class="task" data-view="takeout">
+            <span class="task-icon"><svg class="i"><use href="#i-box"/></svg></span>
+            <h3>I downloaded my Google Photos with Takeout</h3>
+            <p>Your photos show the wrong date or no location. Reads Google's JSON files and writes the date, GPS and caption back into every photo and video.</p>
+            <span class="go">Process Takeout <svg class="i sm"><use href="#i-arrow"/></svg></span>
+          </button>
+          <button class="task" data-view="filename">
+            <span class="task-icon"><svg class="i"><use href="#i-cal"/></svg></span>
+            <h3>I have Screenshots, WhatsApp or camera folders</h3>
+            <p>Files named like <code>IMG_20240315_143022.jpg</code>. Uses the date in the name to sort them into folders and stamp the date inside.</p>
+            <span class="go">Sort by filename date <svg class="i sm"><use href="#i-arrow"/></svg></span>
+          </button>
+          <button class="task" data-view="fixdrive">
+            <span class="task-icon"><svg class="i"><use href="#i-spark"/></svg></span>
+            <h3>Photos on my backup drive have no date</h3>
+            <p>The drive is already sorted into year/month/day folders. Writes each folder's date into the files that are missing one, including HEIC and video.</p>
+            <span class="go">Fix missing dates <svg class="i sm"><use href="#i-arrow"/></svg></span>
+          </button>
+          <button class="task" data-view="rename">
+            <span class="task-icon"><svg class="i"><use href="#i-folders"/></svg></span>
+            <h3>My drive has old 2024/01/15 folders</h3>
+            <p>Switch to the <code>2024/January/January_15</code> layout the Android app uses. Folders are merged safely; nothing is overwritten.</p>
+            <span class="go">Rename old folders <svg class="i sm"><use href="#i-arrow"/></svg></span>
+          </button>
+          <button class="task" data-view="dupes">
+            <span class="task-icon"><svg class="i"><use href="#i-copy"/></svg></span>
+            <h3>I think I have the same photos twice</h3>
+            <p>Finds byte-for-byte identical photos and videos under any name. Report only, or move the extra copies aside. Never deletes.</p>
+            <span class="go">Find duplicates <svg class="i sm"><use href="#i-arrow"/></svg></span>
+          </button>
         </div>
-        <div class="divider"></div>
-        <label class="option-row"><input type="checkbox" id="filename-keep" class="persist" checked><span class="toggle"></span>
-          <div><div class="option-label">Keep dates already in the file</div></div></label>
-        <label class="option-row"><input type="checkbox" id="filename-ftime" class="persist" checked><span class="toggle"></span>
-          <div><div class="option-label">Set file modified time to the photo date</div></div></label>
-        <label class="option-row"><input type="checkbox" id="filename-undated" class="persist" checked><span class="toggle"></span>
-          <div><div class="option-label">Copy undated files to <code>no-date/</code></div></div></label>
-        <div class="field-row"><span class="option-label">Times in filenames are</span>
-          <select id="filename-tz" class="persist"><option value="local">this PC's time zone</option><option value="utc">UTC</option></select></div>
-        <div class="divider"></div>
-        <label class="option-row"><input type="checkbox" id="filename-dry" class="persist dry"><span class="toggle"></span>
-          <div><div class="option-label">Dry run (preview only)</div></div></label>
-      </div>
-    </section>
 
-    <!-- Fix drive -->
-    <section class="tool" data-tool="fixdrive">
-      <div class="card">
-        <div class="tool-title">Fix Missing Dates</div>
-        <div class="tool-intro">Walks a backup drive organised as <code>year/month/day</code> and writes the folder's date into
-          every photo or video that has none — <b>in place</b>. Files that already have a date are never changed; ones whose
-          date disagrees with their folder are listed. Works on JPEG, PNG, HEIC, RAW and MP4/MOV.</div>
-      </div>
-      <div class="card">
-        <div class="card-title">Drive</div>
-        <div class="folder-row"><span class="folder-label">Folder</span>
-          <input id="fixdrive-root" class="folder-input persist" type="text" placeholder="Drive root or a year folder…">
-          <button class="btn-browse" data-browse="fixdrive-root">Browse</button></div>
-        <div class="option-sub" style="margin-top:6px">Accepts <code>January_07</code>, <code>January 7</code> and <code>01/07</code> folders.</div>
-      </div>
-      <div class="card">
-        <div class="card-title">Options</div>
-        <label class="option-row"><input type="checkbox" id="fixdrive-ftime" class="persist" checked><span class="toggle"></span>
-          <div><div class="option-label">Set file modified time too</div></div></label>
-        <div class="field-row"><span class="option-label">Times in filenames are</span>
-          <select id="fixdrive-tz" class="persist"><option value="local">this PC's time zone</option><option value="utc">UTC</option></select></div>
-        <div class="divider"></div>
-        <label class="option-row"><input type="checkbox" id="fixdrive-dry" class="persist dry" checked><span class="toggle"></span>
-          <div><div class="option-label">Dry run (preview only)</div>
-          <div class="option-sub">Recommended first — this tool edits files in place</div></div></label>
-      </div>
-    </section>
-
-    <!-- Rename -->
-    <section class="tool" data-tool="rename">
-      <div class="card">
-        <div class="tool-title">Rename Old Folders</div>
-        <div class="tool-intro">Converts the old numeric layout <code>2024/01/15</code> (and <code>January 7</code>) into the
-          layout the Android app and this tool now use: <code>2024/January/January_15</code>. If both layouts exist, folders
-          are merged — nothing is overwritten; byte-identical extras go to <code>_duplicates/</code>.</div>
-      </div>
-      <div class="card">
-        <div class="card-title">Drive</div>
-        <div class="folder-row"><span class="folder-label">Folder</span>
-          <input id="rename-root" class="folder-input persist" type="text" placeholder="Drive root or a year folder…">
-          <button class="btn-browse" data-browse="rename-root">Browse</button></div>
-      </div>
-      <div class="card">
-        <div class="card-title">Options</div>
-        <label class="option-row"><input type="checkbox" id="rename-dry" class="persist dry" checked><span class="toggle"></span>
-          <div><div class="option-label">Dry run (preview only)</div></div></label>
-      </div>
-    </section>
-
-    <!-- Duplicates -->
-    <section class="tool" data-tool="dupes">
-      <div class="card">
-        <div class="tool-title">Find Duplicates</div>
-        <div class="tool-intro">Finds byte-identical photos and videos (any name, any folder) by content hash. The copy with a
-          Takeout sidecar / in a <code>Photos from YYYY</code> folder / shortest path is kept. Nothing is ever deleted.</div>
-      </div>
-      <div class="card">
-        <div class="card-title">Folders</div>
-        <div class="folder-row"><span class="folder-label">Folder</span>
-          <input id="dupes-a" class="folder-input persist" type="text" placeholder="Folder to scan…">
-          <button class="btn-browse" data-browse="dupes-a">Browse</button></div>
-        <div class="folder-row"><span class="folder-label">Also</span>
-          <input id="dupes-b" class="folder-input persist" type="text" placeholder="(optional) second folder…">
-          <button class="btn-browse" data-browse="dupes-b">Browse</button></div>
-      </div>
-      <div class="card">
-        <div class="card-title">Options</div>
-        <label class="option-row"><input type="checkbox" id="dupes-move" class="persist"><span class="toggle"></span>
-          <div><div class="option-label">Move extra copies to <code>_duplicates/</code></div>
-          <div class="option-sub">Off = report only. Moved files keep their folder structure.</div></div></label>
-      </div>
-    </section>
-
-    <!-- Controls -->
-    <div class="card">
-      <div class="controls">
-        <button class="btn btn-primary" id="btn-start"><span>▶</span> <span id="start-label">Start</span></button>
-        <button class="btn btn-secondary" id="btn-pause" disabled>⏸ Pause</button>
-        <button class="btn btn-danger" id="btn-stop" disabled><span>■</span> Stop</button>
-        <button class="btn btn-secondary" id="btn-open">📂 Open folder</button>
-      </div>
-      <div class="option-sub" style="margin-top:10px">Stopped runs can be resumed: finished files are skipped next time.</div>
-    </div>
-  </div>
-
-  <!-- OUTPUT -->
-  <div class="right">
-    <div class="stats-row" id="stats-row"></div>
-
-    <div class="card progress-card">
-      <div class="progress-header">
-        <span class="progress-label" id="prog-label">Ready — choose folders and press Start</span>
-        <span class="progress-pct" id="prog-pct"></span>
-      </div>
-      <div class="progress-track"><div class="progress-fill" id="prog-fill"></div></div>
-      <div class="progress-meta">
-        <span class="progress-file" id="prog-file"></span>
-        <span class="progress-eta" id="prog-eta"></span>
-        <span class="progress-speed" id="prog-speed"></span>
-      </div>
-      <div class="done-banner" id="done-banner">
-        <span id="done-text"></span>
-        <button class="btn-clear" id="btn-report-csv">⬇ Report (CSV)</button>
-        <button class="btn-clear" id="btn-report-json">⬇ JSON</button>
-        <button class="btn-clear" id="btn-report-open">📂 Report folder</button>
-      </div>
-    </div>
-
-    <div class="card log-card">
-      <div class="log-header">
-        <span class="card-title" style="margin:0">Activity Log</span>
-        <div style="display:flex;gap:6px">
-          <button class="btn-clear" id="btn-problems">Problems only</button>
-          <button class="btn-clear" id="btn-copy-log">Copy</button>
-          <button class="btn-clear" id="btn-clear-log">Clear</button>
+        <div class="overview-grid">
+          <div class="card">
+            <h3>Good to know</h3>
+            <ul class="ticks">
+              <li><svg class="i sm"><use href="#i-check"/></svg><span><b>Preview first.</b> Every tool has a preview mode that shows exactly what would happen and writes nothing except a report.</span></li>
+              <li><svg class="i sm"><use href="#i-check"/></svg><span><b>Your originals are safe.</b> Takeout and filename sorting only <i>copy</i>. The two drive tools edit in place, and ask before they do.</span></li>
+              <li><svg class="i sm"><use href="#i-check"/></svg><span><b>Stop any time.</b> Run again later and finished files are skipped, so big exports can be done in parts.</span></li>
+              <li><svg class="i sm"><use href="#i-check"/></svg><span><b>Every run is recorded.</b> A spreadsheet-friendly report (CSV + JSON) is saved in a <code>_photofix</code> folder.</span></li>
+              <li><svg class="i sm"><use href="#i-check"/></svg><span><b>Works with the Android app.</b> Same folder layout (<code>2024/March/March_15</code>), so both can share one drive.</span></li>
+            </ul>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:14px">
+            <div class="card">
+              <h3>Recent runs</h3>
+              <ul class="history" id="history"><li class="empty-note">Nothing yet this session.</li></ul>
+            </div>
+            <div class="card">
+              <h3>This computer</h3>
+              <dl class="kv" id="sysinfo"><dt>ExifTool</dt><dd>Checking…</dd></dl>
+            </div>
+          </div>
         </div>
-      </div>
-      <div class="log-scroll" id="log"><div class="log-line log-empty">Waiting to start…</div></div>
+      </section>
+
+      <!-- ── Tool views (the activity panel is moved into the active one) ─── -->
+
+      <!-- Process Takeout -->
+      <section class="view" data-view="takeout">
+        <div class="tool-head">
+          <div class="eyebrow">Import</div>
+          <h1>Process Google Takeout</h1>
+          <p class="lead">Copies every photo and video from an unzipped Takeout export into dated folders, and writes the date, location and caption from Google's JSON sidecar files into each one.</p>
+          <div class="facts">
+            <span class="fact ok"><svg class="i sm"><use href="#i-shield"/></svg>Your Takeout folder is never changed</span>
+            <span class="fact info"><svg class="i sm"><use href="#i-copy"/></svg>Writes copies to the output folder</span>
+            <span class="fact info"><svg class="i sm"><use href="#i-clock"/></svg>Stop and resume any time</span>
+          </div>
+        </div>
+        <div class="tool-grid">
+          <div class="steps">
+            <div class="step">
+              <div class="step-head"><span class="step-num">1</span><h2>Choose folders</h2></div>
+              <div class="field">
+                <label for="takeout-src">Takeout folder</label>
+                <div class="input-row"><input id="takeout-src" class="input mono persist" list="dl-takeout-src" placeholder="e.g. D:\Takeout" autocomplete="off"><button class="btn btn-secondary" data-browse="takeout-src"><svg class="i sm"><use href="#i-folder"/></svg>Browse</button></div>
+                <datalist id="dl-takeout-src"></datalist>
+                <div class="hint" id="takeout-src-hint">The unzipped export. If you have several Takeout zips, extract them all into this one folder.</div>
+              </div>
+              <div class="field">
+                <label for="takeout-dst">Output folder</label>
+                <div class="input-row"><input id="takeout-dst" class="input mono persist" list="dl-takeout-dst" placeholder="e.g. E:\Photos" autocomplete="off"><button class="btn btn-secondary" data-browse="takeout-dst"><svg class="i sm"><use href="#i-folder"/></svg>Browse</button></div>
+                <datalist id="dl-takeout-dst"></datalist>
+                <div class="hint" id="takeout-dst-hint">Where the fixed copies go. Can be your backup drive. Files already there are skipped.</div>
+              </div>
+            </div>
+
+            <div class="step">
+              <div class="step-head"><span class="step-num">2</span><h2>Options</h2><span class="faint">The defaults suit most people</span></div>
+              <div class="opt block">
+                <span class="opt-title">Folder layout</span>
+                <div class="seg wide" data-example="takeout">
+                  <input type="radio" name="takeout-mode" id="takeout-mode-date" value="date" class="persist" checked><label for="takeout-mode-date">By date</label>
+                  <input type="radio" name="takeout-mode" id="takeout-mode-num" value="date_numeric" class="persist"><label for="takeout-mode-num">Numeric</label>
+                  <input type="radio" name="takeout-mode" id="takeout-mode-pres" value="preserve" class="persist"><label for="takeout-mode-pres">Keep Takeout's</label>
+                  <input type="radio" name="takeout-mode" id="takeout-mode-flat" value="flat" class="persist"><label for="takeout-mode-flat">One folder</label>
+                </div>
+                <div class="example" id="takeout-example"></div>
+              </div>
+              <label class="opt"><span class="opt-text"><span class="opt-title">Keep dates already in the file</span><span class="opt-desc">Photos straight from a camera already know when they were taken. Keep that date and only add missing location or caption.</span></span><input type="checkbox" class="switch persist" id="takeout-keep" checked></label>
+              <label class="opt"><span class="opt-text"><span class="opt-title">Check for duplicates first</span><span class="opt-desc">Takeout often has the same photo in several albums. Same-name copies are skipped automatically; this also finds renamed copies and lets you review them.</span></span><input type="checkbox" class="switch persist" id="takeout-dupes"></label>
+              <label class="opt"><span class="opt-text"><span class="opt-title">Write location (GPS)</span><span class="opt-desc">Puts photos on the map in Google Photos, Apple Photos and Windows.</span></span><input type="checkbox" class="switch persist" id="takeout-gps" checked></label>
+              <label class="opt"><span class="opt-text"><span class="opt-title">Write caption, people and favourites</span><span class="opt-desc">Description text, names of people tagged in Google Photos, and favourites as a 5-star rating.</span></span><input type="checkbox" class="switch persist" id="takeout-extras" checked></label>
+              <details class="adv" data-persist="takeout-adv">
+                <summary><svg class="i sm"><use href="#i-chev"/></svg>Advanced options</summary>
+                <label class="opt"><span class="opt-text"><span class="opt-title">Rename files to their date</span><span class="opt-desc"><code>IMG_1234.JPG</code> becomes <code>2019-07-04_10-30-00.jpg</code>, so files sort correctly in any app.</span></span><input type="checkbox" class="switch persist" id="takeout-rename"></label>
+                <label class="opt"><span class="opt-text"><span class="opt-title">Copy files with no date</span><span class="opt-desc">Into a <code>no-date</code> folder so nothing is left behind. Turn off to skip them.</span></span><input type="checkbox" class="switch persist" id="takeout-undated" checked></label>
+                <label class="opt"><span class="opt-text"><span class="opt-title">Set file "modified" time to the photo date</span><span class="opt-desc">Helps File Explorer and apps that ignore EXIF sort correctly.</span></span><input type="checkbox" class="switch persist" id="takeout-ftime" checked></label>
+                <div class="opt block"><span class="opt-title">Which files</span>
+                  <div class="seg">
+                    <input type="radio" name="takeout-kinds" id="takeout-k-all" value="all" class="persist" checked><label for="takeout-k-all">Photos &amp; videos</label>
+                    <input type="radio" name="takeout-kinds" id="takeout-k-ph" value="photos" class="persist"><label for="takeout-k-ph">Photos only</label>
+                    <input type="radio" name="takeout-kinds" id="takeout-k-vid" value="videos" class="persist"><label for="takeout-k-vid">Videos only</label>
+                  </div>
+                </div>
+                <div class="opt block"><span class="opt-title">Only photos taken between</span>
+                  <div class="row2"><input type="date" class="input persist" id="takeout-from" aria-label="From date"><input type="date" class="input persist" id="takeout-to" aria-label="To date"></div>
+                  <span class="opt-desc">Leave empty to include everything. Handy for doing one year at a time.</span>
+                </div>
+                <div class="opt block"><span class="opt-title">Times in file names are in</span>
+                  <select class="input persist" id="takeout-tz"><option value="local">This computer's time zone (recommended)</option><option value="utc">UTC</option></select>
+                </div>
+                <div class="opt block"><span class="opt-title">Parallel workers</span>
+                  <input type="number" class="input persist" id="takeout-workers" min="0" max="16" value="0" style="width:110px">
+                  <span class="opt-desc">0 = automatic. More is faster on SSDs; use 1–2 for slow USB drives.</span>
+                </div>
+              </details>
+            </div>
+
+            <div class="step" data-runbox="takeout"></div>
+          </div>
+          <div class="activity-slot"></div>
+        </div>
+      </section>
+
+      <!-- Sort by filename date -->
+      <section class="view" data-view="filename">
+        <div class="tool-head">
+          <div class="eyebrow">Import</div>
+          <h1>Sort by filename date</h1>
+          <p class="lead">For folders where the date is in the file name: Screenshots, WhatsApp, Signal, Pixel and most phone cameras. Each file is copied into a dated folder and the date is written inside it.</p>
+          <div class="facts">
+            <span class="fact ok"><svg class="i sm"><use href="#i-shield"/></svg>Your source folder is never changed</span>
+            <span class="fact info"><svg class="i sm"><use href="#i-cal"/></svg>Understands IMG_20240315_143022, PXL_…, Screenshot_2024-03-15…, VID-20240315-WA…</span>
+          </div>
+        </div>
+        <div class="tool-grid">
+          <div class="steps">
+            <div class="step">
+              <div class="step-head"><span class="step-num">1</span><h2>Choose folders</h2></div>
+              <div class="field">
+                <label for="filename-src">Folder with photos</label>
+                <div class="input-row"><input id="filename-src" class="input mono persist" list="dl-filename-src" placeholder="e.g. D:\Phone\Screenshots" autocomplete="off"><button class="btn btn-secondary" data-browse="filename-src"><svg class="i sm"><use href="#i-folder"/></svg>Browse</button></div>
+                <datalist id="dl-filename-src"></datalist>
+                <div class="hint" id="filename-src-hint">Sub-folders are included.</div>
+              </div>
+              <div class="field">
+                <label for="filename-dst">Output folder</label>
+                <div class="input-row"><input id="filename-dst" class="input mono persist" list="dl-filename-dst" placeholder="e.g. E:\Photos" autocomplete="off"><button class="btn btn-secondary" data-browse="filename-dst"><svg class="i sm"><use href="#i-folder"/></svg>Browse</button></div>
+                <datalist id="dl-filename-dst"></datalist>
+                <div class="hint" id="filename-dst-hint">Where the sorted copies go.</div>
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-head"><span class="step-num">2</span><h2>Options</h2></div>
+              <div class="opt block">
+                <span class="opt-title">Folder layout</span>
+                <div class="seg wide" data-example="filename">
+                  <input type="radio" name="filename-mode" id="filename-mode-date" value="date" class="persist" checked><label for="filename-mode-date">By date</label>
+                  <input type="radio" name="filename-mode" id="filename-mode-num" value="date_numeric" class="persist"><label for="filename-mode-num">Numeric</label>
+                  <input type="radio" name="filename-mode" id="filename-mode-flat" value="flat" class="persist"><label for="filename-mode-flat">One folder</label>
+                </div>
+                <div class="example" id="filename-example"></div>
+              </div>
+              <label class="opt"><span class="opt-text"><span class="opt-title">Keep dates already in the file</span><span class="opt-desc">If a photo already contains a date, sort by that one and don't change it.</span></span><input type="checkbox" class="switch persist" id="filename-keep" checked></label>
+              <label class="opt"><span class="opt-text"><span class="opt-title">Copy files with no date</span><span class="opt-desc">Into a <code>no-date</code> folder.</span></span><input type="checkbox" class="switch persist" id="filename-undated" checked></label>
+              <details class="adv" data-persist="filename-adv">
+                <summary><svg class="i sm"><use href="#i-chev"/></svg>Advanced options</summary>
+                <label class="opt"><span class="opt-text"><span class="opt-title">Rename files to their date</span><span class="opt-desc">e.g. <code>2024-03-15_14-30-22.jpg</code></span></span><input type="checkbox" class="switch persist" id="filename-rename"></label>
+                <label class="opt"><span class="opt-text"><span class="opt-title">Set file "modified" time to the photo date</span></span><input type="checkbox" class="switch persist" id="filename-ftime" checked></label>
+                <div class="opt block"><span class="opt-title">Which files</span>
+                  <div class="seg">
+                    <input type="radio" name="filename-kinds" id="filename-k-all" value="all" class="persist" checked><label for="filename-k-all">Photos &amp; videos</label>
+                    <input type="radio" name="filename-kinds" id="filename-k-ph" value="photos" class="persist"><label for="filename-k-ph">Photos only</label>
+                    <input type="radio" name="filename-kinds" id="filename-k-vid" value="videos" class="persist"><label for="filename-k-vid">Videos only</label>
+                  </div>
+                </div>
+                <div class="opt block"><span class="opt-title">Only files dated between</span>
+                  <div class="row2"><input type="date" class="input persist" id="filename-from" aria-label="From date"><input type="date" class="input persist" id="filename-to" aria-label="To date"></div>
+                </div>
+                <div class="opt block"><span class="opt-title">Times in file names are in</span>
+                  <select class="input persist" id="filename-tz"><option value="local">This computer's time zone (recommended)</option><option value="utc">UTC</option></select>
+                </div>
+              </details>
+            </div>
+            <div class="step" data-runbox="filename"></div>
+          </div>
+          <div class="activity-slot"></div>
+        </div>
+      </section>
+
+      <!-- Fix missing dates -->
+      <section class="view" data-view="fixdrive">
+        <div class="tool-head">
+          <div class="eyebrow">Backup drive</div>
+          <h1>Fix missing dates</h1>
+          <p class="lead">For a drive that's already organised into year / month / day folders. Every photo or video with no date gets its folder's date written inside it. If the file name contains a time on that day, that time is used.</p>
+          <div class="facts">
+            <span class="fact warn"><svg class="i sm"><use href="#i-edit"/></svg>Edits files in place, so preview first</span>
+            <span class="fact ok"><svg class="i sm"><use href="#i-shield"/></svg>Files that already have a date are never changed</span>
+            <span class="fact info"><svg class="i sm"><use href="#i-info"/></svg>JPEG, PNG, HEIC, RAW, MP4 and MOV</span>
+          </div>
+        </div>
+        <div class="tool-grid">
+          <div class="steps">
+            <div class="step">
+              <div class="step-head"><span class="step-num">1</span><h2>Choose the drive</h2></div>
+              <div class="field">
+                <label for="fixdrive-root">Drive or folder</label>
+                <div class="input-row"><input id="fixdrive-root" class="input mono persist" list="dl-fixdrive-root" placeholder="e.g. E:\Photos  or  E:\Photos\2019" autocomplete="off"><button class="btn btn-secondary" data-browse="fixdrive-root"><svg class="i sm"><use href="#i-folder"/></svg>Browse</button></div>
+                <datalist id="dl-fixdrive-root"></datalist>
+                <div class="hint" id="fixdrive-root-hint">The folder that contains the year folders, or a single year folder. Accepts <code>January_07</code>, <code>January 7</code> and <code>01/07</code>.</div>
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-head"><span class="step-num">2</span><h2>Options</h2></div>
+              <label class="opt"><span class="opt-text"><span class="opt-title">Also correct dates that disagree with their folder</span><span class="opt-desc">If a photo in <code>2021/March/March_09</code> says it was taken in 2019, move its date to 9 March 2021 (the time of day is kept). Off = only list them.</span></span><input type="checkbox" class="switch persist" id="fixdrive-mismatch"></label>
+              <label class="opt"><span class="opt-text"><span class="opt-title">Set file "modified" time too</span><span class="opt-desc">Also covers formats that can't store a date inside (AVI, MKV…).</span></span><input type="checkbox" class="switch persist" id="fixdrive-ftime" checked></label>
+              <details class="adv" data-persist="fixdrive-adv">
+                <summary><svg class="i sm"><use href="#i-chev"/></svg>Advanced options</summary>
+                <div class="opt block"><span class="opt-title">Times in file names are in</span>
+                  <select class="input persist" id="fixdrive-tz"><option value="local">This computer's time zone (recommended)</option><option value="utc">UTC</option></select>
+                </div>
+                <div class="opt block"><span class="opt-title">Parallel workers</span>
+                  <input type="number" class="input persist" id="fixdrive-workers" min="0" max="16" value="0" style="width:110px">
+                  <span class="opt-desc">0 = automatic. Use 1–2 for slow USB drives.</span>
+                </div>
+              </details>
+            </div>
+            <div class="step" data-runbox="fixdrive"></div>
+          </div>
+          <div class="activity-slot"></div>
+        </div>
+      </section>
+
+      <!-- Rename old folders -->
+      <section class="view" data-view="rename">
+        <div class="tool-head">
+          <div class="eyebrow">Backup drive</div>
+          <h1>Rename old folders</h1>
+          <p class="lead">Converts the old numeric layout <code>2024/01/15</code> (and <code>January 7</code>) into <code>2024/January/January_15</code>, the layout the Android app and this tool use. Where both exist, the folders are merged.</p>
+          <div class="facts">
+            <span class="fact warn"><svg class="i sm"><use href="#i-edit"/></svg>Renames folders in place, so preview first</span>
+            <span class="fact ok"><svg class="i sm"><use href="#i-shield"/></svg>Never overwrites; identical extras go to <code>_duplicates</code></span>
+          </div>
+        </div>
+        <div class="tool-grid">
+          <div class="steps">
+            <div class="step">
+              <div class="step-head"><span class="step-num">1</span><h2>Choose the drive</h2></div>
+              <div class="field">
+                <label for="rename-root">Drive or folder</label>
+                <div class="input-row"><input id="rename-root" class="input mono persist" list="dl-rename-root" placeholder="e.g. E:\Photos" autocomplete="off"><button class="btn btn-secondary" data-browse="rename-root"><svg class="i sm"><use href="#i-folder"/></svg>Browse</button></div>
+                <datalist id="dl-rename-root"></datalist>
+                <div class="hint" id="rename-root-hint">The folder that contains the year folders, or a single year folder.</div>
+              </div>
+            </div>
+            <div class="step" data-runbox="rename"></div>
+          </div>
+          <div class="activity-slot"></div>
+        </div>
+      </section>
+
+      <!-- Find duplicates -->
+      <section class="view" data-view="dupes">
+        <div class="tool-head">
+          <div class="eyebrow">Backup drive</div>
+          <h1>Find duplicates</h1>
+          <p class="lead">Finds photos and videos that are byte-for-byte identical, whatever they're called and wherever they are. One copy is kept: the one with a Takeout sidecar, in a <i>Photos from YYYY</i> folder, or with the shortest path.</p>
+          <div class="facts">
+            <span class="fact ok"><svg class="i sm"><use href="#i-shield"/></svg>Never deletes anything</span>
+            <span class="fact info"><svg class="i sm"><use href="#i-eye"/></svg>Report only, unless you choose to move copies</span>
+          </div>
+        </div>
+        <div class="tool-grid">
+          <div class="steps">
+            <div class="step">
+              <div class="step-head"><span class="step-num">1</span><h2>Choose folders</h2></div>
+              <div class="field">
+                <label for="dupes-a">Folder to scan</label>
+                <div class="input-row"><input id="dupes-a" class="input mono persist" list="dl-dupes-a" placeholder="e.g. E:\Photos" autocomplete="off"><button class="btn btn-secondary" data-browse="dupes-a"><svg class="i sm"><use href="#i-folder"/></svg>Browse</button></div>
+                <datalist id="dl-dupes-a"></datalist>
+                <div class="hint" id="dupes-a-hint">Sub-folders are included.</div>
+              </div>
+              <div class="field">
+                <label for="dupes-b">Compare with another folder <span class="faint">(optional)</span></label>
+                <div class="input-row"><input id="dupes-b" class="input mono persist" list="dl-dupes-b" placeholder="e.g. D:\Old backup" autocomplete="off"><button class="btn btn-secondary" data-browse="dupes-b"><svg class="i sm"><use href="#i-folder"/></svg>Browse</button></div>
+                <datalist id="dl-dupes-b"></datalist>
+                <div class="hint" id="dupes-b-hint">Finds files that exist in both places.</div>
+              </div>
+            </div>
+            <div class="step">
+              <div class="step-head"><span class="step-num">2</span><h2>Options</h2></div>
+              <label class="opt"><span class="opt-text"><span class="opt-title">Move the extra copies to <code>_duplicates</code></span><span class="opt-desc">Off = report only. Moved files keep their folder structure, so you can check them and delete the folder yourself.</span></span><input type="checkbox" class="switch persist" id="dupes-move"></label>
+            </div>
+            <div class="step" data-runbox="dupes"></div>
+          </div>
+          <div class="activity-slot"></div>
+        </div>
+      </section>
+
+      <!-- ── Shared activity panel (moved between tool views) ─────────────── -->
+      <aside class="activity" id="activity">
+        <div class="act-head">
+          <h2 id="act-title">Activity</h2>
+          <span class="status-pill" id="status-pill"><span class="dot"></span><span id="status-text">Idle</span></span>
+          <span class="faint" id="elapsed" style="font-size:12.5px;font-variant-numeric:tabular-nums"></span>
+          <span class="spacer"></span>
+          <button class="btn btn-secondary btn-xs" id="btn-pause" disabled><svg class="i sm"><use href="#i-pause"/></svg><span>Pause</span></button>
+          <button class="btn btn-danger btn-xs" id="btn-stop" disabled><svg class="i sm"><use href="#i-stop"/></svg>Stop</button>
+        </div>
+        <div class="act-body">
+          <div class="act-empty" id="act-empty">
+            <div class="big">Nothing running</div>
+            <div>Choose your folders, then press <b>Preview</b> to see exactly what will happen. Nothing is written in preview mode.</div>
+          </div>
+          <div class="progress" id="progress" hidden>
+            <div class="progress-top"><b id="prog-label">Starting…</b><span id="prog-pct" class="faint"></span></div>
+            <div class="bar" id="bar"><div></div></div>
+            <div class="progress-meta"><span class="file" id="prog-file"></span><span id="prog-speed"></span><span id="prog-eta"></span></div>
+          </div>
+          <div class="result" id="result" hidden>
+            <div class="result-title" id="result-title"></div>
+            <div class="result-text" id="result-text"></div>
+            <div class="result-actions">
+              <button class="btn btn-accent btn-sm" id="btn-apply" hidden><svg class="i sm"><use href="#i-play"/></svg><span>Apply for real</span></button>
+              <button class="btn btn-secondary btn-sm" id="btn-open-out"><svg class="i sm"><use href="#i-folder"/></svg>Open folder</button>
+              <button class="btn btn-secondary btn-sm" id="btn-all-files"><svg class="i sm"><use href="#i-list"/></svg>All files</button>
+              <button class="btn btn-ghost btn-sm" id="btn-csv"><svg class="i sm"><use href="#i-down"/></svg>Report (CSV)</button>
+              <button class="btn btn-ghost btn-sm" id="btn-json"><svg class="i sm"><use href="#i-down"/></svg>JSON</button>
+            </div>
+          </div>
+          <div class="metrics" id="metrics" hidden></div>
+          <div class="log-wrap">
+            <div class="log-tools">
+              <h3>Log</h3>
+              <div class="seg" id="log-filter">
+                <input type="radio" name="logf" id="logf-all" value="all" checked><label for="logf-all">All</label>
+                <input type="radio" name="logf" id="logf-warn" value="warn"><label for="logf-warn">Warnings</label>
+                <input type="radio" name="logf" id="logf-err" value="error"><label for="logf-err">Errors</label>
+              </div>
+              <input class="input log-search" id="log-search" placeholder="Search log">
+              <button class="btn btn-ghost btn-xs" id="btn-copy-log" title="Copy log"><svg class="i sm"><use href="#i-copy"/></svg></button>
+              <button class="btn btn-ghost btn-xs" id="btn-clear-log" title="Clear log"><svg class="i sm"><use href="#i-x"/></svg></button>
+            </div>
+            <div class="log" id="log"></div>
+          </div>
+        </div>
+      </aside>
+
     </div>
   </div>
 </div>
 
-<!-- Scan overlay -->
-<div class="scan-overlay" id="scan-overlay">
-  <div class="scan-box">
-    <div class="scan-spinner"></div>
-    <div class="scan-title">Scanning for duplicates…</div>
-    <div class="scan-sub" id="scan-sub">Analysing files</div>
-    <button class="btn btn-secondary" style="margin-top:16px" id="btn-scan-cancel">Cancel</button>
+<!-- Run box template (cloned into each tool) -->
+<template id="tpl-runbox">
+  <div class="step-head"><span class="step-num">3</span><h2>Run</h2><span class="faint"><span class="kbd">Ctrl</span> + <span class="kbd">Enter</span></span></div>
+  <div class="run-box">
+    <div class="seg wide run-mode">
+      <input type="radio" value="preview" checked><label>Preview first</label>
+      <input type="radio" value="apply"><label>Apply changes</label>
+    </div>
+    <div class="run-explain"></div>
+    <button class="btn btn-primary btn-block run-btn"><svg class="i sm"><use href="#i-eye"/></svg><span>Preview</span></button>
+  </div>
+</template>
+
+<!-- Overlay, drawer, modals, toasts -->
+<div class="overlay" id="overlay"></div>
+
+<div class="drawer" id="drawer" aria-hidden="true">
+  <div class="drawer-head">
+    <div class="row">
+      <h2 id="drawer-title">Files</h2>
+      <input class="input" id="drawer-search" placeholder="Filter by name…" style="width:220px;height:34px">
+      <button class="btn btn-ghost btn-sm" id="drawer-close" title="Close (Esc)"><svg class="i sm"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="chips" id="drawer-chips"></div>
+  </div>
+  <div class="drawer-body">
+    <table class="tbl">
+      <thead><tr><th>File</th><th>Went to</th><th>Date</th><th>Result</th><th>Details</th></tr></thead>
+      <tbody id="drawer-rows"></tbody>
+    </table>
+    <div class="empty-note" id="drawer-empty" style="padding:24px" hidden>No files here.</div>
+  </div>
+  <div class="drawer-foot">
+    <span id="drawer-count"></span>
+    <span style="flex:1"></span>
+    <button class="btn btn-secondary btn-sm" id="drawer-more">Load more</button>
+    <button class="btn btn-secondary btn-sm" id="drawer-tsv"><svg class="i sm"><use href="#i-copy"/></svg>Copy as table</button>
   </div>
 </div>
 
-<!-- Duplicate modal -->
-<div class="modal-backdrop" id="dup-modal">
-  <div class="modal">
-    <div class="modal-head">
-      <div class="modal-icon">⚠️</div>
-      <div><div class="modal-title" id="dup-title">Duplicate Files Found</div><div class="modal-sub" id="dup-sub"></div></div>
-    </div>
-    <div class="modal-body">
-      <div class="modal-info">These files are byte-for-byte identical (content hash). <strong>Skip duplicates</strong> processes
-        one copy of each; <strong>Keep all</strong> processes every file (identical files that would land on the same name are still skipped).</div>
-      <table class="dup-table">
-        <thead><tr><th>Kept</th><th>Duplicate — skipped</th><th>Size</th></tr></thead>
-        <tbody id="dup-tbody"></tbody>
-      </table>
-    </div>
-    <div class="modal-foot">
-      <button class="btn btn-primary" data-decide="skip_dupes">✓ Skip duplicates</button>
-      <button class="btn btn-secondary" data-decide="keep_all">Keep all</button>
-      <button class="btn btn-secondary" data-decide="cancel" style="margin-left:auto">✕ Cancel run</button>
-    </div>
+<div class="modal" id="confirm-modal" role="dialog" aria-modal="true">
+  <div class="modal-head"><h2 id="confirm-title">Are you sure?</h2><p id="confirm-text"></p></div>
+  <div class="modal-foot">
+    <button class="btn btn-secondary" id="confirm-no">Cancel</button>
+    <button class="btn btn-primary" id="confirm-yes">Continue</button>
   </div>
 </div>
 
-<!-- Records modal -->
-<div class="modal-backdrop" id="records-modal">
-  <div class="modal" style="max-width:1200px">
-    <div class="modal-head">
-      <div class="modal-icon" id="records-icon">📋</div>
-      <div><div class="modal-title" id="records-title">Files</div><div class="modal-sub" id="records-sub"></div></div>
-      <input class="records-search" id="records-search" placeholder="Filter by name…" style="margin-left:auto">
-    </div>
-    <div class="modal-body">
-      <div class="modal-info" id="records-empty" style="display:none">No files here yet.</div>
-      <table class="dup-table" id="records-table">
-        <thead><tr><th>File</th><th>Destination</th><th>Date</th><th>Status</th><th>Details</th></tr></thead>
-        <tbody id="records-tbody"></tbody>
-      </table>
-    </div>
-    <div class="modal-foot">
-      <span id="records-count" style="color:var(--muted);font-size:.82rem"></span>
-      <button class="btn btn-secondary" id="btn-records-more" style="margin-left:12px">Load more</button>
-      <button class="btn btn-secondary" id="btn-records-tsv">Copy as TSV</button>
-      <button class="btn btn-secondary" id="btn-records-close" style="margin-left:auto">Close</button>
-    </div>
+<div class="modal wide" id="dup-modal" role="dialog" aria-modal="true">
+  <div class="modal-head"><h2 id="dup-title">Duplicates found</h2><p id="dup-sub"></p></div>
+  <div class="modal-body">
+    <table class="tbl">
+      <thead><tr><th>Kept</th><th>Identical copy</th><th>Size</th></tr></thead>
+      <tbody id="dup-rows"></tbody>
+    </table>
+  </div>
+  <div class="modal-foot">
+    <button class="btn btn-ghost" data-decide="cancel" style="margin-right:auto">Cancel run</button>
+    <button class="btn btn-secondary" data-decide="keep_all">Keep all copies</button>
+    <button class="btn btn-primary" data-decide="skip_dupes">Skip the copies</button>
   </div>
 </div>
 
-<div class="toast-area" id="toasts"></div>
+<div class="modal" id="scan-modal" role="dialog" aria-modal="true">
+  <div class="modal-head"><h2>Looking for duplicates…</h2><p id="scan-sub">Comparing file contents.</p></div>
+  <div class="modal-body"><div class="bar indeterminate"><div></div></div></div>
+  <div class="modal-foot"><button class="btn btn-secondary" data-decide="cancel">Cancel</button></div>
+</div>
+
+<div class="toasts" id="toasts"></div>
 
 <script>
 'use strict';
 const TOKEN = document.querySelector('meta[name=api-token]').content;
 const $ = (id) => document.getElementById(id);
-const MAX_LOG_LINES = 4000;
+const fmt = (n) => (n || 0).toLocaleString();
+const MAX_LOG = 4000;
 
-// ── Tool definitions ───────────────────────────────────────────────────────
-const S = (k) => (st) => (st && st[k]) || 0;
+function bytes(n) {
+  n = n || 0;
+  const u = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let i = 0;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return (i ? n.toFixed(1) : n) + ' ' + u[i];
+}
+function plural(n, one, many) { return `${fmt(n)} ${n === 1 ? one : (many || one + 's')}`; }
+function ago(ts) {
+  const s = Math.max(0, Date.now() / 1000 - ts);
+  if (s < 60) return 'just now';
+  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+  return `${Math.floor(s / 3600)} h ago`;
+}
+function dur(s) {
+  s = Math.max(0, Math.round(s));
+  if (s < 60) return `${s}s`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s`;
+  return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
+}
+
+// ── Tool definitions ────────────────────────────────────────────────────────
+const V = (k) => (s) => (s && s[k]) || 0;
+const COPY_METRICS = [
+  { label: 'Files found', v: V('total'), st: [], tip: 'Photos and videos found in the source folder.' },
+  { label: 'Dates written', v: V('processed'), st: ['fixed', 'from_filename'], tone: 'ok', tip: 'A date (and location, if known) was written from the Takeout sidecar or the file name.' },
+  { label: 'Kept own date', v: V('kept_existing'), st: ['kept_existing'], tone: 'ok', tip: 'The file already had a date (usually from the camera). It was sorted by that date and not changed.' },
+  { label: 'No date', v: V('no_json'), st: ['no_date', 'no_date_skipped'], tone: 'warn', tip: 'No date anywhere: no sidecar, nothing in the name, nothing inside the file. Copied to no-date/.' },
+  { label: 'Skipped', v: V('skipped'), st: ['exists', 'duplicate'], tip: 'Already in the output from an earlier run, or an identical copy of another file.' },
+  { label: 'Needs a look', v: (s) => V('errors')(s) + V('meta_failed')(s) + V('unsupported')(s), st: ['error', 'meta_failed', 'unsupported'], tone: 'err', tip: 'Could not be copied, metadata could not be written, or the format cannot hold a date (AVI, MKV, BMP…). Files are still sorted when possible.' },
+  { label: 'Outside dates', v: V('filtered'), st: ['filtered'], optional: true, tip: 'Skipped because of the date range you chose.' },
+];
+
 const TOOLS = {
   takeout: {
-    folder: () => $('takeout-dst').value.trim(),
-    cards: [
-      { label: 'Total',          color: 'blue',   value: S('total'),         statuses: [] },
-      { label: 'Dates written',  color: 'green',  value: S('processed'),     statuses: ['fixed', 'from_filename'] },
-      { label: 'Kept existing',  color: 'violet', value: S('kept_existing'), statuses: ['kept_existing'] },
-      { label: 'No date',        color: 'amber',  value: S('no_json'),       statuses: ['no_date', 'no_date_skipped'] },
-      { label: 'Skipped',        color: 'slate',  value: S('skipped'),       statuses: ['exists', 'duplicate'] },
-      { label: 'Needs attention', color: 'red',    value: (s) => S('errors')(s) + S('meta_failed')(s) + S('unsupported')(s),
-        statuses: ['error', 'meta_failed', 'unsupported'] },
-    ],
+    crumb: ['Import', 'Process Takeout'],
+    metrics: COPY_METRICS,
+    preview: 'Shows where every file would go and which date it would get. Nothing is copied.',
+    apply: 'Copies all files to the output folder and writes their dates. Your Takeout folder is not changed.',
+    applyLabel: 'Start processing',
+    fields: ['takeout-src', 'takeout-dst'],
     body: () => ({
-      src: $('takeout-src').value.trim(), dst: $('takeout-dst').value.trim(),
-      output_mode: document.querySelector('input[name=takeout-mode]:checked').value,
-      keep_existing: $('takeout-keep').checked, check_dupes: $('takeout-dupes').checked,
-      write_gps: $('takeout-gps').checked, write_extras: $('takeout-extras').checked,
-      set_file_times: $('takeout-ftime').checked, copy_undated: $('takeout-undated').checked,
-      filename_tz: $('takeout-tz').value, workers: +$('takeout-workers').value || 0,
-      dry_run: $('takeout-dry').checked,
+      src: val('takeout-src'), dst: val('takeout-dst'), output_mode: radio('takeout-mode'),
+      keep_existing: chk('takeout-keep'), check_dupes: chk('takeout-dupes'), write_gps: chk('takeout-gps'),
+      write_extras: chk('takeout-extras'), rename_to_date: chk('takeout-rename'),
+      copy_undated: chk('takeout-undated'), set_file_times: chk('takeout-ftime'), kinds: radio('takeout-kinds'),
+      date_from: val('takeout-from'), date_to: val('takeout-to'), filename_tz: val('takeout-tz'),
+      workers: +val('takeout-workers') || 0,
     }),
-    validate: (b) => !b.src ? 'Choose a source folder.' : !b.dst ? 'Choose an output folder.'
-      : b.src === b.dst ? 'Source and output must be different.' : '',
+    validate: (b) => !b.src ? 'Choose the Takeout folder.' : !b.dst ? 'Choose an output folder.'
+      : b.src === b.dst ? 'The output folder must be different from the Takeout folder.'
+      : (b.date_from && b.date_to && b.date_from > b.date_to) ? 'The start date is after the end date.' : '',
+    summary: copySummary,
   },
   filename: {
-    folder: () => $('filename-dst').value.trim(),
-    cards: null,   // filled below (same as takeout)
+    crumb: ['Import', 'Sort by filename date'],
+    metrics: COPY_METRICS,
+    preview: 'Shows the date found for each file and where it would go. Nothing is copied.',
+    apply: 'Copies the files into dated folders and writes the dates. The source folder is not changed.',
+    applyLabel: 'Start sorting',
+    fields: ['filename-src', 'filename-dst'],
     body: () => ({
-      src: $('filename-src').value.trim(), dst: $('filename-dst').value.trim(),
-      output_mode: document.querySelector('input[name=filename-mode]:checked').value,
-      keep_existing: $('filename-keep').checked, set_file_times: $('filename-ftime').checked,
-      copy_undated: $('filename-undated').checked, filename_tz: $('filename-tz').value,
-      dry_run: $('filename-dry').checked,
+      src: val('filename-src'), dst: val('filename-dst'), output_mode: radio('filename-mode'),
+      keep_existing: chk('filename-keep'), copy_undated: chk('filename-undated'),
+      rename_to_date: chk('filename-rename'), set_file_times: chk('filename-ftime'),
+      kinds: radio('filename-kinds'), date_from: val('filename-from'), date_to: val('filename-to'),
+      filename_tz: val('filename-tz'),
     }),
-    validate: (b) => !b.src ? 'Choose a source folder.' : !b.dst ? 'Choose an output folder.'
-      : b.src === b.dst ? 'Source and output must be different.' : '',
+    validate: (b) => !b.src ? 'Choose the folder with photos.' : !b.dst ? 'Choose an output folder.'
+      : b.src === b.dst ? 'The output folder must be different.'
+      : (b.date_from && b.date_to && b.date_from > b.date_to) ? 'The start date is after the end date.' : '',
+    summary: copySummary,
   },
   fixdrive: {
-    folder: () => $('fixdrive-root').value.trim(),
-    cards: [
-      { label: 'Total',         color: 'blue',   value: S('total'),         statuses: [] },
-      { label: 'Fixed',         color: 'green',  value: S('fixed'),         statuses: ['fixed'] },
-      { label: 'Already dated', color: 'violet', value: S('already_dated'), statuses: [] },
-      { label: 'Date ≠ folder', color: 'amber',  value: S('mismatched'),    statuses: ['mismatched'] },
-      { label: 'Unsupported',   color: 'slate',  value: S('unsupported'),   statuses: ['unsupported'] },
-      { label: 'Errors',        color: 'red',    value: S('errors'),        statuses: ['error'] },
+    crumb: ['Backup drive', 'Fix missing dates'],
+    metrics: [
+      { label: 'Files checked', v: V('total'), st: [], tip: 'Photos and videos inside year/month/day folders.' },
+      { label: 'Dates written', v: V('fixed'), st: ['fixed'], tone: 'ok', tip: 'Had no date; the folder date was written into them.' },
+      { label: 'Already dated', v: V('already_dated'), st: [], tip: 'Already had a date, so they were left alone.' },
+      { label: 'Date ≠ folder', v: V('mismatched'), st: ['mismatched', 'corrected'], tone: 'warn', tip: 'The date inside the file is on a different day than its folder.' },
+      { label: 'Corrected', v: V('corrected'), st: ['corrected'], tone: 'ok', optional: true, tip: 'Mismatched files moved to their folder\'s day (time kept).' },
+      { label: 'Can\'t hold a date', v: V('unsupported'), st: ['unsupported'], tip: 'AVI, MKV, BMP… only their file time was set.' },
+      { label: 'Errors', v: V('errors'), st: ['error'], tone: 'err', tip: 'ExifTool could not write these files.' },
     ],
-    body: () => ({ root: $('fixdrive-root').value.trim(), set_file_times: $('fixdrive-ftime').checked,
-                   filename_tz: $('fixdrive-tz').value, dry_run: $('fixdrive-dry').checked }),
+    preview: 'Lists which files would get a date and which date. Nothing on the drive changes.',
+    apply: 'Writes dates into files on the drive, in place. Files that already have a date are not touched unless you turned on correcting mismatches.',
+    applyLabel: 'Write dates',
+    confirm: ['Edit files on this drive?', 'Dates will be written into files that have none, directly on the drive. Files that already have a date are never changed. This can\'t be undone automatically.'],
+    fields: ['fixdrive-root'],
+    body: () => ({ root: val('fixdrive-root'), fix_mismatched: chk('fixdrive-mismatch'), set_file_times: chk('fixdrive-ftime'),
+                   filename_tz: val('fixdrive-tz'), workers: +val('fixdrive-workers') || 0 }),
     validate: (b) => !b.root ? 'Choose the drive folder.' : '',
+    summary: (s, dry) => {
+      let t = `${plural(s.total, 'file')} checked: ${fmt(s.fixed)} ${dry ? 'would get' : 'got'} a date, ${fmt(s.already_dated)} already had one.`;
+      if (s.mismatched) {
+        t += ` ${plural(s.mismatched, 'file has', 'files have')} a date that disagrees with its folder`;
+        t += s.corrected ? ` (${fmt(s.corrected)} ${dry ? 'would be corrected' : 'corrected'}).` : '. Turn on "Also correct dates" to fix them.';
+      }
+      return t;
+    },
   },
   rename: {
-    folder: () => $('rename-root').value.trim(),
-    cards: [
-      { label: 'To rename',   color: 'blue',  value: S('total'),     statuses: [] },
-      { label: 'Renamed',     color: 'green', value: S('renamed'),   statuses: ['rename'] },
-      { label: 'Merged',      color: 'violet',value: S('merged'),    statuses: ['merge'] },
-      { label: 'Identical extras', color: 'amber', value: S('conflicts'), statuses: ['merge'] },
-      { label: 'Errors',      color: 'red',   value: S('errors'),    statuses: ['error'] },
+    crumb: ['Backup drive', 'Rename old folders'],
+    metrics: [
+      { label: 'Folders to change', v: V('total'), st: [], tip: 'Old-style folders found.' },
+      { label: 'Renamed', v: V('renamed'), st: ['rename'], tone: 'ok', tip: 'Renamed to the new layout.' },
+      { label: 'Merged', v: V('merged'), st: ['merge'], tone: 'ok', tip: 'The new-style folder already existed, so the contents were moved into it.' },
+      { label: 'Identical extras', v: V('conflicts'), st: [], tone: 'warn', tip: 'A byte-identical file already existed at the target; the extra copy was moved to _duplicates.' },
+      { label: 'Errors', v: V('errors'), st: ['error'], tone: 'err', tip: 'Could not be renamed (in use, or permission denied).' },
     ],
-    body: () => ({ root: $('rename-root').value.trim(), dry_run: $('rename-dry').checked }),
+    preview: 'Lists every folder that would be renamed or merged. Nothing changes.',
+    apply: 'Renames and merges the folders on the drive.',
+    applyLabel: 'Rename folders',
+    confirm: ['Rename folders on this drive?', 'Old-style folders will be renamed, and merged where the new name already exists. Nothing is overwritten.'],
+    fields: ['rename-root'],
+    body: () => ({ root: val('rename-root') }),
     validate: (b) => !b.root ? 'Choose the drive folder.' : '',
+    summary: (s, dry) => s.total
+      ? `${plural(s.total, 'folder')} ${dry ? 'would change' : 'changed'}: ${fmt(s.renamed)} renamed, ${fmt(s.merged)} merged.`
+      : 'Everything already uses the new layout. Nothing to do.',
   },
   dupes: {
-    folder: () => $('dupes-a').value.trim(),
-    cards: [
-      { label: 'Files scanned', color: 'blue',  value: S('total'),      statuses: [] },
-      { label: 'Groups',        color: 'violet',value: S('groups'),     statuses: ['keep'] },
-      { label: 'Extra copies',  color: 'amber', value: S('duplicates'), statuses: ['duplicate', 'moved'] },
-      { label: 'Moved',         color: 'green', value: S('moved'),      statuses: ['moved'] },
-      { label: 'Errors',        color: 'red',   value: S('errors'),     statuses: ['error'] },
+    crumb: ['Backup drive', 'Find duplicates'],
+    noPreview: true,
+    metrics: [
+      { label: 'Files scanned', v: V('total'), st: [] },
+      { label: 'Groups', v: V('groups'), st: ['keep'], tip: 'Sets of identical files. One file per group is kept.' },
+      { label: 'Extra copies', v: V('duplicates'), st: ['duplicate', 'moved'], tone: 'warn' },
+      { label: 'Space to save', v: V('wasted_bytes'), fmt: bytes, st: ['duplicate', 'moved'], tone: 'accent', tip: 'Disk space used by the extra copies.' },
+      { label: 'Moved', v: V('moved'), st: ['moved'], optional: true, tone: 'ok' },
+      { label: 'Errors', v: V('errors'), st: ['error'], tone: 'err', optional: true },
     ],
-    body: () => ({ roots: [$('dupes-a').value.trim(), $('dupes-b').value.trim()].filter(Boolean),
-                   move: $('dupes-move').checked }),
+    fields: ['dupes-a', 'dupes-b'],
+    body: () => ({ roots: [val('dupes-a'), val('dupes-b')].filter(Boolean), move: chk('dupes-move') }),
     validate: (b) => !b.roots.length ? 'Choose a folder to scan.' : '',
+    summary: (s) => s.groups
+      ? `${plural(s.duplicates, 'extra copy', 'extra copies')} in ${plural(s.groups, 'group')}, using ${bytes(s.wasted_bytes)}.` + (s.moved ? ` ${fmt(s.moved)} moved to _duplicates.` : '')
+      : 'No duplicates found.',
   },
 };
-TOOLS.filename.cards = TOOLS.takeout.cards;
+const TOOL_NAMES = { takeout: 'Process Takeout', filename: 'Sort by filename date', fixdrive: 'Fix missing dates', rename: 'Rename old folders', dupes: 'Find duplicates' };
 
-const STATUS_TEXT = {
-  fixed: ['✓ Date/GPS from sidecar', 'st-ok'], from_filename: ['✓ Date from filename', 'st-ok'],
-  kept_existing: ['✓ Kept existing date', 'st-ok'], no_date: ['! No date → no-date/', 'st-warn'],
-  no_date_skipped: ['! No date — not copied', 'st-warn'], unsupported: ['→ Sorted, format has no metadata', 'st-warn'],
-  exists: ['= Already in output', 'st-muted'], duplicate: ['= Duplicate', 'st-muted'],
-  meta_failed: ['✗ Copied, metadata failed', 'st-err'], error: ['✗ Error', 'st-err'],
-  mismatched: ['≠ Date differs from folder', 'st-warn'], rename: ['✓ Renamed', 'st-ok'],
-  merge: ['✓ Merged', 'st-ok'], keep: ['✓ Kept', 'st-ok'], moved: ['→ Moved to _duplicates', 'st-warn'],
+function copySummary(s, dry) {
+  const parts = [];
+  if (s.processed) parts.push(`${fmt(s.processed)} ${dry ? 'would get' : 'got'} a date written`);
+  if (s.kept_existing) parts.push(`${fmt(s.kept_existing)} kept ${s.kept_existing === 1 ? 'its' : 'their'} own date`);
+  if (s.no_json) parts.push(`${fmt(s.no_json)} had no date`);
+  if (s.skipped) parts.push(`${fmt(s.skipped)} ${dry ? 'would be' : (s.skipped === 1 ? 'was' : 'were')} skipped (already there or identical)`);
+  const bad = (s.errors || 0) + (s.meta_failed || 0) + (s.unsupported || 0);
+  if (bad) parts.push(`${fmt(bad)} need${bad === 1 ? 's' : ''} a look`);
+  if (s.filtered) parts.push(`${fmt(s.filtered)} outside your date range`);
+  return `${plural(s.total || 0, 'file')}: ` + (parts.join(', ') || 'nothing to do') + '.' +
+    (!dry && s.bytes_copied ? ` ${bytes(s.bytes_copied)} written.` : '');
+}
+
+const STATUS = {
+  fixed: ['Date from Takeout', 'ok'], from_filename: ['Date from name', 'ok'], kept_existing: ['Kept own date', 'ok'],
+  no_date: ['No date → no-date/', 'warn'], no_date_skipped: ['No date, not copied', 'warn'],
+  unsupported: ['Can\'t hold a date', 'warn'], exists: ['Already there', ''], duplicate: ['Identical copy', ''],
+  meta_failed: ['Copied, date not written', 'err'], error: ['Error', 'err'], filtered: ['Outside dates', ''],
+  mismatched: ['Date ≠ folder', 'warn'], corrected: ['Corrected', 'ok'], rename: ['Renamed', 'ok'], merge: ['Merged', 'ok'],
+  keep: ['Kept', 'ok'], moved: ['Moved aside', 'warn'],
 };
 
-// ── State ──────────────────────────────────────────────────────────────────
-const state = { tool: 'takeout', running: false, runningTool: '', paused: false,
-                autoScroll: true, es: null, stats: null, records: { statuses: [], offset: 0, rows: [] } };
+// ── State & helpers ─────────────────────────────────────────────────────────
+const state = {
+  view: 'home', running: false, runKind: '', paused: false, dry: false, started: 0,
+  stats: null, statsKind: '', last: null, autoScroll: true, es: null,
+  drawer: { statuses: [], offset: 0, rows: [] }, confirmResolve: null,
+};
 
-// ── API helper (every call carries the per-launch token) ──────────────────
+const val = (id) => ($(id).value || '').trim();
+const chk = (id) => $(id).checked;
+const radio = (name) => (document.querySelector(`input[name="${name}"]:checked`) || {}).value;
+function store(k, v) { try { localStorage.setItem('pbf:' + k, v); } catch (e) { /* storage blocked */ } }
+function load(k) { try { return localStorage.getItem('pbf:' + k); } catch (e) { return null; } }
+function svg(id) { return `<svg class="i sm"><use href="#i-${id}"/></svg>`; }
+
 async function api(path, body) {
   const opts = { headers: { 'X-Token': TOKEN } };
   if (body !== undefined) {
@@ -1170,467 +1184,690 @@ async function api(path, body) {
   }
   const r = await fetch(path, opts);
   let d = {};
-  try { d = await r.json(); } catch (e) { /* non-JSON */ }
+  try { d = await r.json(); } catch (e) { /* not JSON */ }
   if (!r.ok && !d.error) d.error = `Request failed (${r.status})`;
   return d;
 }
 
-function store(k, v) { try { localStorage.setItem('pbf:' + k, v); } catch (e) { /* storage blocked */ } }
-function load(k) { try { return localStorage.getItem('pbf:' + k); } catch (e) { return null; } }
-
-// ── Init ───────────────────────────────────────────────────────────────────
+// ── Init ────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+  buildRunBoxes();
   restoreInputs();
-  document.querySelectorAll('.nav-item').forEach(b => b.addEventListener('click', () => selectTool(b.dataset.tool)));
+  document.querySelectorAll('button[data-view], a[data-view]').forEach(el => el.addEventListener('click', (e) => {
+    e.preventDefault();
+    show(el.dataset.view);
+  }));
   document.querySelectorAll('[data-browse]').forEach(b => b.addEventListener('click', () => browse(b.dataset.browse)));
-  document.querySelectorAll('[data-decide]').forEach(b => b.addEventListener('click', () => decideDupes(b.dataset.decide)));
-  document.querySelectorAll('input.dry').forEach(c => c.addEventListener('change', updateStartLabel));
-  ['takeout-src', 'takeout-dst', 'filename-src', 'filename-dst'].forEach(id =>
-    $(id).addEventListener('change', () => preflight(id.split('-')[0])));
-  $('btn-start').addEventListener('click', start);
+  document.querySelectorAll('[data-decide]').forEach(b => b.addEventListener('click', () => decide(b.dataset.decide)));
+  document.querySelectorAll('[data-theme-set]').forEach(b => b.addEventListener('click', () => setTheme(b.dataset.themeSet)));
+  document.querySelectorAll('[data-example]').forEach(seg => seg.addEventListener('change', () => updateExample(seg.dataset.example)));
+  ['takeout-rename', 'filename-rename'].forEach(id => $(id).addEventListener('change', () => updateExample(id.split('-')[0])));
+  Object.values(TOOLS).forEach(t => t.fields.forEach(id => {
+    let timer;
+    $(id).addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(() => checkField(id), 700); });
+    $(id).addEventListener('change', () => { clearTimeout(timer); store(id, $(id).value); checkField(id); });
+  }));
+  $('btn-pause').addEventListener('click', () => api(state.paused ? '/api/resume' : '/api/pause', {}));
   $('btn-stop').addEventListener('click', stop);
-  $('btn-pause').addEventListener('click', togglePause);
-  $('btn-open').addEventListener('click', () => openFolder(TOOLS[state.tool].folder()));
-  $('btn-report-csv').addEventListener('click', () => download('csv'));
-  $('btn-report-json').addEventListener('click', () => download('json'));
-  $('btn-report-open').addEventListener('click', () => api('/api/open', { what: 'report' }));
-  $('btn-problems').addEventListener('click', toggleProblems);
+  $('btn-apply').addEventListener('click', applyForReal);
+  $('btn-open-out').addEventListener('click', () => openFolder(state.last && state.last.output));
+  $('btn-all-files').addEventListener('click', () => openDrawer('All files', []));
+  $('btn-csv').addEventListener('click', () => download('csv'));
+  $('btn-json').addEventListener('click', () => download('json'));
   $('btn-copy-log').addEventListener('click', copyLog);
-  $('btn-clear-log').addEventListener('click', clearLog);
-  $('btn-scan-cancel').addEventListener('click', () => decideDupes('cancel'));
-  $('btn-records-close').addEventListener('click', () => $('records-modal').classList.remove('open'));
-  $('btn-records-more').addEventListener('click', () => loadRecords(false));
-  $('btn-records-tsv').addEventListener('click', copyRecordsTsv);
-  let searchT;
-  $('records-search').addEventListener('input', () => { clearTimeout(searchT); searchT = setTimeout(() => loadRecords(true), 250); });
-
-  const log = $('log');
-  log.addEventListener('scroll', () => {
-    state.autoScroll = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
-  });
+  $('btn-clear-log').addEventListener('click', () => { $('log').innerHTML = ''; });
+  $('log-filter').addEventListener('change', () => { $('log').className = 'log' + (radio('logf') === 'all' ? '' : ' f-' + radio('logf')); });
+  $('log-search').addEventListener('input', filterLog);
+  $('log').addEventListener('scroll', () => { const l = $('log'); state.autoScroll = l.scrollHeight - l.scrollTop - l.clientHeight < 40; });
+  $('run-chip').addEventListener('click', () => show(state.runKind));
+  $('overlay').addEventListener('click', () => closeLayers());
+  $('drawer-close').addEventListener('click', () => closeLayers());
+  $('drawer-more').addEventListener('click', () => loadRows(false));
+  $('drawer-tsv').addEventListener('click', copyTsv);
+  $('confirm-yes').addEventListener('click', () => resolveConfirm(true));
+  $('confirm-no').addEventListener('click', () => resolveConfirm(false));
+  let st;
+  $('drawer-search').addEventListener('input', () => { clearTimeout(st); st = setTimeout(() => loadRows(true), 250); });
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-      if ($('records-modal').classList.contains('open')) $('records-modal').classList.remove('open');
-      else if (state.running) stop();
-    }
+    if (e.key === 'Escape') closeLayers();
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && TOOLS[state.view] && !state.running) { e.preventDefault(); start(state.view); }
   });
+  if (window.matchMedia) {
+    const mq = matchMedia('(prefers-color-scheme: dark)');
+    const onChange = () => { if ((load('theme') || 'system') === 'system') setTheme('system'); };
+    if (mq.addEventListener) mq.addEventListener('change', onChange); else if (mq.addListener) mq.addListener(onChange);
+  }
+  window.addEventListener('hashchange', () => show(location.hash.slice(1) || 'home', true));
 
-  selectTool(load('tool') || 'takeout');
-  checkExifTool();
-  connectSSE();
+  setTheme(load('theme') || 'system');
+  ['takeout', 'filename'].forEach(updateExample);
+  show(location.hash.slice(1) || load('view') || 'home', true);
+  Object.values(TOOLS).forEach(t => t.fields.forEach(id => { if (val(id)) checkField(id); }));
+  loadInfo();
+  connect();
+  setInterval(tickElapsed, 1000);
 });
+
+function setTheme(pref) {
+  store('theme', pref);
+  const dark = pref === 'dark' || (pref === 'system' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  document.querySelectorAll('[data-theme-set]').forEach(b => b.classList.toggle('on', b.dataset.themeSet === pref));
+}
+
+function buildRunBoxes() {
+  const tpl = $('tpl-runbox');
+  document.querySelectorAll('[data-runbox]').forEach(box => {
+    const tool = box.dataset.runbox;
+    box.appendChild(tpl.content.cloneNode(true));
+    const seg = box.querySelector('.run-mode');
+    seg.querySelectorAll('input').forEach(inp => {
+      inp.name = `${tool}-runmode`;
+      inp.id = `${tool}-runmode-${inp.value}`;
+      inp.classList.add('persist');
+      inp.nextElementSibling.htmlFor = inp.id;
+    });
+    if (TOOLS[tool].noPreview) {
+      seg.remove();
+      box.querySelector('.run-explain').textContent = 'Scanning only reads files. With "Move the extra copies" on, duplicates are moved into a _duplicates folder at the end.';
+      box.querySelector('.run-btn span').textContent = 'Scan for duplicates';
+      box.querySelector('.run-btn use').setAttribute('href', '#i-play');
+    } else {
+      seg.addEventListener('change', () => updateRunBox(tool));
+    }
+    box.querySelector('.run-btn').addEventListener('click', () => start(tool));
+  });
+}
+
+function runMode(tool) { return TOOLS[tool].noPreview ? 'apply' : (radio(`${tool}-runmode`) || 'preview'); }
+
+function updateRunBox(tool) {
+  const t = TOOLS[tool];
+  if (t.noPreview) return;
+  const box = document.querySelector(`[data-runbox="${tool}"]`);
+  const apply = runMode(tool) === 'apply';
+  const ex = box.querySelector('.run-explain');
+  ex.textContent = apply ? t.apply : t.preview;
+  ex.classList.toggle('apply', apply && !!t.confirm);
+  const btn = box.querySelector('.run-btn');
+  btn.querySelector('span').textContent = apply ? t.applyLabel : 'Preview';
+  btn.querySelector('use').setAttribute('href', apply ? '#i-play' : '#i-eye');
+}
 
 function restoreInputs() {
   document.querySelectorAll('.persist').forEach(el => {
-    const v = load(el.id || el.name);
     if (el.type === 'radio') {
       if (load(el.name) === el.value) el.checked = true;
-      el.addEventListener('change', () => el.checked && store(el.name, el.value));
+      el.addEventListener('change', () => { if (el.checked) store(el.name, el.value); });
     } else if (el.type === 'checkbox') {
+      const v = load(el.id);
       if (v !== null) el.checked = v === '1';
       el.addEventListener('change', () => store(el.id, el.checked ? '1' : '0'));
     } else {
+      const v = load(el.id);
       if (v !== null) el.value = v;
-      el.addEventListener('input', () => store(el.id, el.value));
       el.addEventListener('change', () => store(el.id, el.value));
     }
   });
-}
-
-function selectTool(tool) {
-  if (!TOOLS[tool]) tool = 'takeout';
-  state.tool = tool;
-  store('tool', tool);
-  document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.tool === tool));
-  document.querySelectorAll('section.tool').forEach(s => s.classList.toggle('active', s.dataset.tool === tool));
-  renderCards(state.running ? state.runningTool : tool);
-  updateStartLabel();
-  setRunning(state.running);
-}
-
-function updateStartLabel() {
-  const dry = document.querySelector(`section.tool[data-tool=${state.tool}] input.dry`);
-  const label = { takeout: 'Start processing', filename: 'Start sorting', fixdrive: 'Fix dates',
-                  rename: 'Rename folders', dupes: 'Scan' }[state.tool];
-  $('start-label').textContent = dry && dry.checked ? 'Preview (dry run)' : label;
-  $('btn-start').classList.toggle('btn-warn', state.tool === 'fixdrive' && !(dry && dry.checked));
-}
-
-// ── Stats cards ────────────────────────────────────────────────────────────
-function renderCards(tool) {
-  const row = $('stats-row');
-  row.innerHTML = '';
-  TOOLS[tool].cards.forEach((c, i) => {
-    const div = document.createElement('div');
-    div.className = `stat-card ${c.color}`;
-    div.innerHTML = `<div class="stat-value" data-card="${i}">0</div><div class="stat-label"></div><div class="stat-hint">click to view</div>`;
-    div.querySelector('.stat-label').textContent = c.label;
-    div.addEventListener('click', () => showRecords(c.label, c.statuses));
-    row.appendChild(div);
+  document.querySelectorAll('details[data-persist]').forEach(d => {
+    if (load(d.dataset.persist) === '1') d.open = true;
+    d.addEventListener('toggle', () => store(d.dataset.persist, d.open ? '1' : '0'));
   });
-  row.dataset.tool = tool;
-  if (state.stats) updateStats(state.stats);
+  document.querySelectorAll('datalist[id^="dl-"]').forEach(dl => fillRecent(dl.id.slice(3)));
+  Object.keys(TOOLS).forEach(updateRunBox);
 }
 
-function updateStats(st) {
-  state.stats = st;
-  const tool = $('stats-row').dataset.tool;
-  TOOLS[tool].cards.forEach((c, i) => {
-    const el = document.querySelector(`[data-card="${i}"]`);
-    if (!el) return;
-    const to = c.value(st);
-    const from = +(el.dataset.v || 0);
-    el.dataset.v = to;
-    animateCounter(el, from, to);
+function recentList(id) { try { return JSON.parse(load('recent:' + id) || '[]'); } catch (e) { return []; } }
+function remember(id, path) {
+  if (!path) return;
+  store('recent:' + id, JSON.stringify([path, ...recentList(id).filter(p => p !== path)].slice(0, 6)));
+  fillRecent(id);
+}
+function fillRecent(id) {
+  const dl = $('dl-' + id);
+  if (!dl) return;
+  dl.innerHTML = '';
+  recentList(id).forEach(p => { const o = document.createElement('option'); o.value = p; dl.appendChild(o); });
+}
+
+function updateExample(tool) {
+  const mode = radio(`${tool}-mode`);
+  const name = chk(`${tool}-rename`) ? '2024-03-15_14-30-22.jpg' : 'IMG_20240315_143022.jpg';
+  const ex = {
+    date: [`Output\\2024\\March\\March_15\\${name}`, 'same layout as the Android app'],
+    date_numeric: [`Output\\2024\\03\\15\\${name}`, 'the old layout'],
+    preserve: [`Output\\Takeout\\Google Photos\\Photos from 2024\\${name}`, 'folders stay as in the export'],
+    flat: [`Output\\${name}`, 'everything in one folder'],
+  }[mode] || ['', ''];
+  $(`${tool}-example`).textContent = `${ex[0]}  ← ${ex[1]}`;
+}
+
+// ── Views ───────────────────────────────────────────────────────────────────
+function show(view, noHash) {
+  if (view !== 'home' && !TOOLS[view]) view = 'home';
+  state.view = view;
+  store('view', view);
+  if (!noHash && location.hash !== '#' + view) history.replaceState(null, '', '#' + view);
+  document.querySelectorAll('section.view').forEach(s => s.classList.toggle('active', s.dataset.view === view));
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+  const crumbs = $('crumbs');
+  crumbs.innerHTML = '';
+  (view === 'home' ? ['Overview'] : TOOLS[view].crumb).forEach((c, i, a) => {
+    const el = document.createElement(i === a.length - 1 ? 'b' : 'span');
+    el.textContent = c;
+    crumbs.appendChild(el);
+    if (i < a.length - 1) { const s = document.createElement('span'); s.textContent = '/'; crumbs.appendChild(s); }
   });
+  if (TOOLS[view]) document.querySelector(`section[data-view="${view}"] .activity-slot`).appendChild($('activity'));
+  updateChip();
+  window.scrollTo({ top: 0 });
 }
 
-function animateCounter(el, from, to) {
-  // One animation per element; a newer update cancels the older one, and a
-  // timer guarantees the final value even when rAF is paused (background tab).
-  const id = (el._anim = (el._anim || 0) + 1);
-  const final = () => { if (el._anim === id) el.textContent = to.toLocaleString(); };
-  if (from === to || document.hidden) { final(); return; }
-  const t0 = performance.now();
-  const tick = (now) => {
-    if (el._anim !== id) return;
-    const t = Math.min(1, (now - t0) / 250);
-    el.textContent = Math.round(from + (to - from) * (1 - Math.pow(1 - t, 3))).toLocaleString();
-    if (t < 1) requestAnimationFrame(tick);
-  };
-  requestAnimationFrame(tick);
-  setTimeout(final, 300);
-}
-
-// ── ExifTool badge ─────────────────────────────────────────────────────────
-async function checkExifTool() {
+// ── System info & history ───────────────────────────────────────────────────
+async function loadInfo() {
   const d = await api('/api/exiftool').catch(() => ({}));
-  const badge = $('exiftool-badge'), label = $('exiftool-label');
-  if (d.ok) {
-    badge.className = 'ok';
-    label.textContent = `ExifTool v${d.version}`;
-    badge.title = d.path;
+  const line = $('sys-exif');
+  line.querySelector('.dot').className = 'dot ' + (d.ok ? 'ok' : 'err');
+  line.lastElementChild.textContent = d.ok ? `ExifTool ${d.version}` : 'ExifTool not found';
+  line.title = d.path || '';
+  const kv = $('sysinfo');
+  kv.innerHTML = '';
+  [
+    ['ExifTool', d.ok ? `Version ${d.version}` : 'Not found. Run Start.bat, which downloads it.'],
+    ['Location', d.path || '—'],
+    ['Speed', d.workers ? `${d.workers} files at a time (${d.cpus} CPU cores)` : '—'],
+    ['Python', d.python || '—'],
+    ['Address', location.origin + ' (this computer only)'],
+  ].forEach(([k, v]) => {
+    const dt = document.createElement('dt'); dt.textContent = k;
+    const dd = document.createElement('dd'); dd.textContent = v;
+    if (k === 'ExifTool' && !d.ok) dd.style.color = 'var(--err)';
+    kv.append(dt, dd);
+  });
+  if (!d.ok) toast('ExifTool was not found. Run Start.bat, which installs it automatically.', 'err');
+}
+
+function renderHistory(list) {
+  const ul = $('history');
+  ul.innerHTML = '';
+  if (!list || !list.length) { ul.innerHTML = '<li class="empty-note">Nothing yet this session.</li>'; return; }
+  list.slice(0, 6).forEach(h => {
+    const li = document.createElement('li');
+    const title = document.createElement('span');
+    title.className = 'h-title';
+    title.textContent = TOOL_NAMES[h.kind] || h.kind;
+    const tag = document.createElement('span');
+    tag.className = 'pill ' + (h.ok ? (h.dry_run ? 'info' : 'ok') : 'err');
+    tag.textContent = h.dry_run ? 'Preview' : (h.ok ? 'Done' : (h.stopped ? 'Stopped' : 'Failed'));
+    tag.style.marginLeft = '8px';
+    title.appendChild(tag);
+    const when = document.createElement('span');
+    when.className = 'h-when';
+    when.textContent = ago(h.finished);
+    const sub = document.createElement('span');
+    sub.className = 'h-sub';
+    sub.textContent = (TOOLS[h.kind] && h.stats) ? TOOLS[h.kind].summary(h.stats, h.dry_run) : '';
+    li.append(title, when, sub);
+    li.style.cursor = 'pointer';
+    li.addEventListener('click', () => show(h.kind));
+    ul.appendChild(li);
+  });
+}
+
+// ── Folder checks ───────────────────────────────────────────────────────────
+function setHint(id, cls, icon, text) {
+  const hint = $(id + '-hint');
+  hint.className = 'hint ' + cls;
+  hint.innerHTML = svg(icon) + '<span></span>';
+  hint.lastChild.textContent = text;
+  return hint.lastChild;
+}
+
+async function checkField(id) {
+  const hint = $(id + '-hint');
+  if (hint.dataset.default === undefined) hint.dataset.default = hint.innerHTML;
+  const v = val(id);
+  if (!v) { hint.className = 'hint'; hint.innerHTML = hint.dataset.default; return; }
+  setHint(id, '', 'clock', 'Checking…');
+  if (id.endsWith('-root')) return checkDrive(id, v);
+  const isDst = id.endsWith('-dst');
+  const d = await api('/api/preflight', isDst ? { dst: v } : { src: v }).catch(() => ({}));
+  if (val(id) !== v) return;
+  if (isDst) {
+    if (d.free_h === undefined) { setHint(id, 'err', 'alert', 'Can\'t reach this location.'); return; }
+    const src = $(id.replace('-dst', '-src'));
+    const size = src && src.dataset.size ? +src.dataset.size : 0;
+    if (size && d.free < size) setHint(id, 'warn', 'alert', `${d.free_h} free, which may not be enough for ${bytes(size)} of photos.`);
+    else setHint(id, 'ok', 'check', `${d.free_h} free` + (d.exists ? '' : ' · the folder will be created'));
+    return;
+  }
+  if (d.count === undefined) { setHint(id, 'err', 'alert', 'Folder not found.'); return; }
+  $(id).dataset.size = d.size;
+  if (!d.count) { setHint(id, 'warn', 'alert', 'No photos or videos found in this folder.'); return; }
+  let t = `${fmt(d.count)} photos & videos · ${d.size_h}`;
+  let cls = 'ok', icon = 'check';
+  if (id === 'takeout-src') {
+    if (d.sidecars) t += ` · ${fmt(d.sidecars)} Takeout .json files`;
+    else { t += ' · no Takeout .json files here. Is this the right folder? "Sort by filename date" may suit it better.'; cls = 'warn'; icon = 'alert'; }
+  }
+  setHint(id, cls, icon, t);
+  const dst = id.replace('-src', '-dst');
+  if ($(dst) && val(dst)) checkField(dst);
+}
+
+async function checkDrive(id, v) {
+  const d = await api('/api/inspect', { root: v }).catch(() => ({}));
+  if (val(id) !== v) return;
+  if (!d.ok) { setHint(id, 'err', 'alert', d.error || 'Folder not found.'); return; }
+  const yrs = d.years.length > 1 ? `${d.years[0]}–${d.years[d.years.length - 1]}` : (d.years[0] || '');
+  if (!d.files && !d.renames) {
+    setHint(id, 'warn', 'alert', 'No year/month/day folders found here. Pick the folder that contains the year folders (e.g. 2019, 2020).');
+    return;
+  }
+  const text = `${fmt(d.files)} photos & videos in dated folders` + (yrs ? ` (${yrs})` : '') + '.';
+  if (id === 'rename-root') {
+    if (d.renames) setHint(id, 'ok', 'check', `${plural(d.renames, 'folder')} to change, e.g. ${d.examples[0]}`);
+    else setHint(id, 'ok', 'check', 'All folders already use the new layout. Nothing to rename.');
+  } else if (d.renames) {
+    const span = setHint(id, 'warn', 'info', `${text} ${plural(d.renames, 'folder uses', 'folders use')} the old layout. `);
+    const a = document.createElement('span');
+    a.className = 'act';
+    a.textContent = 'Rename them first';
+    a.addEventListener('click', () => { $('rename-root').value = v; store('rename-root', v); show('rename'); checkField('rename-root'); });
+    span.after(a);
   } else {
-    badge.className = 'fail';
-    label.textContent = 'ExifTool not found';
-    appendLog('error', 'ExifTool not found — run Start.bat (it downloads ExifTool) or install it from exiftool.org.');
+    setHint(id, 'ok', 'check', text);
   }
 }
 
-// ── SSE ────────────────────────────────────────────────────────────────────
-function connectSSE() {
-  if (state.es) state.es.close();
-  state.es = new EventSource('/api/stream?t=' + encodeURIComponent(TOKEN));
-  state.es.onopen = () => setConn(true);
-  state.es.onmessage = (e) => { try { handleEvent(JSON.parse(e.data)); } catch (err) { console.error(err); } };
-  state.es.onerror = () => { setConn(false); state.es.close(); setTimeout(connectSSE, 2000); };
-}
-
-function setConn(live) {
-  $('conn-badge').className = 'conn-badge ' + (live ? 'live' : 'reconnecting');
-  $('conn-label').textContent = live ? 'Live' : 'Reconnecting…';
-}
-
-function handleEvent(ev) {
-  switch (ev.type) {
-    case 'hello':            onHello(ev); break;
-    case 'reset':            resetOutput(); break;
-    case 'started':          onStarted(ev.kind); break;
-    case 'log':              appendLog(ev.level, ev.text); break;
-    case 'progress':         updateProgress(ev); break;
-    case 'stats':            updateStats(ev.stats); break;
-    case 'phase':            if (ev.phase === 'scanning') $('prog-label').textContent = 'Scanning folders…'; break;
-    case 'paused':           state.paused = ev.paused; setRunning(state.running); break;
-    case 'done':             onDone(ev); break;
-    case 'scan_start':       $('scan-overlay').classList.add('open'); $('scan-sub').textContent = 'Analysing files…'; break;
-    case 'scan_progress':    $('scan-sub').textContent = `${ev.current.toLocaleString()} / ${ev.total.toLocaleString()} files`; break;
-    case 'scan_done':        $('scan-overlay').classList.remove('open'); $('dup-modal').classList.remove('open'); break;
-    case 'duplicates_found': onDuplicatesFound(ev); break;
+async function browse(id) {
+  const titles = { src: 'Choose the source folder', dst: 'Choose the output folder', root: 'Choose the drive folder', a: 'Choose a folder to scan', b: 'Choose a folder to compare' };
+  const d = await api('/api/browse', { title: titles[id.split('-')[1]] || 'Choose a folder' }).catch(() => ({}));
+  if (d.path) {
+    $(id).value = d.path;
+    store(id, d.path);
+    checkField(id);
+  } else if (d.error) {
+    toast('The folder picker isn\'t available. Paste the path instead.', 'err');
   }
 }
 
-function onHello(ev) {
-  // Fresh connection: the server replays the log after this, so start clean.
-  clearLog(true);
-  state.paused = ev.paused;
-  if (ev.running) {
-    onStarted(ev.kind, true);
-    if (ev.stats) updateStats(ev.stats);
-  } else {
-    state.running = false;
-    setRunning(false);
-    if (ev.last && ev.last.kind) showDone(ev.last);
-  }
+// ── Running ─────────────────────────────────────────────────────────────────
+function confirmDialog(title, text, yes) {
+  return new Promise((resolve) => {
+    $('confirm-title').textContent = title;
+    $('confirm-text').textContent = text;
+    $('confirm-yes').textContent = yes || 'Continue';
+    state.confirmResolve = resolve;
+    openLayer('confirm-modal');
+    $('confirm-yes').focus();
+  });
+}
+function resolveConfirm(v) {
+  const r = state.confirmResolve;
+  state.confirmResolve = null;
+  $('confirm-modal').classList.remove('open');
+  $('overlay').classList.remove('open');
+  if (r) r(v);
 }
 
-function onStarted(kind, quiet) {
-  state.running = true;
-  state.runningTool = kind;
-  document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('running', b.dataset.tool === kind));
-  if (!quiet) { renderCards(kind); }
-  else if ($('stats-row').dataset.tool !== kind) renderCards(kind);
-  $('done-banner').classList.remove('show');
-  $('prog-label').textContent = 'Working…';
-  setRunning(true);
+async function start(tool) {
+  if (state.running) { toast('Something is already running.', 'err'); return; }
+  const t = TOOLS[tool];
+  const body = t.body();
+  const err = t.validate(body);
+  if (err) { toast(err, 'err'); return; }
+  const apply = runMode(tool) === 'apply';
+  if (apply && t.confirm && !(await confirmDialog(t.confirm[0], t.confirm[1], 'Yes, go ahead'))) return;
+  body.tool = tool;
+  body.dry_run = !apply;
+  t.fields.forEach(id => remember(id, val(id)));
+  const btn = document.querySelector(`[data-runbox="${tool}"] .run-btn`);
+  btn.disabled = true;
+  const d = await api('/api/run', body).catch(() => ({ error: 'Can\'t reach the app. Is its window still open?' }));
+  btn.disabled = state.running;
+  if (d.error) toast(d.error, 'err');
 }
 
-// ── Log ────────────────────────────────────────────────────────────────────
-function appendLog(level, text) {
-  const log = $('log');
-  const empty = log.querySelector('.log-empty');
-  if (empty) empty.remove();
-  const div = document.createElement('div');
-  div.className = `log-line log-${level}`;
-  div.textContent = text;
-  log.appendChild(div);
-  while (log.childElementCount > MAX_LOG_LINES) log.firstElementChild.remove();
-  if (state.autoScroll) log.scrollTop = log.scrollHeight;
-}
-
-function clearLog(silent) {
-  $('log').innerHTML = silent ? '' : '<div class="log-line log-empty">Log cleared.</div>';
-  state.autoScroll = true;
-}
-
-function toggleProblems() {
-  const on = $('log').classList.toggle('problems-only');
-  $('btn-problems').classList.toggle('on', on);
-}
-
-async function copyLog() {
-  const text = Array.from($('log').querySelectorAll('.log-line')).map(el => el.textContent).join('\n');
-  try { await navigator.clipboard.writeText(text); toast('Log copied.', 'success'); }
-  catch (e) { toast('Clipboard not available.', 'error'); }
-}
-
-// ── Progress ───────────────────────────────────────────────────────────────
-function updateProgress(ev) {
-  if (!state.running) return;      // stale replay after a finished run
-  const pct = ev.total > 0 ? Math.floor(ev.current / ev.total * 100) : 0;
-  const fill = $('prog-fill');
-  fill.style.width = pct + '%';
-  fill.className = 'progress-fill active';
-  $('top-bar').style.width = pct + '%';
-  $('prog-label').textContent = (state.paused ? 'Paused at ' : 'Working: ') +
-    `${ev.current.toLocaleString()} of ${ev.total.toLocaleString()}`;
-  $('prog-pct').textContent = pct + '%';
-  $('prog-file').textContent = ev.file ? shortPath(ev.file) : '';
-  $('prog-speed').textContent = ev.fps > 0.05 ? `${ev.fps.toFixed(1)} files/s` : '';
-  $('prog-eta').textContent = ev.fps > 0.05 && ev.total > ev.current ? 'ETA ' + fmtEta((ev.total - ev.current) / ev.fps) : '';
-}
-
-function fmtEta(secs) {
-  if (secs < 60) return `${Math.ceil(secs)}s`;
-  if (secs < 3600) return `${Math.floor(secs / 60)}m ${Math.ceil(secs % 60)}s`;
-  return `${Math.floor(secs / 3600)}h ${Math.floor((secs % 3600) / 60)}m`;
-}
-
-function shortPath(p) {
-  const parts = p.replace(/\\/g, '/').split('/');
-  return parts.length > 2 ? '…/' + parts.slice(-2).join('/') : p;
-}
-
-function resetOutput() {
-  clearLog(true);
-  const fill = $('prog-fill');
-  fill.style.width = '0%';
-  fill.className = 'progress-fill';
-  $('top-bar').style.width = '0%';
-  ['prog-pct', 'prog-file', 'prog-speed', 'prog-eta'].forEach(id => $(id).textContent = '');
-  $('prog-label').textContent = 'Starting…';
-  $('done-banner').classList.remove('show');
-  state.stats = null;
-  document.querySelectorAll('[data-card]').forEach(el => { el.textContent = '0'; el.dataset.v = 0; });
-}
-
-// ── Done ───────────────────────────────────────────────────────────────────
-function onDone(ev) {
-  state.running = false;
-  state.paused = false;
-  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('running'));
-  setRunning(false);
-  $('prog-eta').textContent = '';
-  $('prog-speed').textContent = '';
-  $('prog-file').textContent = '';
-  const fill = $('prog-fill');
-  if (ev.ok) {
-    fill.style.width = '100%';
-    fill.className = 'progress-fill done';
-    $('top-bar').style.width = '100%';
-    $('prog-pct').textContent = '100%';
-    toast('Finished!', 'success');
-  } else {
-    fill.className = 'progress-fill';
-    toast(ev.stopped ? 'Stopped.' : 'Finished with errors — check the log.', 'error');
-  }
-  showDone(ev);
-}
-
-function showDone(ev) {
-  $('prog-label').textContent = ev.ok ? 'Done ✔' : (ev.stopped ? 'Stopped — run again to continue' : 'Stopped or failed — check the log');
-  const banner = $('done-banner');
-  banner.classList.toggle('bad', !ev.ok);
-  $('done-text').textContent = ev.report ? 'Report saved:' : (ev.ok ? 'Done.' : '');
-  ['btn-report-csv', 'btn-report-json', 'btn-report-open'].forEach(id => $(id).style.display = ev.report ? '' : 'none');
-  banner.classList.toggle('show', !!(ev.report || !ev.ok));
-}
-
-function download(fmt) {
-  // A link can't send headers, so the token goes in the query string.
-  const a = document.createElement('a');
-  a.href = `/api/report?fmt=${fmt}&t=${encodeURIComponent(TOKEN)}`;
-  a.click();
-}
-
-// ── Start / Stop / Pause ───────────────────────────────────────────────────
-async function start() {
-  if (state.running) return;
-  const tool = TOOLS[state.tool];
-  const body = tool.body();
-  const err = tool.validate(body);
-  if (err) { toast(err, 'error'); return; }
-  if (state.tool === 'fixdrive' && !body.dry_run &&
-      !confirm('Fix Missing Dates edits files on the drive in place.\n\nFiles that already have a date are never changed. Continue?')) return;
-  if (state.tool === 'rename' && !body.dry_run &&
-      !confirm('Rename (and merge) folders on the drive now?')) return;
-  body.tool = state.tool;
-  $('btn-start').disabled = true;
-  const d = await api('/api/run', body).catch(() => ({ error: 'Could not reach the server — is the window still open?' }));
-  if (d.error) { toast(d.error, 'error'); setRunning(state.running); }
+function applyForReal() {
+  const kind = state.last && state.last.kind;
+  if (!kind || !TOOLS[kind]) return;
+  show(kind);
+  const r = $(`${kind}-runmode-apply`);
+  if (r) { r.checked = true; store(r.name, 'apply'); updateRunBox(kind); }
+  start(kind);
 }
 
 async function stop() {
   await api('/api/stop', {});
-  toast('Stopping — finishing files in progress…', 'error');
-}
-
-async function togglePause() {
-  await api(state.paused ? '/api/resume' : '/api/pause', {});
+  toast('Stopping. Files in progress will finish first.');
 }
 
 function setRunning(running) {
-  $('btn-start').disabled = running;
+  state.running = running;
+  document.querySelectorAll('.run-btn').forEach(b => { b.disabled = running; });
   $('btn-stop').disabled = !running;
   $('btn-pause').disabled = !running;
-  $('btn-pause').textContent = state.paused ? '▶ Resume' : '⏸ Pause';
+  $('btn-pause').querySelector('span').textContent = state.paused ? 'Resume' : 'Pause';
+  $('btn-pause').querySelector('use').setAttribute('href', state.paused ? '#i-play' : '#i-pause');
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('running', running && b.dataset.view === state.runKind));
+  setStatus(running ? (state.paused ? 'paused' : 'running') : null);
+  updateChip();
 }
 
-// ── Folders ────────────────────────────────────────────────────────────────
-async function browse(field) {
-  const label = field.split('-')[1];
-  const titles = { src: 'Select the source folder', dst: 'Select the output folder', root: 'Select the drive folder',
-                   a: 'Select a folder to scan', b: 'Select a second folder' };
-  const d = await api('/api/browse', { title: titles[label] || 'Select folder' }).catch(() => ({}));
-  if (d.path) {
-    $(field).value = d.path;
-    store(field, d.path);
-    $(field).dispatchEvent(new Event('change'));
-  } else if (d.error) {
-    toast('Folder dialog unavailable — paste the path instead.', 'error');
+function setStatus(kind) {
+  const labels = { running: state.dry ? 'Previewing' : 'Running', paused: 'Paused', done: state.last && state.last.dry_run ? 'Preview ready' : 'Done', failed: 'Stopped', idle: 'Idle' };
+  kind = kind || (state.last ? (state.last.ok ? 'done' : 'failed') : 'idle');
+  $('status-pill').className = 'status-pill ' + (kind === 'idle' ? '' : kind);
+  $('status-text').textContent = labels[kind];
+  $('act-title').textContent = state.runKind && (state.running || state.last) ? TOOL_NAMES[state.runKind] : 'Activity';
+}
+
+function updateChip() {
+  const chip = $('run-chip');
+  const on = state.running && state.view !== state.runKind;
+  chip.classList.toggle('show', on);
+  if (on) $('run-chip-text').textContent = `${state.paused ? 'Paused' : (state.dry ? 'Previewing' : 'Running')}: ${TOOL_NAMES[state.runKind]}` + ($('prog-pct').textContent ? ` · ${$('prog-pct').textContent}` : '');
+}
+
+function tickElapsed() {
+  $('elapsed').textContent = state.running && state.started ? dur(Date.now() / 1000 - state.started) : '';
+}
+
+// ── Live updates (SSE) ──────────────────────────────────────────────────────
+function connect() {
+  if (state.es) state.es.close();
+  state.es = new EventSource('/api/stream?t=' + encodeURIComponent(TOKEN));
+  state.es.onopen = () => setConn(true);
+  state.es.onmessage = (e) => { try { onEvent(JSON.parse(e.data)); } catch (err) { console.error(err); } };
+  state.es.onerror = () => { setConn(false); state.es.close(); setTimeout(connect, 2000); };
+}
+
+function setConn(ok) {
+  const line = $('sys-conn');
+  line.querySelector('.dot').className = 'dot ' + (ok ? 'ok' : 'warn');
+  line.lastElementChild.textContent = ok ? 'Connected' : 'Reconnecting…';
+}
+
+function onEvent(ev) {
+  switch (ev.type) {
+    case 'hello': onHello(ev); break;
+    case 'reset': resetActivity(); break;
+    case 'started': onStarted(ev.kind, ev.dry_run, false); break;
+    case 'log': addLog(ev.level, ev.text); break;
+    case 'progress': onProgress(ev); break;
+    case 'stats': state.stats = ev.stats; renderMetrics(); break;
+    case 'phase': if (ev.phase === 'scanning' && state.running) { $('prog-label').textContent = 'Looking through folders…'; $('bar').className = 'bar indeterminate'; } break;
+    case 'paused': state.paused = ev.paused; setRunning(state.running); break;
+    case 'done': onDone(ev); break;
+    case 'scan_start': openLayer('scan-modal'); break;
+    case 'scan_progress': $('scan-sub').textContent = `Comparing file contents: ${fmt(ev.current)} of ${fmt(ev.total)}`; break;
+    case 'scan_done': if ($('scan-modal').classList.contains('open') || $('dup-modal').classList.contains('open')) closeLayers(true); break;
+    case 'duplicates_found': onDuplicates(ev); break;
   }
 }
 
-async function preflight(tool) {
-  const src = $(tool + '-src').value.trim(), dst = $(tool + '-dst').value.trim();
-  const el = $(tool + '-pre');
-  if (!src) { el.textContent = ''; return; }
-  el.textContent = 'Counting files…';
-  const d = await api('/api/preflight', { src, dst }).catch(() => ({}));
-  if (d.count === undefined) { el.textContent = 'Source folder not found.'; return; }
-  let t = `${d.count.toLocaleString()} photos/videos · ${d.size_h}`;
-  if (d.free_h) t += ` · ${d.free_h} free at output` + (d.free < d.size ? ' ⚠ may not fit' : '');
-  el.textContent = t;
+function onHello(ev) {
+  $('log').innerHTML = '';
+  state.paused = ev.paused;
+  state.last = ev.last && ev.last.kind ? ev.last : null;
+  renderHistory(ev.history);
+  if (ev.running) {
+    state.started = ev.started;
+    onStarted(ev.kind, ev.dry_run, true);
+    if (ev.stats) { state.stats = ev.stats; renderMetrics(); }
+  } else {
+    state.runKind = state.last ? state.last.kind : '';
+    setRunning(false);
+    if (state.last) { state.stats = state.last.stats; state.statsKind = state.last.kind; showResult(state.last); renderMetrics(); }
+  }
 }
 
-async function openFolder(path) {
-  if (!path) { toast('No folder set.', 'error'); return; }
-  const d = await api('/api/open', { path });
-  if (d.error) toast(d.error, 'error');
+function onStarted(kind, dry, resumed) {
+  state.runKind = kind;
+  state.statsKind = kind;
+  state.dry = !!dry;
+  if (!resumed) state.started = Date.now() / 1000;
+  $('act-empty').hidden = true;
+  $('result').hidden = true;
+  $('progress').hidden = false;
+  $('bar').className = 'bar indeterminate';
+  $('prog-label').textContent = 'Starting…';
+  setRunning(true);
+  if (!resumed && TOOLS[kind] && state.view !== kind) show(kind);
+  renderMetrics();
 }
 
-// ── Duplicate review ───────────────────────────────────────────────────────
-function onDuplicatesFound(ev) {
-  $('scan-overlay').classList.remove('open');
-  document.querySelectorAll('[data-decide]').forEach(b => b.disabled = false);
-  $('dup-title').textContent = `${ev.count.toLocaleString()} duplicate file${ev.count !== 1 ? 's' : ''} found`;
-  $('dup-sub').textContent = `${ev.groups.toLocaleString()} group(s) of identical files` +
-    (ev.matches.length < ev.count ? ` — showing the first ${ev.matches.length.toLocaleString()}` : '');
-  const tbody = $('dup-tbody');
-  tbody.innerHTML = '';
+function resetActivity() {
+  $('log').innerHTML = '';
+  state.stats = null;
+  state.last = null;
+  ['prog-pct', 'prog-file', 'prog-speed', 'prog-eta'].forEach(id => { $(id).textContent = ''; });
+  $('bar').firstElementChild.style.width = '0';
+  renderMetrics();
+}
+
+function onProgress(ev) {
+  if (!state.running) return;
+  const pct = ev.total ? Math.floor(ev.current / ev.total * 100) : 0;
+  $('bar').className = 'bar';
+  $('bar').firstElementChild.style.width = pct + '%';
+  $('prog-label').textContent = `${state.paused ? 'Paused at' : (state.dry ? 'Previewing' : 'Working on')} ${fmt(ev.current)} of ${fmt(ev.total)}`;
+  $('prog-pct').textContent = pct + '%';
+  $('prog-file').textContent = ev.file || '';
+  $('prog-file').title = ev.file || '';
+  $('prog-speed').textContent = ev.fps > 0.05 ? `${ev.fps.toFixed(1)} files/s` : '';
+  $('prog-eta').textContent = ev.fps > 0.05 && ev.total > ev.current ? `about ${dur((ev.total - ev.current) / ev.fps)} left` : '';
+  updateChip();
+}
+
+function onDone(ev) {
+  state.last = ev;
+  state.paused = false;
+  if (ev.stats) state.stats = ev.stats;
+  setRunning(false);
+  renderMetrics();
+  showResult(ev);
+  api('/api/status').then(s => renderHistory(s.history)).catch(() => {});
+  if (ev.ok) toast(ev.dry_run ? 'Preview ready. Nothing was changed.' : 'Finished.', 'ok');
+  else toast(ev.stopped ? 'Stopped. Run again to continue where you left off.' : 'Finished with problems. Check the log.', 'err');
+}
+
+function showResult(ev) {
+  $('act-empty').hidden = true;
+  $('progress').hidden = false;
+  $('bar').className = 'bar' + (ev.ok ? ' done' : '');
+  if (ev.ok) $('bar').firstElementChild.style.width = '100%';
+  $('prog-label').textContent = ev.ok ? (ev.dry_run ? 'Preview complete' : 'Complete') : (ev.stopped ? 'Stopped' : 'Stopped with errors');
+  ['prog-file', 'prog-speed', 'prog-eta'].forEach(id => { $(id).textContent = ''; });
+  if (ev.ok) $('prog-pct').textContent = '100%';
+  const t = TOOLS[ev.kind];
+  const s = ev.stats || state.stats || {};
+  const bad = (s.errors || 0) + (s.meta_failed || 0);
+  const r = $('result');
+  r.hidden = false;
+  r.className = 'result ' + (!ev.ok ? 'err' : bad ? 'warn' : 'ok');
+  $('result-title').innerHTML = svg(!ev.ok ? 'alert' : ev.dry_run ? 'eye' : 'check') + '<span></span>';
+  $('result-title').lastChild.textContent = !ev.ok ? (ev.stopped ? 'Stopped. Press start again to continue.' : 'Something went wrong. See the log.')
+    : ev.dry_run ? 'Preview: nothing was changed' : 'All done';
+  $('result-text').textContent = t ? t.summary(s, ev.dry_run) : '';
+  $('btn-apply').hidden = !(ev.ok && ev.dry_run && t && !t.noPreview);
+  $('btn-apply').querySelector('span').textContent = t && t.applyLabel ? t.applyLabel : 'Apply for real';
+  $('btn-csv').hidden = $('btn-json').hidden = !ev.report;
+  $('btn-open-out').hidden = !ev.output;
+  setStatus(null);
+}
+
+// ── Metrics ─────────────────────────────────────────────────────────────────
+function renderMetrics() {
+  const kind = state.statsKind;
+  const box = $('metrics');
+  if (!kind || !TOOLS[kind] || !state.stats) { box.hidden = true; box.innerHTML = ''; return; }
+  box.hidden = false;
+  box.innerHTML = '';
+  TOOLS[kind].metrics.forEach(m => {
+    const v = m.v(state.stats);
+    if (m.optional && !v) return;
+    const b = document.createElement('button');
+    b.className = 'metric' + (v ? (m.tone ? ' tone-' + m.tone : '') : ' zero');
+    if (m.tip) b.dataset.tip = m.tip;
+    b.innerHTML = '<div class="v"></div><div class="l"></div>';
+    b.firstChild.textContent = m.fmt ? m.fmt(v) : fmt(v);
+    b.lastChild.textContent = m.label;
+    b.addEventListener('click', () => openDrawer(m.label, m.st));
+    box.appendChild(b);
+  });
+}
+
+// ── Log ─────────────────────────────────────────────────────────────────────
+function addLog(level, text) {
+  const log = $('log');
+  const div = document.createElement('div');
+  div.className = 'll ' + level;
+  div.textContent = text;
+  const q = $('log-search').value.trim().toLowerCase();
+  if (q && !text.toLowerCase().includes(q)) div.classList.add('hide');
+  log.appendChild(div);
+  while (log.childElementCount > MAX_LOG) log.firstElementChild.remove();
+  if (state.autoScroll) log.scrollTop = log.scrollHeight;
+  $('act-empty').hidden = true;
+}
+function filterLog() {
+  const q = $('log-search').value.trim().toLowerCase();
+  $('log').querySelectorAll('.ll').forEach(l => l.classList.toggle('hide', !!q && !l.textContent.toLowerCase().includes(q)));
+}
+async function copyLog() {
+  const text = [...$('log').querySelectorAll('.ll')].map(l => l.textContent).join('\n');
+  try { await navigator.clipboard.writeText(text); toast('Log copied.', 'ok'); } catch (e) { toast('Clipboard isn\'t available.', 'err'); }
+}
+
+// ── Duplicate review ────────────────────────────────────────────────────────
+function onDuplicates(ev) {
+  $('dup-title').textContent = `${plural(ev.count, 'identical copy', 'identical copies')} found`;
+  $('dup-sub').textContent = `In ${plural(ev.groups, 'group')}. Skip the copies to process each photo once, or keep them all.` +
+    (ev.matches.length < ev.count ? ` Showing the first ${fmt(ev.matches.length)}.` : '');
+  const tb = $('dup-rows');
+  tb.innerHTML = '';
   ev.matches.forEach(m => {
     const tr = document.createElement('tr');
-    [m.a, m.b, m.size].forEach(v => {
-      const td = document.createElement('td');
-      td.textContent = v;
-      td.title = v;
-      tr.appendChild(td);
-    });
-    tbody.appendChild(tr);
+    [m.a, m.b, m.size].forEach((v, i) => { const td = document.createElement('td'); td.title = v; setCell(td, v, i < 2 ? 'path' : 'nowrap'); tr.appendChild(td); });
+    tb.appendChild(tr);
   });
-  $('dup-modal').classList.add('open');
+  document.querySelectorAll('[data-decide]').forEach(b => { b.disabled = false; });
+  openLayer('dup-modal');
 }
-
-async function decideDupes(action) {
-  document.querySelectorAll('[data-decide]').forEach(b => b.disabled = true);
-  $('dup-modal').classList.remove('open');
-  $('scan-overlay').classList.remove('open');
+async function decide(action) {
+  document.querySelectorAll('[data-decide]').forEach(b => { b.disabled = true; });
+  closeLayers(true);
   await api('/api/decide', { action });
-  if (action === 'cancel') toast('Run cancelled.', 'error');
+  if (action === 'cancel') toast('Run cancelled.');
 }
 
-// ── Records ────────────────────────────────────────────────────────────────
-function showRecords(title, statuses) {
-  $('records-title').textContent = title;
-  $('records-search').value = '';
-  state.records = { statuses, offset: 0, rows: [] };
-  $('records-modal').classList.add('open');
-  loadRecords(true);
+// ── Drawer (per-file results) ───────────────────────────────────────────────
+function openDrawer(title, statuses) {
+  const kind = state.statsKind;
+  state.drawer = { statuses, offset: 0, rows: [] };
+  $('drawer-title').textContent = title;
+  $('drawer-search').value = '';
+  const chips = $('drawer-chips');
+  chips.innerHTML = '';
+  const same = (a, b) => a.join() === b.join();
+  const add = (label, sts) => {
+    const c = document.createElement('button');
+    c.className = 'chip' + (same(sts, statuses) ? ' on' : '');
+    c.textContent = label;
+    c.addEventListener('click', () => {
+      state.drawer.statuses = sts;
+      $('drawer-title').textContent = label;
+      chips.querySelectorAll('.chip').forEach(x => x.classList.remove('on'));
+      c.classList.add('on');
+      loadRows(true);
+    });
+    chips.appendChild(c);
+  };
+  add('All files', []);
+  const seen = new Set();
+  if (kind && TOOLS[kind]) TOOLS[kind].metrics.forEach(m => {
+    if (!m.st.length || seen.has(m.st.join())) return;
+    if (m.v(state.stats || {}) || same(m.st, statuses)) { seen.add(m.st.join()); add(m.label, m.st); }
+  });
+  openLayer('drawer');
+  loadRows(true);
 }
-
-async function loadRecords(reset) {
-  const r = state.records;
-  if (reset) { r.offset = 0; r.rows = []; $('records-tbody').innerHTML = ''; }
-  const q = encodeURIComponent($('records-search').value.trim());
-  const d = await api(`/api/records?status=${r.statuses.join(',')}&offset=${r.offset}&limit=500&q=${q}`).catch(() => ({ records: [] }));
-  const tbody = $('records-tbody');
-  (d.records || []).forEach(rec => {
-    r.rows.push(rec);
-    const [stText, stCls] = STATUS_TEXT[rec.status] || [rec.status, 'st-muted'];
-    const details = [rec.gps && 'GPS ' + rec.gps, rec.source && 'from ' + rec.source, rec.error || rec.note].filter(Boolean).join(' · ');
+async function loadRows(reset) {
+  const d0 = state.drawer;
+  if (reset) { d0.offset = 0; d0.rows = []; $('drawer-rows').innerHTML = ''; }
+  const q = encodeURIComponent($('drawer-search').value.trim());
+  const d = await api(`/api/records?status=${d0.statuses.join(',')}&offset=${d0.offset}&limit=400&q=${q}`).catch(() => ({ records: [] }));
+  const tb = $('drawer-rows');
+  (d.records || []).forEach(r => {
+    d0.rows.push(r);
+    const [label, tone] = STATUS[r.status] || [r.status, ''];
+    const details = [r.gps && 'GPS ' + r.gps, r.source && 'from ' + r.source, r.error || r.note].filter(Boolean).join(' · ');
     const tr = document.createElement('tr');
-    [[rec.file], [rec.dest || '—'], [rec.date || '—'], [stText, stCls], [details || '—']].forEach(([v, cls]) => {
+    [[r.file, 'path'], [r.dest || '—', 'path'], [r.date || '—', 'nowrap'], [label, 'pill'], [details || '—', 'wrap']].forEach(([v, kind]) => {
       const td = document.createElement('td');
-      td.textContent = v;
       td.title = v;
-      if (cls) td.className = cls;
+      if (kind === 'pill') { const p = document.createElement('span'); p.className = 'pill ' + tone; p.textContent = v; td.appendChild(p); td.className = 'nowrap'; }
+      else { setCell(td, v, kind); }
       tr.appendChild(td);
     });
-    tbody.appendChild(tr);
+    tb.appendChild(tr);
   });
-  r.offset += (d.records || []).length;
-  const total = d.total || 0;
-  $('records-empty').style.display = total ? 'none' : '';
-  $('records-count').textContent = total ? `${r.offset.toLocaleString()} of ${total.toLocaleString()} shown` : '';
-  $('records-sub').textContent = d.all ? `${total.toLocaleString()} of ${d.all.toLocaleString()} files` : 'Run a task first';
-  $('btn-records-more').style.display = r.offset < total ? '' : 'none';
+  d0.offset += (d.records || []).length;
+  $('drawer-empty').hidden = !!d.total;
+  $('drawer-count').textContent = d.total ? `Showing ${fmt(d0.offset)} of ${fmt(d.total)}` : '';
+  $('drawer-more').hidden = d0.offset >= (d.total || 0);
+}
+async function copyTsv() {
+  const lines = ['File\tWent to\tDate\tResult\tDetails'];
+  state.drawer.rows.forEach(r => lines.push([r.file, r.dest || '', r.date || '', (STATUS[r.status] || [r.status])[0], r.error || r.note || ''].join('\t')));
+  try { await navigator.clipboard.writeText(lines.join('\n')); toast('Copied. Paste into Excel or Sheets.', 'ok'); } catch (e) { toast('Clipboard isn\'t available.', 'err'); }
 }
 
-async function copyRecordsTsv() {
-  const lines = ['File\tDestination\tDate\tStatus\tDetails'];
-  state.records.rows.forEach(r => lines.push([r.file, r.dest || '', r.date || '', r.status, r.error || r.note || ''].join('\t')));
-  try { await navigator.clipboard.writeText(lines.join('\n')); toast('Copied as tab-separated text.', 'success'); }
-  catch (e) { toast('Clipboard not available.', 'error'); }
+function setCell(td, v, kind) {
+  if (kind) td.className = kind;
+  if (kind === 'path') {                       // show the end of long paths (the file name)
+    const span = document.createElement('span');
+    span.dir = 'ltr';
+    span.style.unicodeBidi = 'isolate';
+    span.textContent = v;
+    td.appendChild(span);
+  } else {
+    td.textContent = v;
+  }
 }
 
-// ── Toast ──────────────────────────────────────────────────────────────────
-function toast(msg, type = 'success') {
+// ── Layers ──────────────────────────────────────────────────────────────────
+function openLayer(id) {
+  ['drawer', 'dup-modal', 'scan-modal'].forEach(x => $(x).classList.remove('open'));
+  $('overlay').classList.add('open');
+  $(id).classList.add('open');
+}
+function closeLayers(force) {
+  if (state.confirmResolve) { resolveConfirm(false); return; }
+  const blocking = $('dup-modal').classList.contains('open') || $('scan-modal').classList.contains('open');
+  if (blocking && force !== true) return;          // duplicate review needs an answer
+  ['drawer', 'dup-modal', 'scan-modal'].forEach(x => $(x).classList.remove('open'));
+  $('overlay').classList.remove('open');
+}
+
+// ── Misc ────────────────────────────────────────────────────────────────────
+async function openFolder(path) {
+  if (!path) { toast('No folder to open.', 'err'); return; }
+  const d = await api('/api/open', { path });
+  if (d.error) toast(d.error, 'err');
+}
+function download(kind) {
+  const a = document.createElement('a');
+  a.href = `/api/report?fmt=${kind}&t=${encodeURIComponent(TOKEN)}`;
+  a.click();
+}
+function toast(msg, tone) {
   const el = document.createElement('div');
-  el.className = `toast ${type}`;
-  const icon = document.createElement('span');
-  icon.textContent = type === 'success' ? '✅' : '⚠️';
-  const text = document.createElement('span');
-  text.textContent = msg;
-  el.append(icon, text);
+  el.className = 'toast';
+  el.innerHTML = svg(tone === 'err' ? 'alert' : tone === 'ok' ? 'check' : 'info') + '<span></span>';
+  el.lastChild.textContent = msg;
   $('toasts').appendChild(el);
   setTimeout(() => el.remove(), 4500);
 }

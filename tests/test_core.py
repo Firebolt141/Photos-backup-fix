@@ -335,7 +335,8 @@ class TestProcessor:
         sidecar(y / 'IMG_0001.JPG.supplemental-metadata.json', 1562236200, 48.85, 2.35,
                 description='Paris', people=[{'name': 'Ann'}], favorited=True)
         jpeg(root / 'Takeout/Google Photos/Trip/IMG_0001.JPG', b'1')        # album copy
-        sidecar(root / 'Takeout/Google Photos/Trip/IMG_0001.JPG.json', 1562236200)
+        sidecar(root / 'Takeout/Google Photos/Trip/IMG_0001.JPG.json', 1562236200, 48.85, 2.35,
+                description='Paris', people=[{'name': 'Ann'}], favorited=True)   # albums repeat the sidecar
         jpeg(y / 'IMG_20190203_101112.jpg', b'2')                           # filename date
         jpeg(y / 'undated.jpg', b'3')
         jpeg(y / 'camera.jpg', b'4')
@@ -465,3 +466,37 @@ def test_year_folder_as_root(tmp_path):
     job = DriveFixer(str(tmp_path / '2014'))
     assert job.run() and job.stats.fixed == 1
     assert read_tags(a, 'DateTimeOriginal')['DateTimeOriginal'] == '2014:01:02 12:00:00'
+
+
+# ── New options ───────────────────────────────────────────────────────────────
+
+@needs_exiftool
+def test_date_range_kinds_and_rename_to_date(tmp_path):
+    src = tmp_path / 'src'
+    jpeg(src / 'IMG_20190101_080000.jpg', b'a')
+    jpeg(src / 'IMG_20200615_093000.jpg', b'b')
+    jpeg(src / 'IMG_20210101_100000.jpg', b'c')
+    jpeg(src / 'nodate.jpg', b'd')
+    (src / 'VID_20200615_120000.avi').write_bytes(b'RIFF')
+    opts = ProcessOptions(use_sidecars=False, filename_tz='utc', kinds='photos',
+                          date_from='2020-01-01', date_to='2020-12-31', rename_to_date=True)
+    job = Processor(str(src), str(tmp_path / 'out'), options=opts)
+    assert job.run()
+    assert job.stats.total == 4                      # the .avi was excluded up front
+    assert job.stats.filtered == 3                   # 2019, 2021 and the undated file
+    assert (tmp_path / 'out/2020/June/June_15/2020-06-15_09-30-00.jpg').exists()
+    assert not (tmp_path / 'out/no-date').exists()
+    again = Processor(str(src), str(tmp_path / 'out'), options=opts)
+    assert again.run() and again.stats.skipped == 1
+
+
+@needs_exiftool
+def test_drive_fixer_corrects_mismatched_dates(tmp_path):
+    c = jpeg(tmp_path / '2021/March/March_11/c.jpg', b'c')
+    subprocess.run(['exiftool', '-q', '-overwrite_original', '-DateTimeOriginal=2019:01:01 07:15:00', str(c)],
+                   check=True)
+    job = DriveFixer(str(tmp_path), fix_mismatched=True)
+    assert job.run()
+    assert (job.stats.mismatched, job.stats.corrected) == (1, 1)
+    assert read_tags(c, 'DateTimeOriginal')['DateTimeOriginal'] == '2021:03:11 07:15:00'
+    assert DriveFixer(str(tmp_path)).run()

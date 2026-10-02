@@ -34,8 +34,8 @@ from flask import Flask, Response, abort, jsonify, render_template, request, sen
 
 from core import (
     _SYS, OUTPUT_MODES, DriveFixer, DuplicateFinder, FolderRenamer, Job,
-    ProcessOptions, Processor, _check_exiftool, _fmt_size, _norm_key, find_duplicate_groups,
-    find_exiftool, iter_media,
+    ProcessOptions, Processor, _check_exiftool, _fmt_size, _norm_key, collect_dated_files,
+    find_duplicate_groups, find_exiftool, iter_media, plan_folder_renames,
 )
 
 app = Flask(__name__)
@@ -115,6 +115,7 @@ class Runner:
         self.running = False
         self.started = 0.0
         self.last: dict = {}                 # kind, ok, report, output of the last finished job
+        self.history: list = []              # recent runs this session (newest first)
         self.decision = threading.Event()
         self.decision_value: Optional[str] = None
         self.cancelled = threading.Event()
@@ -129,7 +130,15 @@ class Runner:
             'awaiting_decision': self.awaiting_decision,
             'stats': asdict(job.stats) if job else None,
             'last': self.last,
+            'history': self.history[:10],
+            'started': self.started if self.running else 0,
+            'dry_run': bool(job and _is_dry(job)),
         }
+
+
+def _is_dry(job) -> bool:
+    opts = getattr(job, 'opts', None)
+    return bool(getattr(opts, 'dry_run', False) or getattr(job, 'dry_run', False))
 
 
 runner = Runner()
@@ -148,6 +157,14 @@ def _callbacks() -> dict:
 def _bool(d: dict, k: str, default: bool) -> bool:
     v = d.get(k, default)
     return v if isinstance(v, bool) else str(v).lower() in ('1', 'true', 'yes', 'on')
+
+
+def _valid_day(v: str) -> bool:
+    try:
+        time.strptime(v, '%Y-%m-%d')
+        return True
+    except ValueError:
+        return False
 
 
 def _workers(d: dict) -> int:
@@ -180,7 +197,17 @@ def _build_job(tool: str, d: dict):
             set_file_times=_bool(d, 'set_file_times', True),
             filename_tz='utc' if d.get('filename_tz') == 'utc' else 'local',
             dry_run=_bool(d, 'dry_run', False),
+            kinds=d.get('kinds') if d.get('kinds') in ('photos', 'videos') else 'all',
+            date_from=str(d.get('date_from') or ''),
+            date_to=str(d.get('date_to') or ''),
+            rename_to_date=_bool(d, 'rename_to_date', False),
         )
+        for k in ('date_from', 'date_to'):
+            v = getattr(opts, k)
+            if v and not _valid_day(v):
+                return None, f'Invalid date: {v} (use YYYY-MM-DD).', {}
+        if opts.date_from and opts.date_to and opts.date_from > opts.date_to:
+            return None, 'The start date is after the end date.', {}
         job = Processor(src, dst, options=opts, workers=_workers(d), **cb)
         return job, '', {'output': dst, 'check_dupes': tool == 'takeout' and _bool(d, 'check_dupes', False)}
     if tool in ('fixdrive', 'rename'):
@@ -191,6 +218,7 @@ def _build_job(tool: str, d: dict):
             job = DriveFixer(root, dry_run=_bool(d, 'dry_run', False),
                              set_file_times=_bool(d, 'set_file_times', True),
                              filename_tz='utc' if d.get('filename_tz') == 'utc' else 'local',
+                             fix_mismatched=_bool(d, 'fix_mismatched', False),
                              workers=_workers(d), **cb)
         else:
             job = FolderRenamer(root, dry_run=_bool(d, 'dry_run', False), **cb)
@@ -259,6 +287,7 @@ def _rel(p: Path, root: Path) -> str:
 
 def _start(tool: str, d: dict):
     job, err, extra = _build_job(tool, d)
+    params = {k: v for k, v in d.items() if k != 'tool'}
     if err:
         return jsonify({'error': err}), 400
     with runner.lock:
@@ -271,7 +300,7 @@ def _start(tool: str, d: dict):
         runner.cancelled.clear()
 
     hub.publish({'type': 'reset'})
-    hub.publish({'type': 'started', 'kind': tool})
+    hub.publish({'type': 'started', 'kind': tool, 'dry_run': _is_dry(job)})
     print(f'\n  [START] {tool}', flush=True)
 
     def worker():
@@ -292,7 +321,11 @@ def _start(tool: str, d: dict):
         finally:
             report = str(job.report_path) if job.report_path else ''
             runner.last = {'kind': tool, 'ok': ok, 'report': report,
-                           'output': extra.get('output', ''), 'stopped': job.stopped or runner.cancelled.is_set()}
+                           'output': extra.get('output', ''), 'stopped': job.stopped or runner.cancelled.is_set(),
+                           'dry_run': _is_dry(job), 'stats': asdict(job.stats),
+                           'started': runner.started, 'finished': time.time(), 'params': params}
+            runner.history.insert(0, runner.last)
+            del runner.history[20:]
             with runner.lock:
                 runner.running = False
             hub.publish({'type': 'done', **runner.last})
@@ -335,7 +368,8 @@ def index():
 def api_exiftool():
     ver = _check_exiftool()
     return jsonify({'ok': bool(ver), 'version': ver or '', 'path': find_exiftool() or '',
-                    'cpus': os.cpu_count() or 1})
+                    'cpus': os.cpu_count() or 1, 'workers': Job().workers,
+                    'python': sys.version.split()[0], 'platform': _SYS})
 
 
 @app.route('/api/browse', methods=['POST'])
@@ -371,9 +405,13 @@ def api_preflight():
                 size += p.stat().st_size
             except OSError:
                 pass
-        out.update(count=len(files), size=size, size_h=_fmt_size(size))
+        sidecars = 0
+        for _dp, _dn, fns in os.walk(src):
+            sidecars += sum(1 for f in fns if f.lower().endswith('.json'))
+        out.update(count=len(files), size=size, size_h=_fmt_size(size), sidecars=sidecars)
     dst = (d.get('dst') or '').strip()
     if dst:
+        out['exists'] = Path(dst).is_dir()
         probe = Path(dst)
         while not probe.exists() and probe.parent != probe:
             probe = probe.parent
@@ -383,6 +421,23 @@ def api_preflight():
         except OSError:
             pass
     return jsonify(out)
+
+
+@app.route('/api/inspect', methods=['POST'])
+def api_inspect():
+    """Look at a backup drive: dated folders found, old-style folders to rename."""
+    root = Path(((request.get_json(silent=True) or {}).get('root') or '').strip())
+    if not str(root) or not root.is_dir():
+        return jsonify({'ok': False, 'error': 'Folder not found.'})
+    try:
+        items, notes = collect_dated_files(root)
+        renames = plan_folder_renames(root)
+    except OSError as e:
+        return jsonify({'ok': False, 'error': str(e)})
+    years = sorted({d.year for _, d in items})
+    return jsonify({'ok': True, 'files': len(items), 'years': years,
+                    'renames': len(renames), 'skipped_folders': len(notes),
+                    'examples': [f'{p.relative_to(root)} → {n}' for p, n in renames[:3]]})
 
 
 @app.route('/api/decide', methods=['POST'])

@@ -29,7 +29,7 @@ Photos-backup-fix/
 | `core.py` | All processing logic, stdlib only. `Job` base class + `Processor` (Takeout / sort-by-filename), `DriveFixer`, `FolderRenamer`, `DuplicateFinder`; `ExifTool` (stay_open wrapper), `SidecarIndex`, `Manifest`, date helpers |
 | `web_app.py` | Flask routes, `Hub` (SSE fan-out + replay), `Runner` (one job at a time), security guard, folder picker |
 | `cli.py` | argparse CLI over the same jobs (`takeout`, `sort`, `fix-dates`, `rename`, `dupes`) |
-| `templates/index.html` | Browser UI — tool sidebar, per-tool forms, `TOOLS` table drives stat cards; no build step |
+| `templates/index.html` | Browser UI, no build step. Light theme = ivory/slate/clay, dark = `#151515` + dot grid; colours are CSS tokens on `:root[data-theme]`. Overview page + one `section.view` per tool; the shared `#activity` panel is moved into the active tool's `.activity-slot`. The JS `TOOLS` table drives request bodies, validation, stat tiles and result summaries |
 | `tests/` | pytest suite (`python -m pytest tests/`); ExifTool/ffmpeg tests auto-skip when missing |
 | `app.py` | Legacy tkinter UI (Takeout only) — must keep importing from `core.py` |
 
@@ -38,6 +38,7 @@ Photos-backup-fix/
 - Every tool is a `core.Job`: callbacks `on_log/on_progress/on_stats/on_done/on_file_result/on_event`, `stop()/pause()/resume()`, `_run_parallel()` worker pool, and `self.records` (`FileRecord`) + `self.report_path`
 - Each worker thread gets its own `exiftool -stay_open` process via `ExifToolPool`. Commands are fenced with `-echo4 {readyN}` / `-execute{N}`; a timeout kills and restarts the process
 - Web flow: `POST /api/run {tool, …}` → `Runner` thread → job callbacks → `hub.publish()` → `/api/stream` SSE to every tab. New tabs get the recent log + latest progress/stats replayed. Records are fetched on demand via `/api/records` (not streamed)
+- Other endpoints: `/api/preflight` (count/size/sidecars/free space), `/api/inspect` (dated files + old-style folders on a drive), `/api/records` (paged results), `/api/report?fmt=csv|json`, `/api/status` (includes `history` of recent runs)
 - Takeout + "Review duplicates" pauses in `_dup_review()` until `/api/decide` (`skip_dupes`, `keep_all`, or anything else = cancel)
 - Security: 127.0.0.1 only, `Host` header must be localhost:<port>, every `/api/*` needs the per-launch `TOKEN` (`X-Token` header, or `?t=` for SSE/downloads), POSTs must be JSON
 
