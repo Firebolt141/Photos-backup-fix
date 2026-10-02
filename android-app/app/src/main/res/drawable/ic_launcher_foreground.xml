@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- Placeholder — actual launcher icon is the GSD bitmap in each mipmap-*/ic_launcher_foreground.png -->
-<shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="rectangle">
-    <solid android:color="@color/ic_launcher_background" />
-</shape>
