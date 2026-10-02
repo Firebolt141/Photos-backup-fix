@@ -46,4 +46,10 @@ interface QueueDao {
 
     @Query("DELETE FROM queue WHERE status = 'COPIED'")
     suspend fun clearCopied()
+
+    @Query("DELETE FROM queue WHERE status IN ('PENDING', 'FAILED')")
+    suspend fun deleteUnfinished()
+
+    @Query("UPDATE queue SET status = 'PENDING', errorMsg = NULL")
+    suspend fun resetAll()
 }

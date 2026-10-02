@@ -1,25 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Media read permissions (tiered by Android version) -->
+    <!-- Media read permissions (READ_MEDIA_* are only requested on Android 13+) -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"
-        android:minSdkVersion="33" />
-    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"
-        android:minSdkVersion="33" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <!-- Android 14+: lets people share only some photos ("Select photos") -->
+    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
 
     <!-- Foreground service for copy operations -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"
-        android:minSdkVersion="34" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <!-- Keep CPU alive during large copies -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <!-- Progress notifications -->
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"
-        android:minSdkVersion="33" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:name=".UbertragApp"
@@ -40,17 +38,15 @@
             </intent-filter>
         </activity>
 
-        <!-- Background scan worker (declared for WorkManager) -->
-        <provider
-            android:name="androidx.work.impl.WorkManagerInitializer"
-            android:authorities="${applicationId}.workmanager-init"
-            android:exported="false"
-            tools:node="remove"
-            xmlns:tools="http://schemas.android.com/tools" />
-
         <!-- Foreground copy service -->
         <service
             android:name=".service.CopyService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <!-- Keeps long imports/fixes alive while the screen is off -->
+        <service
+            android:name=".service.KeepAliveService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 

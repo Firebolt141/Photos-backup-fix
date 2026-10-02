@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Window background shown before Compose content draws (matches the app's ivory) -->
-    <style name="Theme.Ubertrag" parent="android:Theme.Material.Light.NoActionBar">
+    <!-- Dark window background so there is no white flash at launch in dark mode -->
+    <style name="Theme.Ubertrag" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">@color/window_background</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>

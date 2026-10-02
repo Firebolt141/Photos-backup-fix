@@ -176,107 +176,75 @@ Photos-backup-fix/
 
 ## Tool 2 — Android: **Übertrag**
 
-**Übertrag** is an Android app (min SDK 26 / Android 8) that backs up phone photos to an external drive **and** repairs missing EXIF dates — no computer needed.
+**Übertrag** is an Android app (Android 8 or newer) that backs up the phone's photos to a USB drive or SD card, imports Google Takeout, sorts messy folders by date and repairs dates. No computer needed. It uses the same `2024/March/March_15/` layout as the Windows tool, so both can work on the same drive.
 
-The app icon is a cartoon **German Shepherd** face on a warm amber background.
+The app opens on **Start here**, which asks what you have and sends you to the right tool:
 
-### Features
+| You have… | Tool | What it does |
+|---|---|---|
+| Photos on this phone | **Back up phone** | Three steps: choose the drive → scan → copy. Only new photos are copied next time. |
+| A Google Takeout export | **Import Google Takeout** | Reads Google's `.json` files and copies every photo/video into Year / Month / Day with the real date, GPS and caption. |
+| Years of photos in random folders | **Sort a folder by date** | Walks every sub-folder and copies each file into Year / Month / Day using the date inside it or in its name. |
+| A backup drive with undated photos | **Fix dates on the drive** | Writes each day folder's date into photos that have none, and can correct dates that disagree with their folder. |
+| A drive from an older version | **Update folder names** | `2024/01/15` and `March 7` → `2024/January/January_15`, `March_07`, merging into existing folders. Shows what will change first. |
 
-#### Phone → Drive backup (`Copy to Drive`)
-- Scans phone media via MediaStore
-- Copies to a USB/SD drive organised by date (`2024/January/January_07/`)
-- Tracks each file as `PENDING → COPIED / SKIPPED / FAILED`
-- Date range filter for selective backup
-- Skips files already present at the destination (idempotent)
-- Copy speed displayed in MB/s during transfer
+### Every file ends up somewhere
 
-#### Google Takeout processing on-device (`Process Google Takeout`)
-- Points at a Takeout folder anywhere SAF can reach (phone storage, SD card, USB drive)
-- Finds JSON sidecars using the same matching logic as the Windows tool
-- Writes `DateTimeOriginal`, UTC offset, and GPS to **JPEG / PNG / WebP** files
-- Falls back to filename date (`IMG_20240315_…`) when no sidecar exists
-- **"Skip files that already have a date"** toggle
-- Copies all files (HEIC, video, RAW) to correct date folders even when EXIF can't be written
+Same rule as the Windows tool. No file is skipped silently:
 
-#### Fix Missing EXIF Dates (`Fix Missing EXIF Dates`)
+- **Dated** → `Output/2024/March/March_15/`
+- **No date anywhere** → `Output/no-date/<original sub-folders>/`
+- **Couldn't be processed** (empty or unreadable file) → `Output/error/<original sub-folders>/`
+- Files that aren't photos or videos are counted and left where they are. Zip files are reported so you can extract them first.
 
-Two modes selectable with a toggle:
+Originals are never changed or deleted. The import and sort tools copy. *Fix dates on the drive* edits photos in place, and only after the new version has been fully written next to the old one.
 
-| Mode | Description |
-|---|---|
-| **Drive-structure mode** (default) | Reads `year / month / day` folder names from your connected drive and stamps EXIF dates on JPEG/PNG/WebP files that are missing them |
-| **Filename Date mode** | Scans any flat folder (Screenshots, WhatsApp exports, etc.), extracts the date from each filename, copies files to an output folder organised as `year / month / day`, and writes EXIF |
+### Safe to stop, safe to re-run
 
-Both modes show a **real-time scrollable log panel** inside the app so you can see what's happening file by file.
+- Long jobs run in the foreground with a progress notification and a **Stop** button, so they keep going with the screen off.
+- Copies are written under a temporary name and only get their real name once complete, so a pulled cable never leaves a half-copied photo looking finished.
+- Run any tool again and finished files are recognised (same name and size) and skipped. A *different* file with the same name gets `_1`, so nothing is overwritten.
+- When the drive fills up or is unplugged, the run stops with a clear message instead of failing every remaining file.
 
-#### Rename Legacy Folders (`Rename Drive Folders`)
-- Renames old numeric month/day folders to spelled-out names
-- `2024/01/15` → `2024/January/January_07` (zero-padded day)
-- Day folders renamed first, then month folders (correct ordering)
+### Dates
 
-### Navigation
+Where the date comes from, in order:
 
-All features are accessible via a **hamburger sidebar** (`☰` button in every top bar):
+1. **Import Google Takeout:** the photo's own date (if *Keep dates already in photos* is on), then Google's `photoTakenTime`, then the file name (`IMG_20240315_143022`, `Screenshot_2024-03-15-…`, `PXL_…`, WhatsApp `IMG-20240315-WA0001`, Unix timestamps), then Google's upload date.
+2. **Sort a folder by date:** the date inside the file, then the file name.
+3. **Back up phone:** the gallery's *date taken*, then the date inside the file, then the file name.
 
-```
-≡ Übertrag
-  ─ Backup
-    📱 Copy to Drive
-    📋 View Queue
-  ─ Drive Utilities
-    ✨ Fix Missing EXIF Dates
-    🏷  Rename Drive Folders
-  ─ Import
-    📦 Process Google Takeout
-```
+Folders use the time the photo was taken *where it was taken*, so a photo from 23:30 doesn't land in the next day's folder. Dates are written with a UTC offset (`OffsetTimeOriginal`), which Google Photos needs to show the right time.
 
-### Supported formats for EXIF writing
-
-| Format | Date | GPS | Notes |
+| Format | Date | GPS / caption | Notes |
 |---|---|---|---|
-| JPEG / JPG | ✓ | ✓ | Full support |
-| PNG | ✓ | ✓ | ExifInterface 1.3.7+ |
-| WebP | ✓ | ✓ | ExifInterface 1.3.7+ |
-| HEIC / HEIF | ✗ | ✗ | Read-only in ExifInterface |
-| RAW formats | ✗ | ✗ | Read-only in ExifInterface |
-| Video | ✗ | ✗ | No native Android metadata write API |
-
-Files in unsupported formats are always copied to the correct date folder.
+| JPEG / PNG / WebP | ✓ | ✓ | Written by ExifInterface |
+| HEIC / HEIF, RAW | ✗ | ✗ | Android can't write these. They are still sorted into the right folder |
+| Video | ✗ | ✗ | Sorted into the right folder. Use the Windows tool's *Fix missing dates* to write the date into them |
 
 ### Architecture
 
 ```
-android-app/app/src/main/java/com/firebolt141/ubertrag/
-├── data/
-│   ├── AppDatabase.kt          ← Room database
-│   ├── QueueDao.kt             ← DAO for queue items
-│   ├── QueueItem.kt            ← Entity (PENDING/COPIED/SKIPPED/FAILED)
-│   └── Prefs.kt                ← DataStore (drive URI, date range)
-├── repository/
-│   └── SyncRepository.kt       ← All business logic (scan, copy, Takeout, rename, EXIF fix)
+android-app/app/src/main/java/com/firebolt141/photosync/   (package com.firebolt141.ubertrag)
+├── data/          Room queue (QueueItem, QueueDao, AppDatabase) + DataStore Prefs
+├── repository/    SyncRepository: scan, copy, Takeout, sort, fix dates, rename
 ├── service/
-│   └── CopyService.kt          ← Foreground service for copy operations
-├── ui/
-│   ├── AppDrawer.kt            ← Hamburger sidebar content
-│   ├── SharedComponents.kt     ← DriveStatusCard + FolderPickerCard (shared)
-│   ├── HomeScreen.kt           ← Scan/copy/retry + drive picker
-│   ├── QueueScreen.kt          ← Queue browser with filter chips
-│   ├── MainViewModel.kt        ← State for Home + Queue + Rename
-│   ├── FixExifScreen.kt        ← Fix EXIF (drive mode + filename mode + live log)
-│   ├── FixExifViewModel.kt     ← State for FixExifScreen
-│   ├── RenameFoldersScreen.kt  ← Rename legacy numeric folders
-│   ├── TakeoutScreen.kt        ← Process Takeout screen
-│   └── TakeoutViewModel.kt     ← State for TakeoutScreen
+│   ├── CopyService.kt       ← foreground service for phone → drive copies (Stop action, wake lock)
+│   └── KeepAliveService.kt  ← keeps Takeout/sort/fix/rename jobs alive with the screen off
+├── ui/            Compose screens: Start, Home, Queue, Takeout, FixExif (sort + fix), Rename
+│   └── theme/     Ivory/clay light and slate dark palette, matching the Windows tool
 └── util/
-    ├── StorageHelper.kt        ← SAF helpers, folder creation/rename
-    ├── DateExtractor.kt        ← EXIF + video metadata date reading
-    ├── ExifFixer.kt            ← fixMissingExif() + fixByFilename()
-    └── TakeoutProcessor.kt     ← Takeout processing (pure + Android functions)
+    ├── PhotoLogic.kt        ← pure Kotlin: dates from names, folder names, sidecar matching (unit-tested)
+    ├── SafTree.kt           ← cached SAF folder access + safe copy (temp name → rename, size check)
+    ├── TakeoutProcessor.kt  ← Takeout import and "sort a folder" (shared engine)
+    ├── ExifFixer.kt         ← fix dates on the drive
+    ├── DateExtractor.kt     ← reads dates inside photos/videos
+    └── StorageHelper.kt     ← drive checks, folder rename + merge
 ```
 
 ### Building
 
-Open `android-app/` in Android Studio (Hedgehog or later).
+Open `android-app/` in Android Studio (Ladybug or later), or:
 
 ```bash
 cd android-app
@@ -292,7 +260,7 @@ cd android-app
 ./gradlew test
 ```
 
-Tests cover `TakeoutProcessor`'s pure functions: JSON sidecar name generation, sidecar parsing, and filename date extraction.
+The tests cover `PhotoLogic`: Takeout sidecar matching (including truncated and `(1)` names), JSON parsing, dates from file names, EXIF date parsing, folder naming and parsing, legacy folder renames and unique names.
 
 ---
 
@@ -310,11 +278,15 @@ Tests cover `TakeoutProcessor`'s pure functions: JSON sidecar name generation, s
 
 **Windows — Browser doesn't open** — Open the URL printed in the console window (usually `http://127.0.0.1:5000`; another port is picked if 5000 is busy). Opening the bare URL is fine — the page carries its own access token.
 
-**Android — Drive not showing as connected** — Disconnect and reconnect the drive, then tap "Change Drive" to re-grant SAF permission.
+**Android — Drive not showing as connected** — Unplug and reconnect the drive, then tap *Change drive* and pick its top folder again (Android forgets access when a drive is reformatted).
 
-**Android — Fix EXIF returns 0 files on a flat folder** — Switch to **Filename Date mode** (the toggle at the top of the Fix Missing EXIF Dates screen). Drive-structure mode requires `year/month/day` subfolders.
+**Android — "Fix dates on the drive" finds 0 photos** — That tool expects `Year/Month/Day` folders. For a folder that isn't sorted yet, use **Sort a folder by date** instead.
 
-**Android — HEIC / video files not getting dates** — This is a platform limitation. The files are still copied to the correct date folder based on the Takeout JSON timestamp. Plug the drive into a PC and run **Fix Missing Dates** in the Windows tool. It writes the folder date into HEIC, RAW and video files too.
+**Android — Only some photos are backed up** — On Android 14+ you may have allowed access to *selected photos* only. The Back up screen shows a card for this. Tap *Allow* and choose *Allow all*.
+
+**Android — The run stopped: "The drive is full" / "disconnected"** — Free up space or reconnect, then start again. Everything finished so far is kept and skipped.
+
+**Android — HEIC / video files not getting dates** — Android can't write dates into these. They are still sorted into the right date folder. Plug the drive into a PC and run **Fix missing dates** in the Windows tool, which can write dates into HEIC, RAW and video too.
 
 **Both tools — Some files still show wrong dates after upload** — Google Photos caches metadata. Try removing and re-adding the photos, or wait 24 h for the index to refresh.
 

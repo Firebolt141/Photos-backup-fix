@@ -2,6 +2,7 @@ package com.firebolt141.ubertrag
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.material3.DrawerValue
@@ -20,6 +21,7 @@ import com.firebolt141.ubertrag.ui.HomeScreen
 import com.firebolt141.ubertrag.ui.MainViewModel
 import com.firebolt141.ubertrag.ui.QueueScreen
 import com.firebolt141.ubertrag.ui.RenameFoldersScreen
+import com.firebolt141.ubertrag.ui.StartScreen
 import com.firebolt141.ubertrag.ui.TakeoutScreen
 import com.firebolt141.ubertrag.ui.theme.UbertragTheme
 import kotlinx.coroutines.launch
@@ -44,58 +46,67 @@ class MainActivity : ComponentActivity() {
                 fun navigateTo(route: String) {
                     closeDrawer()
                     nav.navigate(route) {
-                        popUpTo("home") { saveState = true }
+                        popUpTo("start") { saveState = true }
                         launchSingleTop = true
                         restoreState    = true
                     }
                 }
 
+                // Back closes the drawer first
+                BackHandler(enabled = drawerState.isOpen) { closeDrawer() }
+
                 ModalNavigationDrawer(
                     drawerState   = drawerState,
                     drawerContent = {
-                        AppDrawerContent(
-                            currentRoute = currentRoute,
-                            onNavigate   = ::navigateTo,
-                        )
+                        AppDrawerContent(currentRoute = currentRoute, onNavigate = ::navigateTo)
                     },
                 ) {
-                    NavHost(navController = nav, startDestination = "home") {
+                    NavHost(navController = nav, startDestination = "start") {
+                        composable("start") {
+                            StartScreen(state = state, onNavigate = ::navigateTo, onOpenDrawer = ::openDrawer)
+                        }
                         composable("home") {
                             HomeScreen(
                                 state               = state,
                                 onScan              = vm::startScan,
                                 onCopy              = vm::startCopy,
+                                onStopCopy          = vm::stopCopy,
                                 onDriveSelected     = vm::onDriveSelected,
                                 onForgetDrive       = vm::forgetDrive,
-                                onViewQueue         = { nav.navigate("queue") },
+                                onViewQueue         = { nav.navigate("queue") { launchSingleTop = true } },
                                 onDateRangeSelected = vm::setDateRange,
                                 onClearDateRange    = vm::clearDateRange,
                                 onRetryFailed       = vm::retryFailed,
+                                onDismissSummary    = vm::dismissSummary,
+                                onDismissMessage    = vm::dismissMessage,
+                                onPermissionsChanged = vm::refreshAccess,
                                 onOpenDrawer        = ::openDrawer,
                             )
                         }
                         composable("queue") {
                             QueueScreen(
                                 items         = state.queue,
-                                onBack        = { nav.popBackStack() },
+                                onBack        = { if (!nav.popBackStack()) navigateTo("home") },
                                 onClearCopied = vm::clearCopied,
+                                onRequeueAll  = vm::requeueAll,
                             )
                         }
+                        composable("organize") {
+                            FixExifScreen(onOpenDrawer = ::openDrawer, filenameMode = true)
+                        }
                         composable("fix-exif") {
-                            FixExifScreen(onOpenDrawer = ::openDrawer)
+                            FixExifScreen(onOpenDrawer = ::openDrawer, filenameMode = false)
                         }
                         composable("rename-folders") {
                             RenameFoldersScreen(
                                 state        = state,
-                                onRename     = vm::renameOldFolders,
+                                onCheck      = { vm.renameOldFolders(dryRun = true) },
+                                onRename     = { vm.renameOldFolders(dryRun = false) },
                                 onOpenDrawer = ::openDrawer,
                             )
                         }
                         composable("takeout") {
-                            TakeoutScreen(
-                                onBack       = { nav.popBackStack() },
-                                onOpenDrawer = ::openDrawer,
-                            )
+                            TakeoutScreen(onBack = { nav.popBackStack() }, onOpenDrawer = ::openDrawer)
                         }
                     }
                 }

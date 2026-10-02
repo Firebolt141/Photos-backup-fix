@@ -6,9 +6,12 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.firebolt141.ubertrag.data.Prefs
 import com.firebolt141.ubertrag.repository.SyncRepository
+import com.firebolt141.ubertrag.service.KeepAlive
 import com.firebolt141.ubertrag.util.ExifFixResult
 import com.firebolt141.ubertrag.util.FixByFilenameResult
 import com.firebolt141.ubertrag.util.StorageHelper
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -16,27 +19,34 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 sealed class FixExifResult {
-    data class DriveMode(val r: ExifFixResult) : FixExifResult()
+    /** null = the drive wasn't connected */
+    data class DriveMode(val r: ExifFixResult?) : FixExifResult()
     data class FilenameMode(val r: FixByFilenameResult) : FixExifResult()
 }
 
 data class FixExifUiState(
+    /** true = "Sort a folder by date" (copy into year/month/day); false = fix the backup drive in place. */
     val filenameMode:  Boolean          = false,
     // drive mode
     val driveConnected: Boolean         = false,
     val driveUri:       String?         = null,
-    // filename mode folders
+    val fixMismatched:  Boolean         = false,
+    // filename mode folders + options
     val sourceUri:      String          = "",
     val sourceName:     String          = "",
     val outputUri:      String          = "",
     val outputName:     String          = "",
+    val keepExistingDates: Boolean      = true,
+    val renameToDate:   Boolean         = false,
     // operation
     val running:        Boolean         = false,
+    val stopping:       Boolean         = false,
     val done:           Int             = 0,
     val total:          Int             = 0,
     val currentFile:    String          = "",
     val logLines:       List<String>    = emptyList(),
     val result:         FixExifResult?  = null,
+    val error:          String          = "",
 )
 
 class FixExifViewModel(app: Application) : AndroidViewModel(app) {
@@ -47,65 +57,116 @@ class FixExifViewModel(app: Application) : AndroidViewModel(app) {
     private val _state = MutableStateFlow(FixExifUiState())
     val state: StateFlow<FixExifUiState> = _state.asStateFlow()
 
+    @Volatile private var cancel = false
+
     init {
+        // Drive status, re-checked every few seconds off the main thread.
         viewModelScope.launch {
-            prefs.driveUri.collect { uri ->
-                _state.update { it.copy(
-                    driveUri       = uri,
-                    driveConnected = StorageHelper.isDriveMounted(app, uri),
-                )}
+            prefs.driveUri.collect { uri -> _state.update { it.copy(driveUri = uri) } }
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            while (true) {
+                val connected = StorageHelper.isDriveMounted(app, _state.value.driveUri)
+                _state.update { it.copy(driveConnected = connected) }
+                delay(3_000)
+            }
+        }
+        // Remembered folders from last time
+        viewModelScope.launch {
+            val src = prefs.folder("organize_source")
+            val out = prefs.folder("organize_output")
+            _state.update { s ->
+                s.copy(
+                    sourceUri = src ?: "", sourceName = StorageHelper.folderLabel(src),
+                    outputUri = out ?: "", outputName = StorageHelper.folderLabel(out),
+                )
             }
         }
     }
 
     fun setFilenameMode(on: Boolean) {
-        _state.update { it.copy(filenameMode = on, result = null, logLines = emptyList()) }
+        if (_state.value.running) return
+        _state.update { it.copy(filenameMode = on, result = null, logLines = emptyList(), error = "") }
     }
 
-    fun onSourceSelected(uri: Uri) {
-        _state.update { it.copy(sourceUri = uri.toString(), sourceName = label(uri), result = null) }
-    }
+    fun setFixMismatched(on: Boolean) = _state.update { it.copy(fixMismatched = on) }
+    fun setKeepExistingDates(on: Boolean) = _state.update { it.copy(keepExistingDates = on) }
+    fun setRenameToDate(on: Boolean) = _state.update { it.copy(renameToDate = on) }
 
-    fun onOutputSelected(uri: Uri) {
-        _state.update { it.copy(outputUri = uri.toString(), outputName = label(uri), result = null) }
+    fun onSourceSelected(uri: Uri) = pick(uri, "organize_source") { s, u, n -> s.copy(sourceUri = u, sourceName = n) }
+    fun onOutputSelected(uri: Uri) = pick(uri, "organize_output") { s, u, n -> s.copy(outputUri = u, outputName = n) }
+
+    private fun pick(uri: Uri, slot: String, apply: (FixExifUiState, String, String) -> FixExifUiState) {
+        val str = uri.toString()
+        _state.update { apply(it, str, StorageHelper.folderLabel(str)).copy(result = null, error = "") }
+        viewModelScope.launch {
+            if (StorageHelper.takePersistablePermission(getApplication(), uri)) prefs.saveFolder(slot, str)
+        }
     }
 
     fun clearResult() {
-        _state.update { it.copy(result = null, logLines = emptyList()) }
+        _state.update { it.copy(result = null, logLines = emptyList(), error = "") }
+    }
+
+    fun stop() {
+        cancel = true
+        _state.update { it.copy(stopping = true) }
     }
 
     fun startFix() {
-        if (_state.value.filenameMode) startFilenameModeFix()
-        else startDriveModeFix()
+        if (_state.value.running) return
+        if (_state.value.filenameMode) startFilenameModeFix() else startDriveModeFix()
+    }
+
+    private fun begin(title: String) {
+        cancel = false
+        _state.update { it.copy(running = true, stopping = false, logLines = emptyList(), result = null, error = "", done = 0, total = 0, currentFile = "") }
+        KeepAlive.begin(getApplication(), title)
+    }
+
+    private fun progress(current: Int, total: Int, name: String) {
+        _state.update { it.copy(done = current, total = total, currentFile = name) }
+        KeepAlive.update(getApplication(), name, current, total)
     }
 
     private fun startDriveModeFix() {
+        val s = _state.value
         viewModelScope.launch {
-            val driveLabel = _state.value.driveUri
-                ?.let { android.net.Uri.parse(it) }?.let { label(it) } ?: "unknown"
-            _state.update { it.copy(running = true, logLines = emptyList(), result = null, done = 0, total = 0) }
-            log("Scanning drive: $driveLabel")
-            val result = repo.fixMissingExif { current, total, name ->
-                _state.update { it.copy(done = current, total = total, currentFile = name) }
-                if (current == 1 || current % 10 == 0 || total <= 20) log("[$current/$total] $name")
+            begin("Fixing dates on the drive")
+            try {
+                log("Checking the drive: ${StorageHelper.folderLabel(s.driveUri).ifBlank { "?" }}")
+                val result = repo.fixMissingExif(
+                    fixMismatched = s.fixMismatched,
+                    onProgress    = ::progress,
+                    onLog         = ::log,
+                    isCancelled   = { cancel },
+                )
+                log("─────────────────────────────────────")
+                when {
+                    result == null -> log("✗ The drive isn't connected.")
+                    result.fixed + result.alreadyHasDate + result.skipped + result.failed == 0 -> {
+                        log("⚠ No photos found in Year / Month / Day folders.")
+                        log("  Expected: drive / 2024 / January / January_07 / photo.jpg")
+                        log("  (Selecting a single year folder as the drive also works.)")
+                    }
+                    else -> {
+                        log("Dates written:   ${result.fixed}")
+                        if (result.corrected > 0) log("Corrected:       ${result.corrected}")
+                        log("Already dated:   ${result.alreadyHasDate}")
+                        if (result.mismatched > result.corrected) log("Date ≠ folder:   ${result.mismatched - result.corrected} (left unchanged)")
+                        if (result.skipped > 0) log("Can't store a date (HEIC/RAW/video): ${result.skipped}")
+                        if (result.failed > 0) log("✗ Errors:        ${result.failed}")
+                    }
+                }
+                if (cancel) log("Stopped by you.")
+                _state.update { it.copy(result = FixExifResult.DriveMode(result)) }
+            } catch (e: Exception) {
+                log("✗ ${e.message}")
+                _state.update { it.copy(error = e.message ?: "Something went wrong") }
+            } finally {
+                KeepAlive.end()
+                _state.update { it.copy(running = false, stopping = false) }
             }
-            log("─────────────────────────────────────")
-            val noneFound = result.fixed == 0 && result.alreadyHasDate == 0 &&
-                            result.skipped == 0 && result.failed == 0
-            if (noneFound) {
-                log("⚠ No media files found.")
-                log("  Selected folder: \"$driveLabel\"")
-                log("  Supported structures:")
-                log("    drive-root / 2024 / January / January_07 / photo.jpg")
-                log("    2024 / January / January_07 / photo.jpg  (year folder)")
-                log("  A month folder selected directly is not supported.")
-            } else {
-                log("Fixed:          ${result.fixed}")
-                log("Already dated:  ${result.alreadyHasDate}")
-                log("Skipped (HEIC/video): ${result.skipped}")
-                if (result.failed > 0) log("Errors:         ${result.failed}")
-            }
-            _state.update { it.copy(running = false, result = FixExifResult.DriveMode(result)) }
         }
     }
 
@@ -113,36 +174,39 @@ class FixExifViewModel(app: Application) : AndroidViewModel(app) {
         val s = _state.value
         if (s.sourceUri.isBlank() || s.outputUri.isBlank()) return
         viewModelScope.launch {
-            _state.update { it.copy(running = true, logLines = emptyList(), result = null, done = 0, total = 0) }
-            if (s.sourceUri == s.outputUri) {
-                log("✗ Source and output folders must be different")
-                _state.update { it.copy(running = false) }
-                return@launch
+            begin("Sorting photos by date")
+            try {
+                val result = repo.fixByFilename(
+                    sourceUri  = s.sourceUri,
+                    outputUri  = s.outputUri,
+                    keepExistingDates = s.keepExistingDates,
+                    renameToDate = s.renameToDate,
+                    onLog      = ::log,
+                    onProgress = ::progress,
+                    isCancelled = { cancel },
+                )
+                if (result.errorMsg.isNotBlank()) {
+                    _state.update { it.copy(error = result.errorMsg) }
+                } else {
+                    log("─────────────────────────────────────")
+                    log("Sorted into date folders: ${result.copied - result.noDate}")
+                    if (result.exifWritten > 0) log("Dates written:           ${result.exifWritten}")
+                    if (result.noDate > 0) log("No date (→ no-date/):    ${result.noDate}")
+                    if (result.alreadyExists > 0) log("Already there:           ${result.alreadyExists}")
+                    if (result.failed > 0) log("✗ Errors (→ error/):    ${result.failed}")
+                    _state.update { it.copy(result = FixExifResult.FilenameMode(result)) }
+                }
+            } catch (e: Exception) {
+                log("✗ ${e.message}")
+                _state.update { it.copy(error = e.message ?: "Something went wrong") }
+            } finally {
+                KeepAlive.end()
+                _state.update { it.copy(running = false, stopping = false) }
             }
-            log("Scanning source folder…")
-            val result = repo.fixByFilename(
-                sourceUri  = s.sourceUri,
-                outputUri  = s.outputUri,
-                onLog      = { msg -> log(msg) },
-                onProgress = { current, total, name ->
-                    _state.update { it.copy(done = current, total = total, currentFile = name) }
-                },
-            )
-            log("─────────────────────────────────────")
-            log("Copied:            ${result.copied}")
-            log("EXIF written:      ${result.exifWritten}")
-            if (result.noDate       > 0) log("No date (→ no-date/):  ${result.noDate}")
-            if (result.alreadyExists > 0) log("Already exists:        ${result.alreadyExists}")
-            if (result.unsupported  > 0) log("Copied (no EXIF — HEIC/video): ${result.unsupported}")
-            if (result.failed       > 0) log("Errors (→ error/):     ${result.failed}")
-            _state.update { it.copy(running = false, result = FixExifResult.FilenameMode(result)) }
         }
     }
 
     private fun log(msg: String) {
         _state.update { s -> s.copy(logLines = (s.logLines + msg).takeLast(500)) }
     }
-
-    private fun label(uri: Uri) =
-        uri.lastPathSegment?.substringAfterLast('/')?.substringAfterLast(':') ?: uri.toString()
 }

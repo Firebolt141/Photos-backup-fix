@@ -5,105 +5,108 @@ import android.util.Log
 import androidx.documentfile.provider.DocumentFile
 import androidx.exifinterface.media.ExifInterface
 import java.io.File
-import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.ZoneId
 import java.time.ZoneOffset
-import java.time.format.DateTimeFormatter
 
 data class ExifFixResult(
     val fixed: Int = 0,
     val alreadyHasDate: Int = 0,
-    val skipped: Int = 0,   // unsupported format (HEIC, RAW, video)
+    val skipped: Int = 0,      // format can't store a date (HEIC, RAW, video)
     val failed: Int = 0,
+    val mismatched: Int = 0,   // has a date on a different day than its folder
+    val corrected: Int = 0,    // mismatched files moved to their folder's day
+    val notes: List<String> = emptyList(),  // folders skipped / loose files
 )
 
 data class FixByFilenameResult(
-    val copied: Int      = 0,
-    val exifWritten: Int = 0,  // writable formats with date written
-    val noDate: Int      = 0,  // filename had no recognisable date
-    val alreadyExists: Int = 0,  // file already at destination — skipped
-    val unsupported: Int = 0,  // HEIC / video — copied but no EXIF write
-    val failed: Int      = 0,
+    val copied: Int        = 0,
+    val exifWritten: Int   = 0,  // dates written (from the file name)
+    val noDate: Int        = 0,  // no date anywhere → no-date/
+    val alreadyExists: Int = 0,  // already in the output — skipped
+    val unsupported: Int   = 0,  // HEIC / video — sorted, date not written
+    val failed: Int        = 0,  // → error/
+    val keptExisting: Int  = 0,  // already had a date inside — sorted by it, kept
+    val ignored: Int       = 0,  // not photos/videos — left alone
+    val archives: Int      = 0,  // zip files that need unzipping first
+    val stoppedEarly: String = "",
+    val errorMsg: String   = "",
 )
 
 object ExifFixer {
 
     private const val TAG = "ExifFixer"
 
-    private val ALL_MEDIA_EXTS = setOf(
-        "jpg", "jpeg", "png", "webp", "gif", "bmp", "tiff", "tif",
-        "heic", "heif", "raw", "cr2", "nef", "arw", "dng", "orf", "rw2", "srw", "pef",
-        "mp4", "mov", "avi", "m4v", "mkv", "wmv", "3gp", "mpg", "mpeg", "mts", "ts", "flv",
-    )
+    // ── Drive mode: write folder dates into undated files, in place ──────────
 
-    private val MONTH_NAMES = mapOf(
-        "January" to 1, "February" to 2, "March" to 3,
-        "April" to 4, "May" to 5, "June" to 6,
-        "July" to 7, "August" to 8, "September" to 9,
-        "October" to 10, "November" to 11, "December" to 12
-    )
-
-    // ExifInterface 1.3.7 can write EXIF to JPEG, PNG, WebP.
-    // HEIC/HEIF: read-only. RAW, video: not supported at all.
-    private val WRITABLE_EXTS = setOf(".jpg", ".jpeg", ".png", ".webp")
-
-    private val EXIF_DATE_FMT = DateTimeFormatter.ofPattern("yyyy:MM:dd HH:mm:ss")
+    private class DatedFile(val file: DocumentFile, val dir: DocumentFile, val date: LocalDate)
 
     fun fixMissingExif(
         root: DocumentFile,
         context: Context,
         onProgress: (current: Int, total: Int, name: String) -> Unit,
+        onLog: (String) -> Unit = {},
+        fixMismatched: Boolean = false,
+        isCancelled: () -> Boolean = { false },
     ): ExifFixResult {
-        Log.d(TAG, "fixMissingExif start — root=${root.name}")
-        val workItems = mutableListOf<Pair<DocumentFile, LocalDate>>()
-        collectItems(root, workItems)
-        Log.d(TAG, "collectItems found ${workItems.size} files")
+        Log.d(TAG, "fixMissingExif root=${root.name} fixMismatched=$fixMismatched")
+        val notes = mutableListOf<String>()
+        val items = mutableListOf<DatedFile>()
+        collectItems(root, items, notes)
+        notes.take(10).forEach { onLog("  $it") }
+        if (notes.size > 10) onLog("  … and ${notes.size - 10} more")
+        onLog("Found ${items.size} photo(s) and video(s) in dated folders.")
 
-        if (workItems.isEmpty()) {
-            Log.w(TAG, "No media files found. Check drive folder structure (expected year/month/day).")
-        }
-
-        var fixed = 0
-        var alreadyHasDate = 0
-        var skipped = 0
-        var failed = 0
-
-        workItems.forEachIndexed { idx, (file, date) ->
-            onProgress(idx + 1, workItems.size, file.name ?: "")
-            val ext = file.name?.substringAfterLast('.')
-                ?.lowercase()?.let { ".$it" } ?: ""
-
-            if (ext !in WRITABLE_EXTS) {
-                Log.d(TAG, "  skip (unsupported): ${file.name}")
-                skipped++
-                return@forEachIndexed
-            }
-
-            try {
-                if (hasExifDate(context, file)) {
-                    Log.d(TAG, "  already dated: ${file.name}")
-                    alreadyHasDate++
-                } else {
-                    Log.d(TAG, "  writing EXIF $date → ${file.name}")
-                    writeExifDate(context, file, date)
-                    fixed++
+        val zone = ZoneId.systemDefault()
+        var fixed = 0; var already = 0; var skipped = 0; var failed = 0; var mismatched = 0; var corrected = 0
+        for ((idx, item) in items.withIndex()) {
+            if (isCancelled()) break
+            val name = item.file.name ?: continue
+            onProgress(idx + 1, items.size, name)
+            val existing = DateExtractor.embedded(context, item.file.uri, name)
+            var target: LocalDateTime? = null
+            if (existing != null) {
+                already++
+                val days = kotlin.math.abs(existing.wall.toLocalDate().toEpochDay() - item.date.toEpochDay())
+                if (days <= 1) continue
+                mismatched++
+                if (!fixMismatched || !PhotoLogic.isWritable(name)) {
+                    onLog("≠  $name has ${existing.wall.toLocalDate()}, folder says ${item.date} (left unchanged)")
+                    continue
                 }
+                target = item.date.atTime(existing.wall.toLocalTime())     // keep the time of day
+            }
+            if (!PhotoLogic.isWritable(name)) {
+                skipped++
+                continue
+            }
+            val date = if (target != null) PhotoDate(target, existing?.offset, "folder") else {
+                val fn = PhotoLogic.dateFromFilename(name, zone)
+                if (fn != null && fn.wall.toLocalDate() == item.date) fn
+                else PhotoDate(item.date.atTime(12, 0), ZoneOffset.UTC, "folder")
+            }
+            try {
+                writeExifDate(context, item.file, item.dir, date)
+                if (target != null) { corrected++; onLog("✓  $name corrected to ${date.wall.toLocalDate()}") }
+                else { fixed++; onLog("✓  $name → ${date.exif}") }
             } catch (e: Exception) {
-                Log.e(TAG, "  failed: ${file.name} — ${e.message}", e)
                 failed++
+                Log.e(TAG, "failed: $name", e)
+                onLog("✗  $name: ${e.message}")
             }
         }
-
-        Log.d(TAG, "fixMissingExif done — fixed=$fixed alreadyDated=$alreadyHasDate skipped=$skipped failed=$failed")
-        return ExifFixResult(fixed, alreadyHasDate, skipped, failed)
+        val r = ExifFixResult(fixed, already, skipped, failed, mismatched, corrected, notes)
+        Log.d(TAG, "fixMissingExif done: $r")
+        return r
     }
 
+    // ── Filename / "Organize by date" mode ────────────────────────────────────
+
     /**
-     * Scans [sourceRoot] for media files, extracts a date from each filename, and copies
-     * the file into [outputRoot]/year/month/day/. Files with no recognisable date go to
-     * [outputRoot]/no-date/. Files that fail to copy go to [outputRoot]/error/.
-     * EXIF is written for JPEG/PNG/WebP; other formats are copied as-is.
+     * Copies every photo/video under [sourceRoot] into [outputRoot]/year/month/day
+     * using the date inside the file or in its name (no JSON sidecars). Files with
+     * no date go to no-date/<original sub-folders>/, failures to error/.
      */
     fun fixByFilename(
         sourceRoot: DocumentFile,
@@ -111,231 +114,165 @@ object ExifFixer {
         context:    Context,
         onLog:      (String) -> Unit,
         onProgress: (current: Int, total: Int, name: String) -> Unit,
+        keepExistingDates: Boolean = true,
+        renameToDate: Boolean = false,
+        isCancelled: () -> Boolean = { false },
     ): FixByFilenameResult {
-        Log.d(TAG, "fixByFilename start — source=${sourceRoot.name} output=${outputRoot.name}")
-        val files = mutableListOf<DocumentFile>()
-        collectAllFiles(sourceRoot, files)
-        Log.d(TAG, "fixByFilename: ${files.size} media files found")
-        if (files.isEmpty()) onLog("⚠ No media files found in the selected folder")
-
-        var copied = 0; var exifWritten = 0; var noDate = 0
-        var alreadyExists = 0; var unsupported = 0; var failed = 0
-
-        files.forEachIndexed { idx, file ->
-            val name = file.name ?: return@forEachIndexed
-            onProgress(idx + 1, files.size, name)
-
-            // ── No date in filename → no-date/ fallback ───────────────────
-            val tsSec = TakeoutProcessor.tsFromFilename(name)
-            if (tsSec == null) {
-                noDate++
-                Log.d(TAG, "  no date: $name")
-                val ok = StorageHelper.copyToFallbackDir(context, file, outputRoot, "no-date")
-                onLog(if (ok) "⚠  No date (→ no-date/): $name"
-                      else     "⚠  No date, copy failed: $name")
-                return@forEachIndexed
-            }
-
-            // ── Destination date folder ───────────────────────────────────
-            val destDir = StorageHelper.resolveDestDir(outputRoot, tsSec * 1000L)
-            if (destDir == null) {
-                failed++
-                Log.e(TAG, "  cannot create dest dir: $name")
-                val ok = StorageHelper.copyToFallbackDir(context, file, outputRoot, "error")
-                onLog(if (ok) "✗  Cannot create folder (→ error/): $name"
-                      else     "✗  Cannot create folder: $name")
-                return@forEachIndexed
-            }
-
-            // ── Already at destination → skip ─────────────────────────────
-            if (destDir.findFile(name) != null) {
-                alreadyExists++
-                Log.d(TAG, "  already exists: $name")
-                return@forEachIndexed
-            }
-
-            // ── Create file at destination ────────────────────────────────
-            val destFile = try {
-                destDir.createFile(file.type ?: "application/octet-stream", name)
-                    ?: throw Exception("createFile returned null")
-            } catch (e: Exception) {
-                failed++
-                Log.e(TAG, "  create failed: $name — ${e.message}")
-                val ok = StorageHelper.copyToFallbackDir(context, file, outputRoot, "error")
-                onLog(if (ok) "✗  Failed to create (→ error/): $name"
-                      else     "✗  Failed to create: $name")
-                return@forEachIndexed
-            }
-
-            // ── Copy file bytes ───────────────────────────────────────────
-            val copyOk = try {
-                context.contentResolver.openOutputStream(destFile.uri)?.use { out ->
-                    context.contentResolver.openInputStream(file.uri)
-                        ?.use { inp -> inp.copyTo(out) }
-                        ?: throw Exception("Cannot open source")
-                } ?: throw Exception("Cannot open dest")
-                true
-            } catch (e: Exception) {
-                destFile.delete()
-                failed++
-                Log.e(TAG, "  copy failed: $name — ${e.message}", e)
-                val ok = StorageHelper.copyToFallbackDir(context, file, outputRoot, "error")
-                onLog(if (ok) "✗  Copy error (→ error/): $name — ${e.message}"
-                      else     "✗  Copy error: $name — ${e.message}")
-                false
-            }
-            if (!copyOk) return@forEachIndexed
-            copied++
-
-            // ── Write EXIF (writable formats only) ───────────────────────
-            val extDot = ".${name.substringAfterLast('.').lowercase()}"
-            if (extDot in WRITABLE_EXTS) {
-                try {
-                    val date = Instant.ofEpochSecond(tsSec).atOffset(ZoneOffset.UTC).toLocalDate()
-                    writeExifDate(context, destFile, date)
-                    exifWritten++
-                    Log.d(TAG, "  ✓ copied+EXIF: $name")
-                    onLog("✓  $name")
-                } catch (e: Exception) {
-                    // File is in the correct dated folder — just log the EXIF failure
-                    Log.e(TAG, "  EXIF write failed (file kept): $name — ${e.message}", e)
-                    onLog("→  Copied (EXIF write failed): $name")
-                }
-            } else {
-                unsupported++
-                Log.d(TAG, "  → copied (no EXIF): $name")
-                onLog("→  Copied (HEIC/video): $name")
-            }
-        }
-
-        Log.d(TAG, "fixByFilename done — copied=$copied exifWritten=$exifWritten noDate=$noDate alreadyExists=$alreadyExists unsupported=$unsupported failed=$failed")
-        return FixByFilenameResult(copied, exifWritten, noDate, alreadyExists, unsupported, failed)
+        val r = TakeoutProcessor.process(
+            sourceRoot, outputRoot, context,
+            TakeoutOptions(skipIfHasExif = keepExistingDates, useSidecars = false, renameToDate = renameToDate),
+            onProgress, onLog, isCancelled,
+        )
+        if (r.errorMsg.isNotBlank()) onLog("✗ ${r.errorMsg}")
+        if (r.stoppedEarly.isNotBlank()) onLog("Stopped: ${r.stoppedEarly}")
+        return FixByFilenameResult(
+            copied        = r.fixed + r.fromFilename + r.keptExisting + r.noDate + r.unsupported,
+            exifWritten   = r.fixed + r.fromFilename,
+            noDate        = r.noDate,
+            alreadyExists = r.alreadyThere,
+            unsupported   = r.unsupported,
+            failed        = r.errors,
+            keptExisting  = r.keptExisting,
+            ignored       = r.ignored,
+            archives      = r.archives,
+            stoppedEarly  = r.stoppedEarly,
+            errorMsg      = r.errorMsg,
+        )
     }
 
-    private fun collectAllFiles(dir: DocumentFile, out: MutableList<DocumentFile>) {
-        for (child in dir.listFiles()) {
-            when {
-                child.isDirectory -> collectAllFiles(child, out)
-                child.isFile -> {
-                    val ext = child.name?.substringAfterLast('.')?.lowercase() ?: continue
-                    if (ext in ALL_MEDIA_EXTS) out.add(child)
-                }
-            }
-        }
-    }
+    // ── Folder walking ────────────────────────────────────────────────────────
 
-    private fun collectItems(root: DocumentFile, out: MutableList<Pair<DocumentFile, LocalDate>>) {
-        Log.d(TAG, "collectItems: root=${root.name}")
+    private val OWN_DIRS = setOf("no-date", "error", "_duplicates", "_photofix", "@eadir", ".thumbnails", "lost.dir")
 
-        // If the selected root is itself a year folder (e.g. user selected "2014/" directly
-        // because they can't grant access to the parent), descend straight into its months.
-        val rootYear = root.name?.toIntOrNull()?.takeIf { it in 2000..2040 }
+    private fun collectItems(root: DocumentFile, out: MutableList<DatedFile>, notes: MutableList<String>) {
+        // A year folder may be selected directly (e.g. when the drive root can't be granted).
+        val rootYear = PhotoLogic.parseYearFolder(root.name ?: "")
         if (rootYear != null) {
-            Log.d(TAG, "  root is a year folder — scanning as year=$rootYear")
-            collectMonthDirs(root, rootYear, out)
+            collectYear(root, rootYear, out, notes)
             return
         }
-
-        // Normal mode: root contains one or more year subdirs.
-        val topLevel = root.listFiles()
-        Log.d(TAG, "  ${topLevel.size} entries under root")
-        for (yearDir in topLevel) {
-            if (!yearDir.isDirectory) continue
-            val year = yearDir.name?.toIntOrNull()?.takeIf { it in 2000..2040 }
-            if (year == null) { Log.d(TAG, "  skip non-year dir: ${yearDir.name}"); continue }
-            Log.d(TAG, "  year=$year")
-            collectMonthDirs(yearDir, year, out)
+        for (d in safeList(root, notes)) {
+            if (!d.isDirectory) continue
+            val n = d.name ?: continue
+            val y = PhotoLogic.parseYearFolder(n)
+            if (y != null) collectYear(d, y, out, notes)
+            else if (n.lowercase() !in OWN_DIRS && !n.startsWith(".")) notes += "skipped folder that is not a year: $n"
         }
     }
 
-    private fun collectMonthDirs(yearDir: DocumentFile, year: Int, out: MutableList<Pair<DocumentFile, LocalDate>>) {
-        for (monthDir in yearDir.listFiles()) {
-            if (!monthDir.isDirectory) continue
-            val month = MONTH_NAMES[monthDir.name]
-                ?: monthDir.name?.toIntOrNull()?.takeIf { it in 1..12 }
-            if (month == null) { Log.d(TAG, "    skip non-month dir: ${monthDir.name}"); continue }
-            Log.d(TAG, "    month=${monthDir.name}")
-
-            for (dayDir in monthDir.listFiles()) {
-                if (!dayDir.isDirectory) continue
-                val dayNum = parseDayFolderNum(dayDir.name ?: "")
-                if (dayNum == null) { Log.d(TAG, "      skip non-day dir: ${dayDir.name}"); continue }
-                val date = try {
-                    LocalDate.of(year, month, dayNum)
-                } catch (_: Exception) { continue }
-
-                val files = dayDir.listFiles().filter { it.isFile }
-                Log.d(TAG, "      day=${dayDir.name} date=$date files=${files.size}")
-                files.forEach { out.add(it to date) }
+    private fun collectYear(yearDir: DocumentFile, year: Int, out: MutableList<DatedFile>, notes: MutableList<String>) {
+        for (mdir in safeList(yearDir, notes)) {
+            val mName = mdir.name ?: continue
+            if (!mdir.isDirectory) continue
+            val month = PhotoLogic.parseMonthFolder(mName)
+            if (month == null) {
+                if (mName.lowercase() !in OWN_DIRS && !mName.startsWith(".")) notes += "skipped folder that is not a month: ${yearDir.name}/$mName"
+                continue
+            }
+            val loose = safeList(mdir, notes).count { it.isFile && PhotoLogic.isMedia(it.name ?: "") }
+            if (loose > 0) notes += "$loose file(s) directly in ${yearDir.name}/$mName have no day folder; left as they are"
+            for (ddir in safeList(mdir, notes)) {
+                if (!ddir.isDirectory) continue
+                val dName = ddir.name ?: continue
+                val day = PhotoLogic.parseDayFolder(dName)
+                if (day == null) { notes += "skipped folder that is not a day: ${yearDir.name}/$mName/$dName"; continue }
+                val date = try { LocalDate.of(year, month, day) } catch (_: Exception) {
+                    notes += "not a real date: ${yearDir.name}/$mName/$dName"
+                    continue
+                }
+                collectMedia(ddir, date, out, notes)
             }
         }
     }
 
-    /**
-     * Parses day folder names in multiple formats:
-     *   "January_07"  → 7   (current format)
-     *   "January 15"  → 15  (old format, still accepted)
-     *   "15"          → 15  (legacy numeric)
-     */
-    private fun parseDayFolderNum(name: String): Int? = when {
-        '_' in name -> name.substringAfterLast('_').toIntOrNull()
-        ' ' in name -> name.substringAfterLast(' ').toIntOrNull()
-        else        -> name.toIntOrNull()
+    /** Media in a day folder and any sub-folders below it (bursts, edits…). */
+    private fun collectMedia(dir: DocumentFile, date: LocalDate, out: MutableList<DatedFile>, notes: MutableList<String>) {
+        for (f in safeList(dir, notes)) {
+            val n = f.name ?: continue
+            if (f.isDirectory) {
+                if (n.lowercase() !in OWN_DIRS && !n.startsWith(".")) collectMedia(f, date, out, notes)
+            } else if (PhotoLogic.isMedia(n)) {
+                out += DatedFile(f, dir, date)
+            }
+        }
     }
 
-    private fun hasExifDate(context: Context, file: DocumentFile): Boolean {
-        return try {
-            context.contentResolver.openInputStream(file.uri)?.use { stream ->
-                val exif = ExifInterface(stream)
-                val tag = exif.getAttribute(ExifInterface.TAG_DATETIME_ORIGINAL)
-                    ?: exif.getAttribute(ExifInterface.TAG_DATETIME)
-                !tag.isNullOrBlank() && !tag.startsWith("0000")
-            } ?: false
-        } catch (_: Exception) { false }
+    private fun safeList(dir: DocumentFile, notes: MutableList<String>): List<DocumentFile> = try {
+        dir.listFiles().toList()
+    } catch (e: Exception) {
+        notes += "could not open ${dir.name}: ${e.message}"
+        emptyList()
     }
 
     /**
-     * Writes the folder-derived date to EXIF using the temp-file pattern:
-     *   1. Copy file bytes to a temp file in app cache.
-     *   2. Open ExifInterface on the temp file (supports in-place rewrite).
-     *   3. saveAttributes().
-     *   4. Stream the modified bytes back to the SAF URI with "wt" (truncate) mode.
+     * Writes [date] into [file] (which lives in [dir]) using the temp-file pattern:
+     * copy SAF file → app cache, ExifInterface(path).saveAttributes(), then put
+     * the result back. ExifInterface(FileDescriptor) fails with EBADF on some
+     * SAF providers.
      *
-     * This avoids the EBADF / partial-write issues that can occur when using
-     * ExifInterface(FileDescriptor) directly with some SAF providers.
-     *
-     * Time-of-day is set to noon UTC so the file sorts consistently within
-     * its day folder; only the date portion is meaningful here.
+     * Putting it back: the new bytes go to a hidden temp file next to the
+     * original first; only once that is complete is the original replaced, so
+     * an unplugged drive never leaves a half-written photo. Providers that
+     * can't rename fall back to overwriting in place ("wt").
      */
-    private fun writeExifDate(context: Context, file: DocumentFile, date: LocalDate) {
-        val dateStr = LocalDateTime.of(date.year, date.monthValue, date.dayOfMonth, 12, 0, 0)
-            .format(EXIF_DATE_FMT)
-
+    private fun writeExifDate(context: Context, file: DocumentFile, dir: DocumentFile, date: PhotoDate) {
+        val name = file.name ?: throw java.io.IOException("File has no name")
         val tempFile = File(context.cacheDir, "exif_fix_${System.nanoTime()}.tmp")
         try {
-            // 1. Copy source → temp
             context.contentResolver.openInputStream(file.uri)?.use { inp ->
                 tempFile.outputStream().use { out -> inp.copyTo(out) }
-            } ?: throw Exception("Cannot open source: ${file.name}")
+            } ?: throw java.io.IOException("Cannot open $name")
 
-            // 2. Write EXIF on temp file
-            ExifInterface(tempFile.absolutePath).apply {
-                setAttribute(ExifInterface.TAG_DATETIME_ORIGINAL,  dateStr)
-                setAttribute(ExifInterface.TAG_DATETIME,           dateStr)
-                setAttribute(ExifInterface.TAG_DATETIME_DIGITIZED, dateStr)
-                setAttribute(ExifInterface.TAG_OFFSET_TIME_ORIGINAL,  "+00:00")
-                setAttribute(ExifInterface.TAG_OFFSET_TIME,           "+00:00")
-                setAttribute(ExifInterface.TAG_OFFSET_TIME_DIGITIZED, "+00:00")
-                saveAttributes()
-            }
+            val exif = ExifInterface(tempFile.absolutePath)
+            exif.setAttribute(ExifInterface.TAG_DATETIME_ORIGINAL,  date.exif)
+            exif.setAttribute(ExifInterface.TAG_DATETIME,           date.exif)
+            exif.setAttribute(ExifInterface.TAG_DATETIME_DIGITIZED, date.exif)
+            exif.setAttribute(ExifInterface.TAG_OFFSET_TIME_ORIGINAL,  date.offsetString)
+            exif.setAttribute(ExifInterface.TAG_OFFSET_TIME,           date.offsetString)
+            exif.setAttribute(ExifInterface.TAG_OFFSET_TIME_DIGITIZED, date.offsetString)
+            exif.saveAttributes()
 
-            // 3. Write back to SAF ("wt" = write + truncate existing content)
-            context.contentResolver.openOutputStream(file.uri, "wt")?.use { out ->
+            if (replaceViaTemp(context, tempFile, file, dir, name)) return
+            val written = context.contentResolver.openOutputStream(file.uri, "wt")?.use { out ->
                 tempFile.inputStream().use { inp -> inp.copyTo(out) }
-            } ?: throw Exception("Cannot open destination: ${file.name}")
-
+            } ?: throw java.io.IOException("Cannot write $name")
+            if (written != tempFile.length()) throw java.io.IOException("Write was incomplete — check the drive")
         } finally {
             tempFile.delete()
+        }
+    }
+
+    /** True when [file] was replaced by [data]; false when this provider can't do it that way. */
+    private fun replaceViaTemp(context: Context, data: File, file: DocumentFile, dir: DocumentFile, name: String): Boolean {
+        val side = try { dir.createFile("application/octet-stream", PhotoLogic.TMP_PREFIX + name) } catch (_: Exception) { null }
+            ?: return false
+        var originalDeleted = false
+        try {
+            val written = context.contentResolver.openOutputStream(side.uri, "w")?.use { out ->
+                data.inputStream().use { it.copyTo(out) }
+            } ?: -1L
+            if (written != data.length()) {
+                side.delete()
+                if (written >= 0) throw java.io.IOException("Write was incomplete — check the drive")
+                return false
+            }
+            if (!file.delete()) { side.delete(); return false }
+            originalDeleted = true
+            if (side.renameTo(name)) return true
+            // Original is gone and the temp can't be renamed: write the data under the real name.
+            val dest = dir.createFile("application/octet-stream", name)
+                ?: throw java.io.IOException("Could not restore $name — its data is in ${side.name}")
+            context.contentResolver.openOutputStream(dest.uri, "w")?.use { out ->
+                data.inputStream().use { it.copyTo(out) }
+            } ?: throw java.io.IOException("Could not restore $name — its data is in ${side.name}")
+            side.delete()
+            return true
+        } catch (e: java.io.IOException) {
+            throw e
+        } catch (e: Exception) {
+            if (originalDeleted) throw java.io.IOException("Could not finish writing $name — its data is in ${side.name}", e)
+            try { side.delete() } catch (_: Exception) { }
+            return false
         }
     }
 }

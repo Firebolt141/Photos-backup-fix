@@ -3,26 +3,48 @@ package com.firebolt141.ubertrag.repository
 import android.content.ContentUris
 import android.content.Context
 import android.net.Uri
-import android.util.Log
 import android.provider.MediaStore
+import android.provider.OpenableColumns
+import android.util.Log
 import androidx.documentfile.provider.DocumentFile
 import com.firebolt141.ubertrag.data.AppDatabase
 import com.firebolt141.ubertrag.data.CopyStatus
 import com.firebolt141.ubertrag.data.Prefs
 import com.firebolt141.ubertrag.data.QueueItem
+import com.firebolt141.ubertrag.util.CopyOutcome
 import com.firebolt141.ubertrag.util.DateExtractor
 import com.firebolt141.ubertrag.util.ExifFixResult
 import com.firebolt141.ubertrag.util.ExifFixer
 import com.firebolt141.ubertrag.util.FixByFilenameResult
+import com.firebolt141.ubertrag.util.PhotoLogic
+import com.firebolt141.ubertrag.util.RenameResult
+import com.firebolt141.ubertrag.util.SafTree
 import com.firebolt141.ubertrag.util.StorageHelper
+import com.firebolt141.ubertrag.util.TakeoutOptions
+import com.firebolt141.ubertrag.util.TakeoutProcessor
+import com.firebolt141.ubertrag.util.TakeoutResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
-import java.io.IOException
+import java.io.FileNotFoundException
+import java.time.ZoneId
 
-data class CopySummary(val copied: Int, val skipped: Int, val failed: Int)
+data class CopySummary(
+    val copied: Int = 0,
+    val skipped: Int = 0,          // already on the drive
+    val failed: Int = 0,
+    val gone: Int = 0,             // deleted from the phone since the scan
+    val noDate: Int = 0,           // copied to no-date/
+    val bytes: Long = 0,
+    val stoppedEarly: String = "", // drive full / unplugged / stopped by the user
+    val problem: String = "",      // could not start at all
+) {
+    val total: Int get() = copied + skipped + failed + gone
+}
 
 class SyncRepository(private val context: Context) {
+
+    private companion object { const val TAG = "SyncRepository" }
 
     private val db    = AppDatabase.get(context)
     private val dao   = db.queueDao()
@@ -34,11 +56,22 @@ class SyncRepository(private val context: Context) {
 
     // ── scan ─────────────────────────────────────────────────────────────
 
+    /**
+     * Adds photos/videos from the phone's gallery that aren't in the queue yet.
+     * Dates are stored as wall-clock time ("taken at 23:30 local") encoded as
+     * UTC ms, the same convention as the drive folders and EXIF.
+     */
     suspend fun scanMedia(): Int = withContext(Dispatchers.IO) {
-        Log.d("SyncRepository", "scanMedia start")
+        Log.d(TAG, "scanMedia start")
+        if (!prefs.wallDatesMigrated.first()) {
+            // Before 1.1 the queue stored UTC instants, which put late-evening
+            // photos in the next day's folder. Re-read unfinished items.
+            dao.deleteUnfinished()
+            prefs.setWallDatesMigrated()
+        }
         val existingIds = dao.getAllMediaIds().toHashSet()
-        Log.d("SyncRepository", "scanMedia: ${existingIds.size} already in DB")
         val newItems    = mutableListOf<QueueItem>()
+        val zone        = ZoneId.systemDefault()
 
         val projection = arrayOf(
             MediaStore.MediaColumns._ID,
@@ -53,6 +86,7 @@ class SyncRepository(private val context: Context) {
             MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
             MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
         ).forEach { collection ->
+            val isVideo = collection == MediaStore.Video.Media.EXTERNAL_CONTENT_URI
             context.contentResolver.query(
                 collection, projection, null, null,
                 "${MediaStore.MediaColumns.DATE_ADDED} DESC"
@@ -68,15 +102,22 @@ class SyncRepository(private val context: Context) {
                     val mediaId = cursor.getLong(idCol)
                     if (mediaId in existingIds) continue
 
-                    val mimeType  = cursor.getString(mimeCol) ?: continue
-                    val path      = cursor.getString(dataCol) ?: continue
+                    val path      = cursor.getString(dataCol) ?: ""
+                    val name      = cursor.getString(nameCol)?.takeIf { it.isNotBlank() }
+                        ?: path.substringAfterLast('/').takeIf { it.isNotBlank() }
+                        ?: "media_$mediaId"
+                    val mimeType  = cursor.getString(mimeCol)?.takeIf { it.isNotBlank() }
+                        ?: if (isVideo) "video/*" else "image/*"
                     val dateAdded = cursor.getLong(addedCol) * 1000L
-                    val dateTaken = cursor.getLong(takenCol).takeIf { it > 0 }
-                        ?: refineDateTaken(mediaId, mimeType)
+                    val taken     = cursor.getLong(takenCol).takeIf { it > 0 }
+                        ?.let { PhotoLogic.wallMs(it, zone) }
+                    val dateTaken = taken
+                        ?: refineDateTaken(mediaId, isVideo, zone)
+                        ?: PhotoLogic.dateFromFilename(name, zone)?.wallMs
 
                     newItems += QueueItem(
                         mediaId      = mediaId,
-                        displayName  = cursor.getString(nameCol) ?: path.substringAfterLast('/'),
+                        displayName  = name,
                         mimeType     = mimeType,
                         absolutePath = path,
                         dateAdded    = dateAdded,
@@ -87,111 +128,123 @@ class SyncRepository(private val context: Context) {
         }
 
         if (newItems.isNotEmpty()) dao.insertAll(newItems)
-        Log.d("SyncRepository", "scanMedia done — found ${newItems.size} new items")
+        Log.d(TAG, "scanMedia done — found ${newItems.size} new items")
         newItems.size
     }
 
-    private fun refineDateTaken(mediaId: Long, mimeType: String): Long? {
-        return if (mimeType.startsWith("image/")) {
-            val uri = ContentUris.withAppendedId(
-                MediaStore.Images.Media.EXTERNAL_CONTENT_URI, mediaId)
+    private fun refineDateTaken(mediaId: Long, isVideo: Boolean, zone: ZoneId): Long? =
+        if (!isVideo) {
+            val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, mediaId)
             try {
-                context.contentResolver.openInputStream(uri)
-                    ?.use { DateExtractor.fromImageStream(it) }
+                context.contentResolver.openInputStream(uri)?.use { DateExtractor.fromImageStream(it) }
             } catch (_: Exception) { null }
         } else {
-            val uri = ContentUris.withAppendedId(
-                MediaStore.Video.Media.EXTERNAL_CONTENT_URI, mediaId)
-            DateExtractor.fromVideoUri(context, uri)
+            // Video dates are UTC instants: show them in the phone's time zone.
+            val uri = ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, mediaId)
+            DateExtractor.fromVideoUri(context, uri)?.let { PhotoLogic.wallMs(it, zone) }
         }
-    }
 
     // ── copy ─────────────────────────────────────────────────────────────
 
+    /**
+     * Copies queued items to the drive: <drive>/2024/March/March_15/name.
+     * Items without any date go to <drive>/no-date/. A file already there
+     * with the same size is not copied again; a different file with the same
+     * name gets an _1 suffix. Stops early when the drive is full or unplugged.
+     */
     suspend fun copyPending(
         fromMs: Long = 0L,
         toMs: Long = 0L,
+        isCancelled: () -> Boolean = { false },
         onProgress: suspend (done: Int, total: Int, currentName: String, speedMBps: Double) -> Unit,
     ): CopySummary = withContext(Dispatchers.IO) {
-        Log.d("SyncRepository", "copyPending start")
+        Log.d(TAG, "copyPending start")
         val driveUriStr = prefs.driveUri.first()
-        if (driveUriStr == null) { Log.w("SyncRepository", "copyPending: no drive configured"); return@withContext CopySummary(0, 0, 0) }
-        if (!StorageHelper.isDriveMounted(context, driveUriStr)) { Log.w("SyncRepository", "copyPending: drive not mounted"); return@withContext CopySummary(0, 0, 0) }
-
+            ?: return@withContext CopySummary(problem = "No drive selected")
+        if (!StorageHelper.isDriveMounted(context, driveUriStr))
+            return@withContext CopySummary(problem = "The drive isn't connected (or can't be written to)")
         val root = DocumentFile.fromTreeUri(context, Uri.parse(driveUriStr))
-            ?: return@withContext CopySummary(0, 0, 0)
+            ?: return@withContext CopySummary(problem = "Cannot open the drive folder — select it again")
+        if (!prefs.wallDatesMigrated.first()) scanMedia()
 
-        // Add 24 h so the end date is inclusive (picker returns midnight UTC of the selected day).
-        val effectiveTo = if (toMs > 0) toMs + 86_400_000L else Long.MAX_VALUE
-        val pending = dao.getPending().let { all ->
-            if (fromMs == 0L && effectiveTo == Long.MAX_VALUE) all
-            else all.filter { item ->
-                val ts = item.dateTaken ?: item.dateAdded
-                ts in fromMs..effectiveTo
-            }
+        // Picker dates are midnight UTC of the chosen days; queue dates are wall-clock in UTC ms.
+        val effectiveTo = if (toMs > 0) toMs + 86_400_000L - 1 else Long.MAX_VALUE
+        val zone = ZoneId.systemDefault()
+        val pending = dao.getPending().filter { item ->
+            fromMs == 0L && effectiveTo == Long.MAX_VALUE ||
+                (item.dateTaken ?: PhotoLogic.wallMs(item.dateAdded, zone)) in fromMs..effectiveTo
         }
 
+        val tree       = SafTree(context)
         val startMs    = System.currentTimeMillis()
         var totalBytes = 0L
-        var done       = 0
-        var copied     = 0
-        var skipped    = 0
-        var failed     = 0
+        var done = 0; var copied = 0; var skipped = 0; var failed = 0; var gone = 0; var noDate = 0
+        var stopped = ""
 
-        Log.d("SyncRepository", "copyPending: ${pending.size} items to copy")
+        Log.d(TAG, "copyPending: ${pending.size} items to copy")
         for (item in pending) {
+            if (isCancelled()) { stopped = "Stopped by you"; break }
             onProgress(done, pending.size, item.displayName, calcSpeed(totalBytes, startMs))
-            try {
-                val bytes = copyItem(item, root)
-                if (bytes != null) {
-                    totalBytes += bytes
-                    dao.updateStatus(item.id, CopyStatus.COPIED)
-                    Log.d("SyncRepository", "  copied: ${item.displayName} (${bytes}B)")
+            val srcUri = sourceUri(item)
+            val size = sourceSize(srcUri)
+            if (size == null) {
+                dao.updateStatusAndError(item.id, CopyStatus.SKIPPED, "No longer on the phone")
+                gone++; done++
+                continue
+            }
+            val parts = item.dateTaken?.let { PhotoLogic.dateFolders(it) } ?: listOf(PhotoLogic.NO_DATE_DIR)
+            val destDir = tree.dirPath(root, parts)
+            val outcome = if (destDir == null) {
+                CopyOutcome.Failed(
+                    if (StorageHelper.isDriveMounted(context, driveUriStr)) "Cannot create folder ${parts.joinToString("/")}"
+                    else "File or folder not found (was the drive disconnected?)"
+                )
+            } else try {
+                tree.copyInto(srcUri, size, destDir, item.displayName)
+            } catch (e: Exception) {
+                CopyOutcome.Failed(tree.friendly(e))
+            }
+            when (outcome) {
+                is CopyOutcome.Copied -> {
+                    totalBytes += outcome.bytes
+                    dao.updateStatusAndError(item.id, CopyStatus.COPIED, null)
                     copied++
-                } else {
-                    dao.updateStatus(item.id, CopyStatus.SKIPPED)
-                    Log.d("SyncRepository", "  skipped (exists): ${item.displayName}")
+                    if (item.dateTaken == null) noDate++
+                }
+                is CopyOutcome.AlreadyThere -> {
+                    dao.updateStatusAndError(item.id, CopyStatus.SKIPPED, null)
                     skipped++
                 }
-            } catch (e: Exception) {
-                dao.updateStatusAndError(item.id, CopyStatus.FAILED, e.message)
-                Log.e("SyncRepository", "  failed: ${item.displayName} — ${e.message}", e)
-                failed++
+                is CopyOutcome.Failed -> {
+                    dao.updateStatusAndError(item.id, CopyStatus.FAILED, outcome.message)
+                    Log.w(TAG, "  failed: ${item.displayName} — ${outcome.message}")
+                    failed++
+                    if (tree.isFatal(outcome.message)) { stopped = outcome.message; done++; break }
+                }
             }
             done++
         }
         onProgress(done, pending.size, "", calcSpeed(totalBytes, startMs))
-        Log.d("SyncRepository", "copyPending done — copied=$copied skipped=$skipped failed=$failed")
-        CopySummary(copied, skipped, failed)
+        Log.d(TAG, "copyPending done — copied=$copied skipped=$skipped failed=$failed gone=$gone stopped=$stopped")
+        CopySummary(copied, skipped, failed, gone, noDate, totalBytes, stopped)
     }
 
-    // Returns bytes written, or null if the file already exists at the destination (skip).
-    private fun copyItem(item: QueueItem, root: DocumentFile): Long? {
-        val destDir = StorageHelper.resolveDestDir(root, item.dateTaken)
-            ?: throw IOException("Failed to create destination directory")
-
-        if (destDir.findFile(item.displayName) != null) return null   // already there → skip
-
-        val mimeType = item.mimeType.takeIf { it.isNotBlank() } ?: "application/octet-stream"
-        val destFile = destDir.createFile(mimeType, item.displayName)
-            ?: throw IOException("Cannot create file: ${item.displayName}")
-
-        val srcUri = if (item.mimeType.startsWith("image/")) {
-            ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, item.mediaId)
-        } else {
+    private fun sourceUri(item: QueueItem): Uri =
+        if (item.mimeType.startsWith("video/"))
             ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, item.mediaId)
-        }
+        else
+            ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, item.mediaId)
 
-        return try {
-            context.contentResolver.openOutputStream(destFile.uri)?.use { out ->
-                context.contentResolver.openInputStream(srcUri)?.use { inp ->
-                    inp.copyTo(out)
-                } ?: throw IOException("Cannot open source: ${item.displayName}")
-            } ?: throw IOException("Cannot open destination: ${item.displayName}")
-        } catch (e: Exception) {
-            destFile.delete()
-            throw e
-        }
+    /** Size in bytes, -1 if unknown, or null when the item no longer exists. */
+    private fun sourceSize(uri: Uri): Long? = try {
+        context.contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { c ->
+            if (!c.moveToFirst()) null
+            else if (c.isNull(0)) -1L else c.getLong(0)
+        } ?: -1L
+    } catch (_: FileNotFoundException) {
+        null
+    } catch (_: Exception) {
+        -1L
     }
 
     private fun calcSpeed(bytes: Long, startMs: Long): Double {
@@ -201,69 +254,67 @@ class SyncRepository(private val context: Context) {
 
     suspend fun retryFailed()  = withContext(Dispatchers.IO) { dao.resetFailed() }
     suspend fun clearCopied()  = withContext(Dispatchers.IO) { dao.clearCopied() }
+    /** Marks everything as pending again, e.g. to fill a new drive. Files already there are skipped. */
+    suspend fun requeueAll()   = withContext(Dispatchers.IO) { dao.resetAll() }
 
-    suspend fun renameLegacyFolders(onProgress: (String) -> Unit): Pair<Int, Int> =
+    // ── drive utilities ──────────────────────────────────────────────────
+
+    private suspend fun driveRoot(): DocumentFile? {
+        val driveUriStr = prefs.driveUri.first() ?: return null
+        if (!StorageHelper.isDriveMounted(context, driveUriStr)) return null
+        return DocumentFile.fromTreeUri(context, Uri.parse(driveUriStr))
+    }
+
+    suspend fun renameLegacyFolders(dryRun: Boolean, onProgress: (String) -> Unit): RenameResult? =
         withContext(Dispatchers.IO) {
-            val driveUriStr = prefs.driveUri.first() ?: return@withContext 0 to 0
-            if (!StorageHelper.isDriveMounted(context, driveUriStr)) return@withContext 0 to 0
-            val root = DocumentFile.fromTreeUri(context, Uri.parse(driveUriStr))
-                ?: return@withContext 0 to 0
-            StorageHelper.renameLegacyFolders(root, onProgress)
+            val root = driveRoot() ?: return@withContext null
+            StorageHelper.renameLegacyFolders(context, root, dryRun, onProgress)
         }
 
     suspend fun fixMissingExif(
+        fixMismatched: Boolean,
         onProgress: (current: Int, total: Int, name: String) -> Unit,
-    ) = withContext(Dispatchers.IO) {
-        val driveUriStr = prefs.driveUri.first()
-            ?: return@withContext ExifFixResult()
-        if (!StorageHelper.isDriveMounted(context, driveUriStr))
-            return@withContext ExifFixResult()
-        val root = DocumentFile.fromTreeUri(context, Uri.parse(driveUriStr))
-            ?: return@withContext ExifFixResult()
-        ExifFixer.fixMissingExif(root, context, onProgress)
+        onLog: (String) -> Unit,
+        isCancelled: () -> Boolean,
+    ): ExifFixResult? = withContext(Dispatchers.IO) {
+        val root = driveRoot() ?: return@withContext null
+        ExifFixer.fixMissingExif(root, context, onProgress, onLog, fixMismatched, isCancelled)
     }
 
     suspend fun fixByFilename(
         sourceUri:  String,
         outputUri:  String,
+        keepExistingDates: Boolean,
+        renameToDate: Boolean,
         onLog:      (String) -> Unit,
         onProgress: (current: Int, total: Int, name: String) -> Unit,
+        isCancelled: () -> Boolean,
     ): FixByFilenameResult = withContext(Dispatchers.IO) {
-        Log.d("SyncRepository", "fixByFilename source=$sourceUri output=$outputUri")
-        val src = DocumentFile.fromTreeUri(context, Uri.parse(sourceUri))
-            ?: run { onLog("✗ Cannot open source folder"); return@withContext FixByFilenameResult() }
-        val out = DocumentFile.fromTreeUri(context, Uri.parse(outputUri))
-            ?: run { onLog("✗ Cannot open output folder"); return@withContext FixByFilenameResult() }
-        ExifFixer.fixByFilename(src, out, context, onLog, onProgress)
+        Log.d(TAG, "fixByFilename source=$sourceUri output=$outputUri")
+        val src = treeOrNull(sourceUri)
+            ?: return@withContext FixByFilenameResult(errorMsg = "Cannot open the source folder. Select it again.")
+        val out = treeOrNull(outputUri)
+            ?: return@withContext FixByFilenameResult(errorMsg = "Cannot open the output folder. Select it again.")
+        ExifFixer.fixByFilename(src, out, context, onLog, onProgress, keepExistingDates, renameToDate, isCancelled)
     }
 
     suspend fun processTakeout(
         sourceUri:  String,
         outputUri:  String,
-        options:    com.firebolt141.ubertrag.util.TakeoutOptions,
+        options:    TakeoutOptions,
         onProgress: (done: Int, total: Int, name: String) -> Unit,
-    ) = withContext(Dispatchers.IO) {
-        Log.d("SyncRepository", "processTakeout start — source=$sourceUri output=$outputUri")
-
-        val sourceRoot = DocumentFile.fromTreeUri(context, Uri.parse(sourceUri))
-        if (sourceRoot == null) {
-            Log.e("SyncRepository", "processTakeout: cannot open source folder — uri=$sourceUri")
-            return@withContext com.firebolt141.ubertrag.util.TakeoutResult(
-                errorMsg = "Cannot open the selected source folder. Try selecting it again."
-            )
-        }
-
-        val outputRoot = DocumentFile.fromTreeUri(context, Uri.parse(outputUri))
-        if (outputRoot == null) {
-            Log.e("SyncRepository", "processTakeout: cannot open output folder — uri=$outputUri")
-            return@withContext com.firebolt141.ubertrag.util.TakeoutResult(
-                errorMsg = "Cannot open the selected output folder. Try selecting it again."
-            )
-        }
-
-        Log.d("SyncRepository", "processTakeout: source=${sourceRoot.name} output=${outputRoot.name}")
-        com.firebolt141.ubertrag.util.TakeoutProcessor.process(
-            sourceRoot, outputRoot, context, options, onProgress
-        )
+        onLog:      (String) -> Unit = {},
+        isCancelled: () -> Boolean = { false },
+    ): TakeoutResult = withContext(Dispatchers.IO) {
+        Log.d(TAG, "processTakeout start — source=$sourceUri output=$outputUri")
+        val sourceRoot = treeOrNull(sourceUri)
+            ?: return@withContext TakeoutResult(errorMsg = "Cannot open the selected source folder. Try selecting it again.")
+        val outputRoot = treeOrNull(outputUri)
+            ?: return@withContext TakeoutResult(errorMsg = "Cannot open the selected output folder. Try selecting it again.")
+        TakeoutProcessor.process(sourceRoot, outputRoot, context, options, onProgress, onLog, isCancelled)
     }
+
+    private fun treeOrNull(uri: String): DocumentFile? = try {
+        DocumentFile.fromTreeUri(context, Uri.parse(uri))?.takeIf { it.exists() }
+    } catch (_: Exception) { null }
 }

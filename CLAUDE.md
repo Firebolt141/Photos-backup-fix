@@ -74,51 +74,38 @@ Build: Kotlin + Jetpack Compose + Room + DataStore
 
 ### Navigation
 
-**Übertrag** uses a `ModalNavigationDrawer` (hamburger sidebar) with three sections:
+`ModalNavigationDrawer`; start destination `start` (`StartScreen`, a "what do you have?" guide).
 
-| Section | Route | Screen |
-|---|---|---|
-| Backup | `home` | `HomeScreen` — scan, copy, queue stats, drive picker |
-| Backup | `queue` | `QueueScreen` — queue browser with All/Pending/Copied/Skipped/Failed filter chips |
-| Drive Utilities | `fix-exif` | `FixExifScreen` — fix missing EXIF (two modes) |
-| Drive Utilities | `rename-folders` | `RenameFoldersScreen` — rename numeric → spelled-out folders |
-| Import | `takeout` | `TakeoutScreen` — process Google Takeout on-device |
+| Route | Screen |
+|---|---|
+| `start` | `StartScreen` — task cards → other routes |
+| `home` | `HomeScreen` — 3 steps: drive → scan → copy; permission card, Stop, last summary |
+| `queue` | `QueueScreen` — scrollable filter chips, "copy everything again" |
+| `takeout` | `TakeoutScreen` — Takeout import (`TakeoutProcessor`) |
+| `organize` | `FixExifScreen(filenameMode = true)` — sort any folder by date |
+| `fix-exif` | `FixExifScreen(filenameMode = false)` — fix dates on drive in place |
+| `rename-folders` | `RenameFoldersScreen` — Check (dry run) then rename/merge |
 
 ### Key files
 
 | File | Purpose |
 |---|---|
-| `ui/AppDrawer.kt` | `ModalDrawerSheet` content — all nav items, section labels |
-| `ui/SharedComponents.kt` | `DriveStatusCard`, `FolderPickerCard` — shared between screens |
-| `ui/HomeScreen.kt` | Scan/copy/retry stats + drive picker; hamburger opens drawer |
-| `ui/QueueScreen.kt` | Queue browser; filter chips (All/Pending/Copied/Skipped/Failed) |
-| `ui/MainViewModel.kt` | State for Home + Queue + Rename screens via `combine()` flows |
-| `ui/FixExifScreen.kt` | Fix EXIF screen — mode toggle, pickers, progress, live log |
-| `ui/FixExifViewModel.kt` | State for `FixExifScreen`; isolated from `MainViewModel` |
-| `ui/RenameFoldersScreen.kt` | Rename numeric legacy folders; reads rename state from `UiState` |
-| `ui/TakeoutScreen.kt` | Process Takeout — source + output pickers, options, progress, result |
-| `ui/TakeoutViewModel.kt` | State for `TakeoutScreen`; completely isolated |
-| `util/TakeoutProcessor.kt` | Port of core.py logic; pure functions are unit-testable |
-| `util/StorageHelper.kt` | SAF folder creation (`January/January_07` naming), `renameLegacyFolders` |
-| `util/ExifFixer.kt` | `fixMissingExif()` (drive-structure mode) + `fixByFilename()` (filename-date mode) |
-| `util/DateExtractor.kt` | Reads EXIF/video metadata date from phone media |
-| `repository/SyncRepository.kt` | All business logic wired together; one class, no DI framework |
-| `data/AppDatabase.kt` + `QueueDao.kt` | Room DB for the copy queue |
-| `data/Prefs.kt` | DataStore for drive URI and date range |
-| `service/CopyService.kt` | Foreground service running `SyncRepository.copyPending()` |
+| `util/PhotoLogic.kt` | Pure Kotlin (unit-tested): filename dates, folder names/parsing, sidecar matching, `PhotoDate` |
+| `util/SafTree.kt` | Cached SAF listings; `copyInto()` = temp name → size check → rename; same name+size = `AlreadyThere`, else `_N` |
+| `util/TakeoutProcessor.kt` | Shared engine for Takeout + "sort a folder"; every file → dated dir, `no-date/<rel>`, or `error/<rel>`; fatal errors stop the run |
+| `util/ExifFixer.kt` | `fixMissingExif()` (in place, via sibling temp file) + `fixByFilename()` (delegates to TakeoutProcessor, `useSidecars=false`) |
+| `util/StorageHelper.kt` | `isDriveMounted`, `folderLabel`, `renameLegacyFolders(context, root, dryRun)` with merge |
+| `repository/SyncRepository.kt` | Scan (wall-clock dates), copyPending (SafTree), wrappers for all tools |
+| `service/CopyService.kt` | Foreground copy; Stop action, wake lock, `lastSummary` |
+| `service/KeepAliveService.kt` | `KeepAlive.begin/update/end` keeps ViewModel jobs alive with the screen off |
+| `ui/SharedComponents.kt` | `DriveStatusCard`, `FolderPickerCard`, `JobProgressCard`, `LogPanel`, `ResultCard`, `StepLabel`, `InfoCard` |
 
-### Fix EXIF — two modes
+### Invariants
 
-`FixExifScreen` has a toggle ("Filename Date Mode"):
-
-| Mode | Toggle | How it works |
-|---|---|---|
-| **Drive-structure mode** (OFF) | Drive must be connected | Reads `year/month/day` folder names, stamps EXIF on files missing it |
-| **Filename Date mode** (ON) | Source + output folder pickers | Extracts date from filename (`IMG_20240315_…`), copies to `year/month/day/`, writes EXIF |
-
-`ExifFixer.fixByFilename()` calls `TakeoutProcessor.tsFromFilename()` for date extraction and `StorageHelper.resolveDestDir()` for folder creation. It emits `onLog()` messages (`✓`, `→`, `⚠`, `✗` prefixed) that feed the live log panel in the UI.
-
-The log panel (`LogPanel` composable in `FixExifScreen.kt`) is a 220dp-tall monospace `LazyColumn` that auto-scrolls on each new line via `LaunchedEffect(lines.size)`.
+- Queue/folder dates are **wall-clock time encoded as UTC ms** (`PhotoLogic.wallMs`, `PhotoDate.wallMs`); format them in UTC
+- EXIF/GPS for copies is written into a cache copy **before** copying (deterministic bytes → re-runs detect "already there")
+- Compare SAF folders by document id, not URI string
+- Long ViewModel jobs must call `KeepAlive.begin/end` and honour an `isCancelled` flag
 
 ### EXIF writing pattern
 
@@ -166,26 +153,11 @@ TAG_OFFSET_TIME_DIGITIZED   // "+00:00"
 
 ### Folder naming
 
-New copies go into `2024/January/January_07/` (zero-padded day). Legacy numeric folders (`01/15`) can be renamed using `StorageHelper.renameLegacyFolders()`.
-
-`ExifFixer.parseDayFolderNum()` accepts all three formats:
-- `January_07` — current format
-- `January 7` — old format (still accepted for existing drives)
-- `15` — legacy numeric
+New copies go into `2024/January/January_07/`. `PhotoLogic.parseDayFolder` accepts `January_07`, `January 7`, `15`; `renameLegacyFolders` converts old names and merges into existing folders.
 
 ### State management
 
-`MainViewModel` uses nested `combine()` to merge 5 base flows + `_renameUi` into a single `UiState`. The `_renameUi` flow is a `MutableStateFlow(false to "")` pair (running flag + status message). Add new async operations following the same pattern.
-
-`FixExifViewModel` and `TakeoutViewModel` are separate ViewModels — they do NOT share state with `MainViewModel`. Keep them isolated.
-
-### Shared composables
-
-`SharedComponents.kt` contains composables used by more than one screen:
-- `DriveStatusCard(state: UiState, onDriveSelected?)` — drive connection card
-- `FolderPickerCard(title, subtitle, icon, name, enabled, onPick)` — folder picker card
-
-**Do not** add `FolderPickerCard` as a `private` function inside any single screen — it is shared between `FixExifScreen` and `TakeoutScreen`.
+`MainViewModel` merges flows into `UiState` (rename state is `RenameUi`). `FixExifViewModel` and `TakeoutViewModel` are isolated; they remember folder picks in `Prefs.folder(slot)`.
 
 ### App icon
 
@@ -199,10 +171,7 @@ Icon assets live in `app/src/main/res/mipmap-*/`:
 
 ### Unit tests
 
-Tests live in `app/src/test/` and cover `TakeoutProcessor`'s pure functions:
-- `jsonCandidateNames()` — sidecar filename generation
-- `parseMeta()` — JSON parsing
-- `tsFromFilename()` — filename date extraction
+Tests live in `app/src/test/` (`PhotoLogicTest`) and cover `PhotoLogic`.
 
 Run with `./gradlew test` from the `android-app/` directory.
 

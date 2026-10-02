@@ -2,20 +2,15 @@ package com.firebolt141.ubertrag.ui
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -30,22 +25,24 @@ fun TakeoutScreen(
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
 
-    val sourcePicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocumentTree()
-    ) { uri -> uri?.let(vm::onSourceSelected) }
-
-    val outputPicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocumentTree()
-    ) { uri -> uri?.let(vm::onOutputSelected) }
+    val sourcePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri -> uri?.let(vm::onSourceSelected) }
+    val outputPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri -> uri?.let(vm::onOutputSelected) }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Process Google Takeout", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onOpenDrawer) {
-                        Icon(Icons.Default.Menu, contentDescription = "Menu")
+                title = {
+                    Column {
+                        Text("Import Google Takeout")
+                        Text(
+                            "Restore dates, places and captions",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
+                },
+                navigationIcon = {
+                    IconButton(onClick = onOpenDrawer) { Icon(Icons.Default.Menu, contentDescription = "Menu") }
                 },
             )
         }
@@ -53,165 +50,85 @@ fun TakeoutScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
                 .padding(pad)
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            InfoCard(
+                "Google Takeout strips dates and places out of your photos and puts them in .json files next to them. " +
+                    "This reads those files and copies every photo and video into Output / Year / Month / Day with the " +
+                    "right date (and GPS and caption for JPEG/PNG/WebP). Your Takeout folder is not changed."
+            )
 
-            // ── Info banner ──────────────────────────────────────────────
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.Top,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Icon(
-                        Icons.Default.Info, null,
-                        Modifier.size(20.dp).padding(top = 2.dp),
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                    Text(
-                        "Reads JSON sidecars from your Takeout export and writes " +
-                        "correct dates, GPS, and descriptions into JPEG / PNG / WebP files. " +
-                        "HEIC, RAW, and video files are copied to the right date folder " +
-                        "but cannot have EXIF written.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-
-            // ── Source folder ────────────────────────────────────────────
+            StepLabel(1, "Unzip the Takeout download", done = state.sourceUri.isNotBlank())
+            Text(
+                "Takeout arrives as .zip files. In the Files app tap each zip → Extract. Extract all parts into the same folder.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             FolderPickerCard(
-                title    = "Takeout Source Folder",
-                subtitle = "The folder exported from Google Takeout",
+                title    = "Takeout folder",
+                subtitle = "The extracted \"Takeout\" folder (or \"Google Photos\" inside it)",
                 icon     = Icons.Default.FolderZip,
                 name     = state.sourceName,
                 enabled  = !state.running,
                 onPick   = { sourcePicker.launch(null) },
             )
 
-            // ── Output folder ────────────────────────────────────────────
+            StepLabel(2, "Where to put the photos", done = state.outputUri.isNotBlank())
             FolderPickerCard(
-                title    = "Output Folder",
-                subtitle = "Where to copy files (drive, internal storage, etc.)",
-                icon     = Icons.Default.DriveFileMove,
+                title    = "Output folder",
+                subtitle = "Your backup drive or a new empty folder",
+                icon     = Icons.AutoMirrored.Filled.DriveFileMove,
                 name     = state.outputName,
                 enabled  = !state.running,
                 onPick   = { outputPicker.launch(null) },
             )
-
-            // ── Options ──────────────────────────────────────────────────
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            Icons.Default.Tune, null,
-                            Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            "Options",
-                            style      = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                    }
-                    Row(
-                        modifier              = Modifier.fillMaxWidth(),
-                        verticalAlignment     = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                "Skip files that already have a date",
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                            Text(
-                                "Only write EXIF to files where it is missing",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        Switch(
-                            checked         = state.skipIfHasExif,
-                            onCheckedChange = vm::setSkipIfHasExif,
-                            enabled         = !state.running,
-                        )
-                    }
-                }
+            if (state.sourceUri.isNotBlank() && state.sourceUri == state.outputUri) {
+                Text("Source and output must be different folders.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
 
-            // ── Process button ───────────────────────────────────────────
-            Button(
-                onClick  = vm::startProcessing,
-                enabled  = state.sourceUri.isNotBlank() && state.outputUri.isNotBlank() && !state.running,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                if (state.running) {
-                    CircularProgressIndicator(
-                        modifier    = Modifier.size(18.dp),
-                        strokeWidth = 2.dp,
-                        color       = MaterialTheme.colorScheme.onPrimary,
+            StepLabel(3, "Options")
+            ElevatedCard(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    OptionSwitch(
+                        "Keep dates already in photos",
+                        "Recommended. Camera dates are usually more precise than Google's",
+                        state.skipIfHasExif, !state.running, vm::setSkipIfHasExif,
                     )
-                } else {
-                    Icon(Icons.Default.PlayArrow, null, Modifier.size(18.dp))
+                    OptionSwitch(
+                        "Rename copies to their date",
+                        "2024-03-15_14-30-22.jpg instead of the original name",
+                        state.renameToDate, !state.running, vm::setRenameToDate,
+                    )
                 }
-                Spacer(Modifier.width(8.dp))
-                Text(if (state.running) "Processing…" else "Start Processing")
             }
 
-            // ── Progress ─────────────────────────────────────────────────
-            AnimatedVisibility(
-                visible = state.running || (state.total > 0 && state.result == null),
-                enter   = fadeIn(),
-                exit    = fadeOut(),
-            ) {
-                ElevatedCard(
+            if (state.running) {
+                JobProgressCard(
+                    title    = "Importing…",
+                    done     = state.done,
+                    total    = state.total,
+                    current  = state.currentFile,
+                    stopping = state.stopping,
+                    onStop   = vm::stop,
+                )
+            } else {
+                Button(
+                    onClick  = vm::startProcessing,
+                    enabled  = state.sourceUri.isNotBlank() && state.outputUri.isNotBlank() && state.sourceUri != state.outputUri,
                     modifier = Modifier.fillMaxWidth(),
-                    colors   = CardDefaults.elevatedCardColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                    ),
                 ) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(
-                            modifier              = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            Text(
-                                "Processing files…",
-                                style      = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                            Text(
-                                "${state.done} / ${state.total}",
-                                style = MaterialTheme.typography.labelMedium,
-                            )
-                        }
-
-                        LinearProgressIndicator(
-                            progress = {
-                                if (state.total > 0) state.done.toFloat() / state.total else 0f
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-
-                        if (state.currentFile.isNotBlank()) {
-                            Text(
-                                state.currentFile,
-                                style    = MaterialTheme.typography.bodySmall,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                color    = MaterialTheme.colorScheme.onSecondaryContainer,
-                            )
-                        }
-                    }
+                    Icon(Icons.Default.PlayArrow, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Start import")
                 }
             }
 
-            // ── Results ──────────────────────────────────────────────────
-            state.result?.let { ResultCard(it, vm::clearResult) }
+            if (!state.running) state.result?.let { TakeoutResultCard(it, vm::clearResult) }
+
+            if (state.logLines.isNotEmpty()) LogPanel(lines = state.logLines, running = state.running)
 
             Spacer(Modifier.height(8.dp))
         }
@@ -219,79 +136,39 @@ fun TakeoutScreen(
 }
 
 @Composable
-private fun ResultCard(r: TakeoutResult, onDismiss: () -> Unit) {
-    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-
-            // Error state
-            if (r.errorMsg.isNotBlank()) {
-                Row(
-                    verticalAlignment     = Alignment.Top,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    Icon(
-                        Icons.Default.ErrorOutline, null,
-                        Modifier.size(20.dp),
-                        tint = MaterialTheme.colorScheme.error,
-                    )
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            "Could not start processing",
-                            style      = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color      = MaterialTheme.colorScheme.error,
-                        )
-                        Text(
-                            r.errorMsg,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-                TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
-                    Text("Dismiss")
-                }
-                return@Column
-            }
-
-            // Success state
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Default.CheckCircle, null,
-                    Modifier.size(20.dp),
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    "Done — ${r.total} file${if (r.total == 1) "" else "s"} processed",
-                    style      = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                ResultRow("EXIF written (JSON sidecar)",         r.fixed,           Icons.Default.AutoFixHigh)
-                ResultRow("EXIF written (filename date)",        r.fromFilename,    Icons.Default.TextFields)
-                if (r.skippedExisting > 0)
-                    ResultRow("Already had date — skipped",      r.skippedExisting, Icons.Default.SkipNext)
-                if (r.noDate > 0)
-                    ResultRow("No date found (in no-date/)",     r.noDate,          Icons.Default.HelpOutline)
-                if (r.unsupported > 0)
-                    ResultRow("Copied (HEIC/video — no EXIF)",   r.unsupported,     Icons.Default.Warning)
-                if (r.errors > 0)
-                    ResultRow("Errors (in error/)",              r.errors,          Icons.Default.ErrorOutline)
-            }
+private fun TakeoutResultCard(r: TakeoutResult, onDismiss: () -> Unit) {
+    if (r.errorMsg.isNotBlank()) {
+        ResultCard("Could not start", ok = false, onDismiss = onDismiss) {
+            Text(r.errorMsg, style = MaterialTheme.typography.bodySmall)
         }
+        return
     }
-}
-
-@Composable
-private fun ResultRow(label: String, count: Int, icon: androidx.compose.ui.graphics.vector.ImageVector) {
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment     = Alignment.CenterVertically,
-    ) {
-        Icon(icon, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text("$label: $count", style = MaterialTheme.typography.bodySmall)
+    val title = when {
+        r.stoppedEarly.isNotBlank() -> "Stopped — ${r.stoppedEarly}"
+        r.total == 0 -> "No photos or videos found"
+        r.errors > 0 -> "Done, with problems"
+        else -> "Done — ${plural(r.total, "file")}"
+    }
+    ResultCard(title, ok = r.errors == 0 && r.stoppedEarly.isBlank() && r.total > 0, onDismiss = onDismiss) {
+        if (r.fixed > 0) ResultRow("Date from Google's .json", r.fixed, Icons.Default.AutoFixHigh)
+        if (r.fromFilename > 0) ResultRow("Date from the file name", r.fromFilename, Icons.Default.TextFields)
+        if (r.keptExisting > 0) ResultRow("Kept the photo's own date", r.keptExisting, Icons.Default.CheckCircle)
+        if (r.unsupported > 0) ResultRow("Sorted, date not written (HEIC/video)", r.unsupported, Icons.Default.Info)
+        if (r.noDate > 0) ResultRow("No date found (in no-date/)", r.noDate, Icons.AutoMirrored.Filled.HelpOutline)
+        if (r.alreadyThere > 0) ResultRow("Already in the output (duplicates/earlier run)", r.alreadyThere, Icons.Default.RemoveCircleOutline)
+        if (r.errors > 0) ResultRow("Errors (copied to error/)", r.errors, Icons.Default.ErrorOutline, MaterialTheme.colorScheme.error)
+        if (r.ignored > 0) ResultRow("Other files left alone", r.ignored, Icons.Default.Description)
+        if (r.archives > 0) {
+            Text(
+                "${plural(r.archives, "zip file")} still packed. Extract ${if (r.archives == 1) "it" else "them"} (Files app → tap the zip → Extract) and run again.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        if (r.total == 0 && r.archives == 0) {
+            Text("Pick the folder you extracted the Takeout zips into.", style = MaterialTheme.typography.bodySmall)
+        }
+        if (r.stoppedEarly.isNotBlank()) {
+            Text("Everything done so far is safe. Run it again to continue — finished files are skipped.", style = MaterialTheme.typography.bodySmall)
+        }
     }
 }

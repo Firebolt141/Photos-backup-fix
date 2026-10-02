@@ -1,2 +1,2 @@
--keep class com.firebolt141.photosync.data.** { *; }
+-keep class com.firebolt141.ubertrag.data.** { *; }
 -keepattributes *Annotation*

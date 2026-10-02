@@ -2,61 +2,60 @@ package com.firebolt141.ubertrag.ui
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 
+/**
+ * Two tools sharing one screen (the route picks the mode):
+ *  - "Sort a folder by date" (filename mode): copies any messy folder into
+ *    output/Year/Month/Day using the date inside each file or in its name.
+ *  - "Fix the backup drive" (drive mode): writes the folder's date into
+ *    photos on the drive that have none.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FixExifScreen(
     onOpenDrawer: () -> Unit,
+    filenameMode: Boolean = false,
     vm: FixExifViewModel = viewModel(),
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
+    // Each route ("organize" / "fix-exif") has its own ViewModel, fixed to one mode.
+    LaunchedEffect(filenameMode) {
+        if (state.filenameMode != filenameMode) vm.setFilenameMode(filenameMode)
+    }
 
-    val sourcePicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocumentTree()
-    ) { uri -> uri?.let(vm::onSourceSelected) }
-
-    val outputPicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocumentTree()
-    ) { uri -> uri?.let(vm::onOutputSelected) }
+    val sourcePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri -> uri?.let(vm::onSourceSelected) }
+    val outputPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri -> uri?.let(vm::onOutputSelected) }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Column {
-                        Text("Fix Missing EXIF Dates", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text(if (filenameMode) "Sort a folder by date" else "Fix dates on the drive")
                         Text(
-                            if (state.filenameMode) "Copy & tag files using filename dates"
-                            else "Write dates to drive files missing them",
+                            if (filenameMode) "Any folder → Year / Month / Day"
+                            else "Give undated photos their folder's date",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = onOpenDrawer) {
-                        Icon(Icons.Default.Menu, contentDescription = "Menu")
-                    }
+                    IconButton(onClick = onOpenDrawer) { Icon(Icons.Default.Menu, contentDescription = "Menu") }
                 },
             )
         }
@@ -64,134 +63,103 @@ fun FixExifScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
                 .padding(pad)
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-
-            // ── Mode toggle ──────────────────────────────────────────────
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(
-                        modifier              = Modifier.fillMaxWidth(),
-                        verticalAlignment     = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text("Filename Date Mode", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                            Text(
-                                "Extract dates from filenames instead of folder structure",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        Switch(
-                            checked         = state.filenameMode,
-                            onCheckedChange = vm::setFilenameMode,
-                            enabled         = !state.running,
-                        )
-                    }
-
-                    // Mode description
-                    val (modeIcon, modeText) = if (state.filenameMode) {
-                        Icons.Default.TextFields to
-                        "Scans any folder, reads dates like IMG_20240315, copies files to output/2024/March/March 15/ and writes EXIF. Works on Screenshots, WhatsApp, or any flat folder."
-                    } else {
-                        Icons.Default.Storage to
-                        "Reads your drive's year / month / day folder names and writes EXIF into JPEG, PNG, WebP files that are missing it. HEIC, RAW, and video are skipped."
-                    }
-                    Row(
-                        verticalAlignment     = Alignment.Top,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Icon(modeIcon, null, Modifier.size(16.dp).padding(top = 2.dp), tint = MaterialTheme.colorScheme.primary)
-                        Text(modeText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            }
-
-            // ── Drive mode: drive status ─────────────────────────────────
-            if (!state.filenameMode) {
-                DriveStatusCard(
-                    driveUri       = state.driveUri,
-                    driveConnected = state.driveConnected,
+            if (filenameMode) {
+                InfoCard(
+                    "For a messy folder — camera dumps, WhatsApp, Screenshots, old phone backups, sub-folders and all. " +
+                        "Each photo and video is copied to Output / Year / Month / Day using the date inside the file " +
+                        "or in its name (IMG_20240315…). Files with no date go to no-date/ (keeping their sub-folders); " +
+                        "anything unreadable goes to error/. Your originals are never changed."
                 )
-            }
-
-            // ── Filename mode: source + output pickers ───────────────────
-            if (state.filenameMode) {
+                StepLabel(1, "Folder to sort", done = state.sourceUri.isNotBlank())
                 FolderPickerCard(
-                    title    = "Source Folder",
-                    subtitle = "Any folder with files to process (Screenshots, WhatsApp, etc.)",
+                    title    = "Source folder",
+                    subtitle = "Sub-folders are included",
                     icon     = Icons.Default.FolderOpen,
                     name     = state.sourceName,
                     enabled  = !state.running,
                     onPick   = { sourcePicker.launch(null) },
                 )
+                StepLabel(2, "Where to put the sorted copies", done = state.outputUri.isNotBlank())
                 FolderPickerCard(
-                    title    = "Output Folder",
-                    subtitle = "Where organized files go — will be structured as year/month/day",
-                    icon     = Icons.Default.DriveFileMove,
+                    title    = "Output folder",
+                    subtitle = "e.g. your backup drive or a new empty folder",
+                    icon     = Icons.AutoMirrored.Filled.DriveFileMove,
                     name     = state.outputName,
                     enabled  = !state.running,
                     onPick   = { outputPicker.launch(null) },
                 )
-            }
-
-            // ── Start button ─────────────────────────────────────────────
-            val canStart = !state.running && if (state.filenameMode)
-                state.sourceUri.isNotBlank() && state.outputUri.isNotBlank()
-            else
-                state.driveConnected
-
-            Button(
-                onClick  = vm::startFix,
-                enabled  = canStart,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                if (state.running) {
-                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
-                } else {
-                    Icon(Icons.Default.AutoFixHigh, null, Modifier.size(18.dp))
+                if (state.sourceUri.isNotBlank() && state.sourceUri == state.outputUri) {
+                    Text("Source and output must be different folders.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 }
-                Spacer(Modifier.width(8.dp))
-                Text(if (state.running) "Processing…" else "Start EXIF Fix")
-            }
-
-            // ── Progress bar ─────────────────────────────────────────────
-            if (state.running && state.total > 0) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Text("${state.done} / ${state.total}", style = MaterialTheme.typography.labelSmall)
-                        if (state.currentFile.isNotBlank()) {
-                            Text(
-                                state.currentFile,
-                                style    = MaterialTheme.typography.labelSmall,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f, fill = false).padding(start = 8.dp),
-                                color    = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
+                StepLabel(3, "Options")
+                ElevatedCard(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                        OptionSwitch(
+                            "Trust dates already in photos",
+                            "Recommended. Off = always use the date in the file name, when there is one.",
+                            state.keepExistingDates, !state.running, vm::setKeepExistingDates,
+                        )
+                        OptionSwitch(
+                            "Rename copies to their date",
+                            "2024-03-15_14-30-22.jpg instead of the original name",
+                            state.renameToDate, !state.running, vm::setRenameToDate,
+                        )
                     }
-                    LinearProgressIndicator(
-                        progress = { state.done.toFloat() / state.total },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
+                }
+            } else {
+                InfoCard(
+                    "For a drive already sorted into Year / Month / Day folders. Photos with no date inside get " +
+                        "the date of the folder they're in, so Google Photos and galleries show them on the right day. " +
+                        "JPEG, PNG and WebP can be updated; HEIC, RAW and video can't store a date this way and are left as they are."
+                )
+                DriveStatusCard(driveUri = state.driveUri, driveConnected = state.driveConnected)
+                ElevatedCard(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                        OptionSwitch(
+                            "Also correct wrong dates",
+                            "Photos whose date is more than a day away from their folder get the folder's day (time of day kept)",
+                            state.fixMismatched, !state.running, vm::setFixMismatched,
+                        )
+                    }
                 }
             }
 
-            // ── Live log panel ───────────────────────────────────────────
-            if (state.logLines.isNotEmpty()) {
-                LogPanel(lines = state.logLines, running = state.running)
+            // ── Start / stop ─────────────────────────────────────────────
+            val canStart = !state.running && if (filenameMode)
+                state.sourceUri.isNotBlank() && state.outputUri.isNotBlank() && state.sourceUri != state.outputUri
+            else state.driveConnected
+
+            if (state.running) {
+                JobProgressCard(
+                    title    = if (filenameMode) "Sorting…" else "Checking dates…",
+                    done     = state.done,
+                    total    = state.total,
+                    current  = state.currentFile,
+                    stopping = state.stopping,
+                    onStop   = vm::stop,
+                )
+            } else {
+                Button(onClick = vm::startFix, enabled = canStart, modifier = Modifier.fillMaxWidth()) {
+                    Icon(if (filenameMode) Icons.Default.CalendarMonth else Icons.Default.AutoFixHigh, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (filenameMode) "Start sorting" else "Fix dates")
+                }
             }
 
-            // ── Result summary ───────────────────────────────────────────
-            state.result?.let { ResultSummaryCard(it) }
+            if (state.error.isNotBlank()) {
+                ResultCard("Couldn't run", ok = false, onDismiss = vm::clearResult) {
+                    Text(state.error, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+
+            state.result?.let { if (!state.running) ResultSummaryCard(it, vm::clearResult) }
+
+            if (state.logLines.isNotEmpty()) LogPanel(lines = state.logLines, running = state.running)
 
             Spacer(Modifier.height(8.dp))
         }
@@ -199,96 +167,67 @@ fun FixExifScreen(
 }
 
 @Composable
-private fun LogPanel(lines: List<String>, running: Boolean) {
-    val listState = rememberLazyListState()
-
-    LaunchedEffect(lines.size) {
-        if (lines.isNotEmpty()) listState.animateScrollToItem(lines.size - 1)
+internal fun OptionSwitch(title: String, subtitle: String, checked: Boolean, enabled: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        modifier              = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        verticalAlignment     = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Switch(checked = checked, onCheckedChange = onChange, enabled = enabled)
     }
+}
 
-    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(
-                verticalAlignment     = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                if (running) CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 2.dp)
-                Text(
-                    if (running) "Processing…" else "Log",
-                    style      = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Spacer(Modifier.weight(1f))
-                Text("${lines.size} lines", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+@Composable
+private fun ResultSummaryCard(result: FixExifResult, onDismiss: () -> Unit) {
+    when (result) {
+        is FixExifResult.DriveMode -> {
+            val r = result.r
+            if (r == null) {
+                ResultCard("The drive isn't connected", ok = false, onDismiss = onDismiss) {}
+                return
             }
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(220.dp)
-                    .background(
-                        MaterialTheme.colorScheme.surfaceVariant,
-                        MaterialTheme.shapes.small,
+            ResultCard(if (r.failed == 0) "Done" else "Done, with problems", ok = r.failed == 0, onDismiss = onDismiss) {
+                ResultRow("Dates written", r.fixed, Icons.Default.AutoFixHigh)
+                if (r.corrected > 0) ResultRow("Wrong dates corrected", r.corrected, Icons.Default.EditCalendar)
+                ResultRow("Already had a date", r.alreadyHasDate, Icons.Default.CheckCircle)
+                if (r.mismatched > r.corrected) ResultRow("Date doesn't match folder (unchanged)", r.mismatched - r.corrected, Icons.Default.Warning)
+                if (r.skipped > 0) ResultRow("Can't store a date (HEIC/RAW/video)", r.skipped, Icons.Default.Block)
+                if (r.failed > 0) ResultRow("Errors", r.failed, Icons.Default.ErrorOutline, MaterialTheme.colorScheme.error)
+                r.notes.take(5).forEach { Text("• $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                if (r.notes.size > 5) Text("… and ${r.notes.size - 5} more (see the log)", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        is FixExifResult.FilenameMode -> {
+            val r = result.r
+            val title = when {
+                r.stoppedEarly.isNotBlank() -> "Stopped — ${r.stoppedEarly}"
+                r.copied + r.alreadyExists + r.failed == 0 -> "No photos or videos found"
+                r.failed > 0 -> "Done, with problems"
+                else -> "Done"
+            }
+            ResultCard(title, ok = r.failed == 0 && r.stoppedEarly.isBlank(), onDismiss = onDismiss) {
+                ResultRow("Sorted into date folders", r.copied - r.noDate, Icons.Default.CalendarMonth)
+                if (r.exifWritten > 0) ResultRow("Date written into the copy", r.exifWritten, Icons.Default.AutoFixHigh)
+                if (r.keptExisting > 0) ResultRow("Kept the photo's own date", r.keptExisting, Icons.Default.CheckCircle)
+                if (r.unsupported > 0) ResultRow("Sorted, date not written (HEIC/video)", r.unsupported, Icons.Default.Info)
+                if (r.noDate > 0) ResultRow("No date found (in no-date/)", r.noDate, Icons.AutoMirrored.Filled.HelpOutline)
+                if (r.alreadyExists > 0) ResultRow("Already in the output", r.alreadyExists, Icons.Default.RemoveCircleOutline)
+                if (r.failed > 0) ResultRow("Errors (copied to error/)", r.failed, Icons.Default.ErrorOutline, MaterialTheme.colorScheme.error)
+                if (r.ignored > 0) ResultRow("Other files left alone (not photos/videos)", r.ignored, Icons.Default.Description)
+                if (r.archives > 0) {
+                    Text(
+                        "${plural(r.archives, "zip file")} found. Unzip them first (Files app → tap the zip → Extract), then run again.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary,
                     )
-                    .padding(8.dp),
-            ) {
-                LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-                    items(lines) { line ->
-                        Text(
-                            line,
-                            style      = MaterialTheme.typography.bodySmall.copy(
-                                fontFamily = FontFamily.Monospace,
-                                fontSize   = 11.sp,
-                            ),
-                            color      = when {
-                                line.startsWith("✓") -> MaterialTheme.colorScheme.primary
-                                line.startsWith("✗") -> MaterialTheme.colorScheme.error
-                                line.startsWith("⚠") -> MaterialTheme.colorScheme.tertiary
-                                line.startsWith("─") -> MaterialTheme.colorScheme.onSurfaceVariant
-                                else                 -> MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                        )
-                    }
+                }
+                if (r.stoppedEarly.isNotBlank()) {
+                    Text("Everything done so far is safe. Run it again to continue — finished files are skipped.", style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun ResultSummaryCard(result: FixExifResult) {
-    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Default.CheckCircle, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
-                Text("Done", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-            }
-            when (result) {
-                is FixExifResult.DriveMode -> {
-                    val r = result.r
-                    ResultRow("EXIF written",              r.fixed,          Icons.Default.AutoFixHigh)
-                    if (r.alreadyHasDate > 0) ResultRow("Already had date", r.alreadyHasDate, Icons.Default.SkipNext)
-                    if (r.skipped > 0) ResultRow("Skipped (HEIC/video)",   r.skipped,        Icons.Default.Warning)
-                    if (r.failed  > 0) ResultRow("Errors",                  r.failed,         Icons.Default.ErrorOutline)
-                }
-                is FixExifResult.FilenameMode -> {
-                    val r = result.r
-                    ResultRow("Copied to output",          r.copied,         Icons.Default.ContentCopy)
-                    ResultRow("EXIF written",               r.exifWritten,    Icons.Default.AutoFixHigh)
-                    if (r.noDate        > 0) ResultRow("No date in filename",   r.noDate,       Icons.Default.HelpOutline)
-                    if (r.alreadyExists > 0) ResultRow("Already at destination", r.alreadyExists, Icons.Default.SkipNext)
-                    if (r.unsupported   > 0) ResultRow("Copied (HEIC/video — no EXIF)", r.unsupported, Icons.Default.Warning)
-                    if (r.failed        > 0) ResultRow("Errors",                r.failed,       Icons.Default.ErrorOutline)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ResultRow(label: String, count: Int, icon: androidx.compose.ui.graphics.vector.ImageVector) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text("$label: $count", style = MaterialTheme.typography.bodySmall)
     }
 }

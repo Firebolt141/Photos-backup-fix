@@ -4,153 +4,54 @@ import android.content.Context
 import android.util.Log
 import androidx.documentfile.provider.DocumentFile
 import androidx.exifinterface.media.ExifInterface
-import org.json.JSONObject
 import java.io.File
-import java.time.Instant
-import java.time.ZoneOffset
-import java.time.format.DateTimeFormatter
-
-// ── Public data types ─────────────────────────────────────────────────────────
-
-data class TakeoutMeta(
-    val timestampSec: Long?   = null,
-    val latitude:     Double? = null,
-    val longitude:    Double? = null,
-    val altitude:     Double? = null,
-    val description:  String  = "",
-)
+import java.time.ZoneId
 
 data class TakeoutOptions(
+    /** Keep a date that is already inside the file (camera date); only add missing GPS/caption. */
     val skipIfHasExif: Boolean = true,
+    /** false = "Organize by date": ignore JSON sidecars, use embedded/filename dates. */
+    val useSidecars:   Boolean = true,
+    /** Rename copies to 2024-03-15_14-30-22.jpg. */
+    val renameToDate:  Boolean = false,
 )
 
 data class TakeoutResult(
-    val total:           Int    = 0,
-    val fixed:           Int    = 0,  // date+GPS written from JSON sidecar
-    val fromFilename:    Int    = 0,  // date written from filename only
-    val noDate:          Int    = 0,  // no JSON, no filename date — copied as-is
-    val skippedExisting: Int    = 0,  // already had EXIF date, not modified
-    val unsupported:     Int    = 0,  // HEIC / video / RAW — copied, no EXIF write
-    val errors:          Int    = 0,
-    val errorMsg:        String = "", // non-blank when processing could not start
-)
+    val total:        Int    = 0,
+    val fixed:        Int    = 0,  // date (+GPS) written from a JSON sidecar
+    val fromFilename: Int    = 0,  // date written from the file name
+    val keptExisting: Int    = 0,  // already had a date inside — copied, date kept
+    val noDate:       Int    = 0,  // no date anywhere — copied to no-date/
+    val alreadyThere: Int    = 0,  // same file already in the output (earlier run / duplicate)
+    val unsupported:  Int    = 0,  // HEIC / RAW / video with a new date — sorted, date not written
+    val errors:       Int    = 0,  // copied to error/ when possible
+    val ignored:      Int    = 0,  // not photos/videos (PDF, TXT…) — left alone
+    val archives:     Int    = 0,  // .zip/.tgz files found in the source (need unzipping first)
+    val stoppedEarly: String = "", // non-blank when the run stopped (drive full / removed)
+    val errorMsg:     String = "", // non-blank when processing could not start
+) {
+    /** Back-compat name used by older UI code. */
+    val skippedExisting: Int get() = keptExisting
+}
 
-// ── Processor ─────────────────────────────────────────────────────────────────
-
+/**
+ * Copies photos/videos from a source folder into year/month/day folders,
+ * writing dates (and GPS/caption from Takeout sidecars) into the copies.
+ * Same rules as the Windows tool: every file ends up somewhere — a dated
+ * folder, no-date/<original sub-folders>/, or error/<original sub-folders>/.
+ */
 object TakeoutProcessor {
 
     private const val TAG = "TakeoutProcessor"
 
-    private val IMAGE_EXTS = setOf(
-        "jpg", "jpeg", "png", "gif", "bmp", "tiff", "tif",
-        "webp", "heic", "heif", "raw", "cr2", "nef", "arw",
-        "dng", "orf", "rw2", "srw", "pef",
-    )
-    private val VIDEO_EXTS = setOf(
-        "mp4", "mov", "avi", "m4v", "mkv", "wmv", "3gp",
-        "mpg", "mpeg", "mts", "m2ts", "flv", "webm", "ts",
-    )
-    // ExifInterface 1.3.7+ supports writing to these formats.
-    private val WRITABLE_EXTS = setOf("jpg", "jpeg", "png", "webp")
-    private val UNSUPPORTED_EXTS = setOf(
-        "heic", "heif", "raw", "cr2", "nef", "arw", "dng",
-        "orf", "rw2", "srw", "pef",
-    ) + VIDEO_EXTS
+    // Back-compat delegates (tests and older callers)
+    fun jsonCandidateNames(fileName: String) = PhotoLogic.jsonCandidateNames(fileName)
+    fun parseMeta(jsonText: String) = PhotoLogic.parseMeta(jsonText)
+    fun tsFromFilename(name: String) = PhotoLogic.tsFromFilename(name)
 
-    private val EXIF_DATE_FMT = DateTimeFormatter.ofPattern("yyyy:MM:dd HH:mm:ss")
+    private enum class Outcome { FIXED, FROM_FILENAME, KEPT, NO_DATE, ALREADY, UNSUPPORTED, ERROR }
 
-    // ── Pure / testable helpers ───────────────────────────────────────────────
-
-    /**
-     * Returns all JSON sidecar filename candidates for [fileName].
-     * Exact port of find_json() from core.py.
-     */
-    fun jsonCandidateNames(fileName: String): List<String> {
-        val dotIdx = fileName.lastIndexOf('.')
-        val stem = if (dotIdx >= 0) fileName.substring(0, dotIdx) else fileName
-        val ext  = if (dotIdx >= 0) fileName.substring(dotIdx) else ""
-
-        val out = mutableListOf(
-            "$stem$ext.json",
-            "$stem.json",
-        )
-
-        // Google truncates the JSON filename at 46 characters
-        if (fileName.length > 46) out += "${fileName.take(46)}.json"
-
-        // "photo(1).jpg" → base="photo", num="1"
-        val numbered = Regex("""^(.+)\((\d+)\)$""").matchEntire(stem)
-        if (numbered != null) {
-            val base = numbered.groupValues[1]
-            val num  = numbered.groupValues[2]
-            out += "$base$ext($num).json"
-            out += "$base($num).json"
-        }
-
-        if (stem.endsWith("-edited")) {
-            val orig = stem.dropLast(7)
-            out += "$orig$ext.json"
-            out += "$orig.json"
-        }
-
-        out += "$stem$ext.supplemental-metadata.json"
-        out += "$stem.supplemental-metadata.json"
-
-        return out
-    }
-
-    /**
-     * Parses a Takeout JSON sidecar string into [TakeoutMeta].
-     * Pure function — no Android dependencies.
-     */
-    fun parseMeta(jsonText: String): TakeoutMeta {
-        return try {
-            val obj = JSONObject(jsonText)
-
-            var ts: Long? = null
-            for (key in listOf("photoTakenTime", "creationTime")) {
-                val t = obj.optJSONObject(key) ?: continue
-                val v = t.optString("timestamp").toLongOrNull() ?: continue
-                if (v > 0) { ts = v; break }
-            }
-
-            var lat: Double? = null
-            var lon: Double? = null
-            var alt: Double? = null
-            for (key in listOf("geoDataExif", "geoData")) {
-                val geo = obj.optJSONObject(key) ?: continue
-                val la = geo.optDouble("latitude",  0.0)
-                val lo = geo.optDouble("longitude", 0.0)
-                if (la != 0.0 || lo != 0.0) {
-                    lat = la; lon = lo
-                    alt = geo.optDouble("altitude", 0.0)
-                    break
-                }
-            }
-
-            TakeoutMeta(ts, lat, lon, alt, obj.optString("description", ""))
-        } catch (_: Exception) { TakeoutMeta() }
-    }
-
-    /**
-     * Extracts a Unix timestamp (seconds) from a filename containing an
-     * embedded date such as IMG_20240315_143022.jpg.
-     * Pure function — no Android dependencies.
-     */
-    fun tsFromFilename(name: String): Long? {
-        val m = Regex("""(?<!\d)(\d{4})[_\-]?(\d{2})[_\-]?(\d{2})(?!\d)""").find(name)
-            ?: return null
-        val y  = m.groupValues[1].toIntOrNull() ?: return null
-        val mo = m.groupValues[2].toIntOrNull() ?: return null
-        val d  = m.groupValues[3].toIntOrNull() ?: return null
-        if (y !in 2000..2040 || mo !in 1..12 || d !in 1..31) return null
-        return try {
-            java.time.LocalDateTime.of(y, mo, d, 12, 0, 0)
-                .toInstant(ZoneOffset.UTC).epochSecond
-        } catch (_: Exception) { null }
-    }
-
-    // ── Main entry point ──────────────────────────────────────────────────────
+    private class Item(val file: DocumentFile, val parent: DocumentFile, val relDirs: List<String>)
 
     fun process(
         sourceRoot: DocumentFile,
@@ -158,215 +59,274 @@ object TakeoutProcessor {
         context:    Context,
         options:    TakeoutOptions,
         onProgress: (done: Int, total: Int, name: String) -> Unit,
+        onLog:      (String) -> Unit = {},
+        isCancelled: () -> Boolean = { false },
     ): TakeoutResult {
-        Log.d(TAG, "process() start — source=${sourceRoot.uri} output=${outputRoot.uri}")
-        val items = mutableListOf<Pair<DocumentFile, DocumentFile>>() // (file, parentDir)
-        collectMediaFiles(sourceRoot, items)
-        Log.d(TAG, "collectMediaFiles found ${items.size} media files")
-
+        Log.d(TAG, "process() source=${sourceRoot.uri} output=${outputRoot.uri} $options")
+        val outputId = docId(outputRoot)
+        if (outputId == docId(sourceRoot)) {
+            return TakeoutResult(errorMsg = "The source and output must be different folders.")
+        }
+        val items = mutableListOf<Item>()
+        val counts = IntArray(2)                       // [ignored, archives]
+        onLog("Looking through ${sourceRoot.name ?: "the folder"}…")
+        collect(sourceRoot, emptyList(), items, counts, outputId)
+        if (counts[1] > 0) onLog("⚠ ${counts[1]} zip/archive file(s) found: unzip them first (Files app → tap the zip → Extract), then run again.")
+        if (counts[0] > 0) onLog("${counts[0]} file(s) that aren't photos or videos are left alone.")
+        onLog("Found ${items.size} photo(s) and video(s).")
         if (items.isEmpty()) {
-            Log.w(TAG, "No media files found under source root. Check folder selection and permissions.")
+            return TakeoutResult(ignored = counts[0], archives = counts[1])
         }
 
-        var fixed = 0; var fromFilename = 0; var noDate = 0
-        var skippedExisting = 0; var unsupported = 0; var errors = 0
+        val tree = SafTree(context)
+        val zone = ZoneId.systemDefault()
+        val sidecarMaps = HashMap<String, Map<String, DocumentFile>>()
+        val n = IntArray(Outcome.values().size)
+        var stopped = ""
 
-        // Cache per-directory sibling maps to avoid re-listing the same folder
-        val siblingMaps = HashMap<String, Map<String, DocumentFile>>()
-
-        items.forEachIndexed { idx, (file, parentDir) ->
-            onProgress(idx + 1, items.size, file.name ?: "")
-            try {
-                val sibMap = siblingMaps.getOrPut(parentDir.uri.toString()) {
-                    buildSiblingMap(parentDir)
-                }
-                val outcome = processOne(file, sibMap, outputRoot, context, options)
-                Log.d(TAG, "[${idx+1}/${items.size}] ${file.name} -> $outcome")
-                when (outcome) {
-                    Outcome.FIXED         -> fixed++
-                    Outcome.FROM_FILENAME -> fromFilename++
-                    Outcome.NO_DATE       -> noDate++
-                    Outcome.SKIPPED       -> skippedExisting++
-                    Outcome.UNSUPPORTED   -> unsupported++
-                }
+        items.forEachIndexed { idx, item ->
+            if (stopped.isNotEmpty() || isCancelled()) return@forEachIndexed
+            val name = item.file.name ?: return@forEachIndexed
+            onProgress(idx + 1, items.size, name)
+            val outcome = try {
+                processOne(item, name, tree, sidecarMaps, outputRoot, context, options, zone, onLog)
             } catch (e: Exception) {
-                Log.e(TAG, "Error processing ${file.name}: ${e.message}", e)
-                errors++
-                // File never reached the output (copy failed before completion) — put it in error/
-                StorageHelper.copyToFallbackDir(context, file, outputRoot, "error")
+                Log.e(TAG, "Error processing $name", e)
+                fail(item, name, tree, outputRoot, tree.friendly(e), onLog)
+            }
+            n[outcome.first.ordinal]++
+            if (outcome.second.isNotEmpty() && tree.isFatal(outcome.second)) {
+                stopped = outcome.second
+                onLog("✗ Stopping: ${outcome.second}. Files done so far are safe; run again to continue.")
             }
         }
-
-        Log.d(TAG, "process() done — total=${items.size} fixed=$fixed fromFilename=$fromFilename noDate=$noDate skipped=$skippedExisting unsupported=$unsupported errors=$errors")
-        return TakeoutResult(items.size, fixed, fromFilename, noDate, skippedExisting, unsupported, errors)
+        if (isCancelled() && stopped.isEmpty()) stopped = "Stopped by you"
+        val r = TakeoutResult(
+            total        = items.size,
+            fixed        = n[Outcome.FIXED.ordinal],
+            fromFilename = n[Outcome.FROM_FILENAME.ordinal],
+            keptExisting = n[Outcome.KEPT.ordinal],
+            noDate       = n[Outcome.NO_DATE.ordinal],
+            alreadyThere = n[Outcome.ALREADY.ordinal],
+            unsupported  = n[Outcome.UNSUPPORTED.ordinal],
+            errors       = n[Outcome.ERROR.ordinal],
+            ignored      = counts[0],
+            archives     = counts[1],
+            stoppedEarly = stopped,
+        )
+        Log.d(TAG, "process() done: $r")
+        return r
     }
-
-    // ── Private helpers ───────────────────────────────────────────────────────
-
-    private enum class Outcome { FIXED, FROM_FILENAME, NO_DATE, SKIPPED, UNSUPPORTED }
-
-    private fun collectMediaFiles(
-        dir: DocumentFile,
-        out: MutableList<Pair<DocumentFile, DocumentFile>>,
-    ) {
-        val children = dir.listFiles()
-        Log.d(TAG, "listFiles(${dir.name}) → ${children.size} entries")
-        for (child in children) {
-            when {
-                child.isDirectory -> collectMediaFiles(child, out)
-                child.isFile -> {
-                    val ext = child.name?.substringAfterLast('.')?.lowercase() ?: continue
-                    if (ext in IMAGE_EXTS || ext in VIDEO_EXTS) out.add(child to dir)
-                }
-            }
-        }
-    }
-
-    private fun buildSiblingMap(dir: DocumentFile): Map<String, DocumentFile> =
-        dir.listFiles().filter { it.isFile }
-            .associateBy { it.name?.lowercase() ?: "" }
-
-    private fun processOne(
-        file:       DocumentFile,
-        sibMap:     Map<String, DocumentFile>,
-        outputRoot: DocumentFile,
-        context:    Context,
-        options:    TakeoutOptions,
-    ): Outcome {
-        val name = file.name ?: return Outcome.NO_DATE
-        val ext  = name.substringAfterLast('.').lowercase()
-        val isWritable = ext in WRITABLE_EXTS
-
-        // Locate JSON sidecar and parse metadata
-        val jsonFile = findJson(name, sibMap)
-        val meta = if (jsonFile != null) {
-            context.contentResolver.openInputStream(jsonFile.uri)
-                ?.use { parseMeta(it.bufferedReader().readText()) }
-                ?: TakeoutMeta()
-        } else TakeoutMeta()
-
-        val effectiveTsSec = meta.timestampSec ?: tsFromFilename(name)
-
-        // Check existing EXIF — only possible for writable formats
-        if (options.skipIfHasExif && isWritable && effectiveTsSec != null) {
-            if (hasExifDate(context, file)) return Outcome.SKIPPED
-        }
-
-        // Determine destination folder. resolveDestDir returns null only when it
-        // cannot create the directory (permissions / storage issue) — throw so the
-        // outer catch counts it as an error rather than silently losing the file.
-        val destDir = StorageHelper.resolveDestDir(
-            outputRoot, effectiveTsSec?.let { it * 1000L }
-        ) ?: throw Exception("Failed to create destination directory for $name")
-
-        // Skip if file already copied (idempotent re-runs)
-        if (destDir.findFile(name) != null) return Outcome.SKIPPED
-
-        // Copy file to destination
-        val mimeType = file.type ?: "application/octet-stream"
-        val destFile = destDir.createFile(mimeType, name)
-            ?: throw Exception("Cannot create: $name")
-
-        try {
-            context.contentResolver.openOutputStream(destFile.uri)?.use { out ->
-                context.contentResolver.openInputStream(file.uri)
-                    ?.use { inp -> inp.copyTo(out) }
-                    ?: throw Exception("Cannot read source: $name")
-            } ?: throw Exception("Cannot write dest: $name")
-        } catch (e: Exception) {
-            destFile.delete()
-            throw e
-        }
-
-        // Write EXIF for supported formats with a known date
-        if (!isWritable || effectiveTsSec == null) {
-            return if (ext in UNSUPPORTED_EXTS) Outcome.UNSUPPORTED else Outcome.NO_DATE
-        }
-
-        return try {
-            writeExif(context, destFile, meta, effectiveTsSec)
-            if (meta.timestampSec != null) Outcome.FIXED else Outcome.FROM_FILENAME
-        } catch (e: Exception) {
-            // File is already in the correct dated folder — treat as unsupported rather than
-            // surfacing as an error that would trigger an error/ copy of a file that IS there.
-            Log.w(TAG, "EXIF write failed for $name (file kept in output): ${e.message}")
-            Outcome.UNSUPPORTED
-        }
-    }
-
-    private fun findJson(fileName: String, sibMap: Map<String, DocumentFile>): DocumentFile? {
-        for (candidate in jsonCandidateNames(fileName)) {
-            sibMap[candidate.lowercase()]?.let { return it }
-        }
-        return null
-    }
-
-    private fun hasExifDate(context: Context, file: DocumentFile): Boolean = try {
-        context.contentResolver.openInputStream(file.uri)?.use {
-            val exif = ExifInterface(it)
-            val tag = exif.getAttribute(ExifInterface.TAG_DATETIME_ORIGINAL)
-                ?: exif.getAttribute(ExifInterface.TAG_DATETIME)
-            !tag.isNullOrBlank() && !tag.startsWith("0000")
-        } ?: false
-    } catch (_: Exception) { false }
 
     /**
-     * Writes date (and GPS + description if available) to [destFile] using
-     * the proven temp-file pattern to avoid EBADF issues with SAF providers.
+     * The same folder reached through two different picks has different
+     * URIs (…/tree/A/document/A/B vs …/tree/A/B/document/A/B); compare the
+     * document id instead.
      */
-    private fun writeExif(
-        context: Context,
-        destFile: DocumentFile,
-        meta: TakeoutMeta,
-        tsSec: Long,
+    private fun docId(f: DocumentFile): String = try {
+        android.provider.DocumentsContract.getDocumentId(f.uri)
+    } catch (_: Exception) { f.uri.toString() }
+
+    // ── Scan ──────────────────────────────────────────────────────────────────
+
+    private val SKIP_DIRS = setOf(
+        "@eadir", ".thumbnails", ".trash", ".trashes", "\$recycle.bin", "system volume information",
+        "_photofix", "_duplicates", "lost.dir",
+    )
+
+    private fun collect(
+        dir: DocumentFile, rel: List<String>, out: MutableList<Item>, counts: IntArray, outputId: String,
     ) {
-        val instant = Instant.ofEpochSecond(tsSec).atOffset(ZoneOffset.UTC)
-        val dateStr = instant.format(EXIF_DATE_FMT)
-
-        val tmp = File(context.cacheDir, "takeout_exif_${System.nanoTime()}.tmp")
-        try {
-            // 1. Copy to temp
-            context.contentResolver.openInputStream(destFile.uri)?.use { inp ->
-                tmp.outputStream().use { out -> inp.copyTo(out) }
-            } ?: throw Exception("Cannot open for EXIF read")
-
-            // 2. Write EXIF on temp file
-            ExifInterface(tmp.absolutePath).apply {
-                setAttribute(ExifInterface.TAG_DATETIME_ORIGINAL,  dateStr)
-                setAttribute(ExifInterface.TAG_DATETIME,           dateStr)
-                setAttribute(ExifInterface.TAG_DATETIME_DIGITIZED, dateStr)
-                setAttribute(ExifInterface.TAG_OFFSET_TIME_ORIGINAL,  "+00:00")
-                setAttribute(ExifInterface.TAG_OFFSET_TIME,           "+00:00")
-                setAttribute(ExifInterface.TAG_OFFSET_TIME_DIGITIZED, "+00:00")
-
-                if (meta.latitude != null && meta.longitude != null) {
-                    setLatLong(meta.latitude, meta.longitude)
-                    meta.altitude?.let { alt ->
-                        val altAbs = kotlin.math.abs(alt).toLong()
-                        setAttribute(ExifInterface.TAG_GPS_ALTITUDE, "$altAbs/1")
-                        setAttribute(ExifInterface.TAG_GPS_ALTITUDE_REF,
-                            if (alt >= 0) "0" else "1")
-                    }
-                    val dateOnly = instant.format(DateTimeFormatter.ofPattern("yyyy:MM:dd"))
-                    val timeOnly = instant.format(DateTimeFormatter.ofPattern("HH:mm:ss"))
-                    setAttribute(ExifInterface.TAG_GPS_DATESTAMP, dateOnly)
-                    setAttribute(ExifInterface.TAG_GPS_TIMESTAMP,  timeOnly)
+        val children = try { dir.listFiles() } catch (e: Exception) {
+            Log.w(TAG, "Cannot list ${dir.name}: ${e.message}")
+            return
+        }
+        for (child in children) {
+            val n = child.name ?: continue
+            when {
+                child.isDirectory -> {
+                    // Skip our own output when it was picked inside the source folder.
+                    if (n.lowercase() in SKIP_DIRS || docId(child) == outputId) continue
+                    collect(child, rel + n, out, counts, outputId)
                 }
-
-                if (meta.description.isNotBlank()) {
-                    setAttribute(ExifInterface.TAG_IMAGE_DESCRIPTION, meta.description)
-                }
-
-                saveAttributes()
+                PhotoLogic.isMedia(n) -> out.add(Item(child, dir, rel))
+                PhotoLogic.isArchive(n) -> counts[1]++
+                !PhotoLogic.isJunk(n) && !n.lowercase().endsWith(".json") && !n.startsWith(".") -> counts[0]++
             }
+        }
+    }
 
-            // 3. Write back (wt = write + truncate)
-            context.contentResolver.openOutputStream(destFile.uri, "wt")?.use { out ->
-                tmp.inputStream().use { inp -> inp.copyTo(out) }
-            } ?: throw Exception("Cannot write back EXIF")
+    // ── One file ──────────────────────────────────────────────────────────────
 
+    private fun processOne(
+        item: Item,
+        name: String,
+        tree: SafTree,
+        sidecarMaps: HashMap<String, Map<String, DocumentFile>>,
+        outputRoot: DocumentFile,
+        context: Context,
+        options: TakeoutOptions,
+        zone: ZoneId,
+        onLog: (String) -> Unit,
+    ): Pair<Outcome, String> {
+        val size = item.file.length()
+        if (size == 0L) return fail(item, name, tree, outputRoot, "The file is empty (0 bytes), probably a broken copy", onLog)
+
+        // Sidecar metadata
+        var meta = TakeoutMeta()
+        if (options.useSidecars) {
+            val sibs = sidecarMaps.getOrPut(item.parent.uri.toString()) {
+                (try { item.parent.listFiles() } catch (_: Exception) { emptyArray() })
+                    .filter { it.isFile && PhotoLogic.isSidecarName(it.name ?: "") }
+                    .associateBy { (it.name ?: "").lowercase() }
+            }
+            PhotoLogic.findSidecar(name, sibs.keys)?.let { key ->
+                sibs[key]?.let { json ->
+                    // A broken .json must not send the photo to error/: just ignore it.
+                    try {
+                        context.contentResolver.openInputStream(json.uri)?.use {
+                            meta = PhotoLogic.parseMeta(it.bufferedReader().readText())
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "unreadable sidecar ${json.name}: ${e.message}")
+                    }
+                }
+            }
+        }
+
+        // Date priority: photoTakenTime → filename → creationTime (upload date)
+        var date: PhotoDate? = null
+        if (meta.timestampSec != null && meta.timestampSource == "photoTakenTime") {
+            date = PhotoDate.fromEpochSec(meta.timestampSec!!, "sidecar")
+        }
+        if (date == null) date = PhotoLogic.dateFromFilename(name, zone)
+        if (date == null && meta.timestampSec != null) date = PhotoDate.fromEpochSec(meta.timestampSec!!, "sidecar")
+
+        val embedded = if (options.skipIfHasExif || date == null) DateExtractor.embedded(context, item.file.uri, name) else null
+        val keepEmbedded = embedded != null && options.skipIfHasExif
+        val place: PhotoDate? = when {
+            keepEmbedded -> embedded
+            date != null -> date
+            else         -> embedded
+        }
+
+        // Destination: dated folder, or no-date/<original sub-folders>
+        val parts = if (place != null) PhotoLogic.dateFolders(place.wallMs)
+                    else listOf(PhotoLogic.NO_DATE_DIR) + item.relDirs
+        val destDir = tree.dirPath(outputRoot, parts)
+            ?: return fail(item, name, tree, outputRoot, "Cannot create folder ${parts.joinToString("/")}", onLog)
+        val outName = if (options.renameToDate && place != null) PhotoLogic.dateFileName(place, name) else name
+
+        val writable = PhotoLogic.isWritable(name)
+        val dateToWrite = when {
+            place == null || keepEmbedded || place.source == "embedded" -> null
+            embedded != null && embedded.wall == place.wall -> null
+            else -> place
+        }
+        // Metadata is written into a private copy *before* the file goes to the
+        // output, so an interrupted write never damages a finished copy, and a
+        // re-run produces the same bytes (same size → recognised as already there).
+        var exifError = ""
+        val prepared: File? = if (writable && place != null) try {
+            prepareExif(context, item.file.uri, meta, dateToWrite)
+        } catch (e: Exception) {
+            Log.w(TAG, "EXIF write failed for $name: ${e.message}")
+            exifError = e.message ?: e.javaClass.simpleName
+            null
+        } else null
+
+        val outcome = try {
+            val srcUri = prepared?.let { android.net.Uri.fromFile(it) } ?: item.file.uri
+            val srcSize = prepared?.length() ?: size
+            tree.copyInto(srcUri, srcSize, destDir, outName)
         } finally {
-            tmp.delete()
+            prepared?.delete()
+        }
+        val copied = when (outcome) {
+            is CopyOutcome.AlreadyThere -> {
+                onLog("=  $name already in ${parts.joinToString("/")}")
+                return Outcome.ALREADY to ""
+            }
+            is CopyOutcome.Failed -> return fail(item, name, tree, outputRoot, outcome.message, onLog)
+            is CopyOutcome.Copied -> outcome
+        }
+        val where = parts.joinToString("/") + "/" + copied.name
+
+        return when {
+            place == null -> { onLog("⚠  $name: no date found → $where"); Outcome.NO_DATE to "" }
+            keepEmbedded || place.source == "embedded" -> { onLog("✓  $name → $where (kept its own date)"); Outcome.KEPT to "" }
+            !writable -> { onLog("→  $name → $where (this format can't store a date)"); Outcome.UNSUPPORTED to "" }
+            exifError.isNotEmpty() -> { onLog("→  $name → $where (date not written: $exifError)"); Outcome.UNSUPPORTED to "" }
+            place.source == "sidecar" -> { onLog("✓  $name → $where"); Outcome.FIXED to "" }
+            else -> { onLog("✓  $name → $where (date from name)"); Outcome.FROM_FILENAME to "" }
+        }
+    }
+
+    /** Last resort: copy the file to error/<original sub-folders>/ so nothing is lost. */
+    private fun fail(
+        item: Item, name: String, tree: SafTree, outputRoot: DocumentFile, msg: String, onLog: (String) -> Unit,
+    ): Pair<Outcome, String> {
+        if (!tree.isFatal(msg)) {
+            val dir = tree.dirPath(outputRoot, listOf(PhotoLogic.ERROR_DIR) + item.relDirs)
+            if (dir != null) {
+                val r = tree.copyInto(item.file.uri, item.file.length(), dir, name)
+                if (r is CopyOutcome.Copied || r is CopyOutcome.AlreadyThere) {
+                    onLog("✗  $name: $msg (copied to error/)")
+                    return Outcome.ERROR to msg
+                }
+            }
+        }
+        onLog("✗  $name: $msg")
+        return Outcome.ERROR to msg
+    }
+
+    /**
+     * Copies [source] into the app cache and writes the date (when [date] is
+     * non-null) plus any missing GPS/caption into that copy. Returns the
+     * temp file, or null when there is nothing to change (the caller then
+     * copies the original as is). The caller deletes the returned file.
+     * (Path-based ExifInterface: the FileDescriptor variant fails with EBADF
+     * on some SAF providers.)
+     */
+    private fun prepareExif(context: Context, source: android.net.Uri, meta: TakeoutMeta, date: PhotoDate?): File? {
+        val wantsGps = meta.latitude != null && meta.longitude != null
+        if (date == null && !wantsGps && meta.description.isBlank()) return null
+        val tmp = File(context.cacheDir, "takeout_exif_${System.nanoTime()}.tmp")
+        var keep = false
+        try {
+            context.contentResolver.openInputStream(source)?.use { inp ->
+                tmp.outputStream().use { out -> inp.copyTo(out) }
+            } ?: throw java.io.IOException("Cannot read the file")
+
+            val exif = ExifInterface(tmp.absolutePath)
+            var changed = false
+            if (date != null) {
+                exif.setAttribute(ExifInterface.TAG_DATETIME_ORIGINAL,  date.exif)
+                exif.setAttribute(ExifInterface.TAG_DATETIME,           date.exif)
+                exif.setAttribute(ExifInterface.TAG_DATETIME_DIGITIZED, date.exif)
+                exif.setAttribute(ExifInterface.TAG_OFFSET_TIME_ORIGINAL,  date.offsetString)
+                exif.setAttribute(ExifInterface.TAG_OFFSET_TIME,           date.offsetString)
+                exif.setAttribute(ExifInterface.TAG_OFFSET_TIME_DIGITIZED, date.offsetString)
+                changed = true
+            }
+            if (wantsGps && exif.latLong == null) {
+                exif.setLatLong(meta.latitude!!, meta.longitude!!)
+                meta.altitude?.let { alt ->
+                    exif.setAttribute(ExifInterface.TAG_GPS_ALTITUDE, "${kotlin.math.abs(alt).toLong()}/1")
+                    exif.setAttribute(ExifInterface.TAG_GPS_ALTITUDE_REF, if (alt >= 0) "0" else "1")
+                }
+                changed = true
+            }
+            if (meta.description.isNotBlank() && exif.getAttribute(ExifInterface.TAG_IMAGE_DESCRIPTION).isNullOrBlank()) {
+                exif.setAttribute(ExifInterface.TAG_IMAGE_DESCRIPTION, meta.description)
+                changed = true
+            }
+            if (!changed) return null
+            exif.saveAttributes()
+            keep = true
+            return tmp
+        } finally {
+            if (!keep) tmp.delete()
         }
     }
 }

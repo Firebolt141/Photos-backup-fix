@@ -13,8 +13,8 @@ android {
         applicationId   = "com.firebolt141.ubertrag"
         minSdk          = 26
         targetSdk       = 35
-        versionCode     = 1
-        versionName     = "1.0.0"
+        versionCode     = 2
+        versionName     = "1.1.0"
     }
 
     buildTypes {
@@ -65,9 +65,6 @@ dependencies {
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
 
-    // WorkManager
-    implementation(libs.work.runtime.ktx)
-
     // DataStore (persist folder URIs)
     implementation(libs.datastore.preferences)
 
@@ -80,6 +77,7 @@ dependencies {
     // Coroutines
     implementation(libs.coroutines.android)
 
-    // Unit tests
+    // Unit tests (PhotoLogic is pure Kotlin; org.json replaces Android's stubbed copy on the JVM)
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
 }

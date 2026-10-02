@@ -1,7 +1,9 @@
 package com.firebolt141.ubertrag.ui
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
@@ -20,7 +22,7 @@ import com.firebolt141.ubertrag.data.QueueItem
 import java.text.SimpleDateFormat
 import java.util.*
 
-private enum class Filter { All, Pending, Copied, Skipped, Failed }
+private enum class Filter(val label: String) { All("All"), Pending("Waiting"), Copied("Copied"), Skipped("Skipped"), Failed("Failed") }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -28,9 +30,12 @@ fun QueueScreen(
     items: List<QueueItem>,
     onBack: () -> Unit,
     onClearCopied: () -> Unit,
+    onRequeueAll: () -> Unit = {},
 ) {
     var filter by remember { mutableStateOf(Filter.All) }
     var showClearDialog by remember { mutableStateOf(false) }
+    var showRequeueDialog by remember { mutableStateOf(false) }
+    var showMenu by remember { mutableStateOf(false) }
 
     val visible = when (filter) {
         Filter.All     -> items
@@ -60,10 +65,22 @@ fun QueueScreen(
                     }
                 },
                 actions = {
-                    if (copiedCount > 0) {
-                        IconButton(onClick = { showClearDialog = true }) {
-                            Icon(Icons.Default.DeleteSweep, contentDescription = "Clear copied")
-                        }
+                    IconButton(onClick = { showMenu = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "More")
+                    }
+                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Remove copied from list") },
+                            leadingIcon = { Icon(Icons.Default.DeleteSweep, null) },
+                            enabled = copiedCount > 0,
+                            onClick = { showMenu = false; showClearDialog = true },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Copy everything again (new drive)") },
+                            leadingIcon = { Icon(Icons.Default.Replay, null) },
+                            enabled = items.isNotEmpty(),
+                            onClick = { showMenu = false; showRequeueDialog = true },
+                        )
                     }
                 },
             )
@@ -75,11 +92,14 @@ fun QueueScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Filter.entries.forEach { f ->
                     val badge: String? = when (f) {
+                        Filter.Pending -> items.count { it.status == CopyStatus.PENDING }.takeIf { it > 0 }?.toString()
+                        Filter.Copied  -> if (copiedCount  > 0) "$copiedCount"  else null
                         Filter.Skipped -> if (skippedCount > 0) "$skippedCount" else null
                         Filter.Failed  -> if (failedCount  > 0) "$failedCount"  else null
                         else           -> null
@@ -91,11 +111,11 @@ fun QueueScreen(
                             if (badge != null) {
                                 Row(verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Text(f.name)
+                                    Text(f.label)
                                     Badge { Text(badge) }
                                 }
                             } else {
-                                Text(f.name)
+                                Text(f.label)
                             }
                         },
                         leadingIcon = if (filter == f) ({
@@ -118,7 +138,7 @@ fun QueueScreen(
                         )
                         Spacer(Modifier.height(12.dp))
                         Text(
-                            "Nothing to show",
+                            if (items.isEmpty()) "Nothing here yet — tap Scan phone first" else "Nothing in this group",
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -133,6 +153,21 @@ fun QueueScreen(
                 }
             }
         }
+    }
+
+    if (showRequeueDialog) {
+        AlertDialog(
+            onDismissRequest = { showRequeueDialog = false },
+            icon    = { Icon(Icons.Default.Replay, null) },
+            title   = { Text("Copy everything again?") },
+            text    = { Text("Marks all ${items.size} items as waiting to be copied — useful for a second or new drive. Files that are already on the drive you copy to are recognised and skipped.") },
+            confirmButton = {
+                TextButton(onClick = { onRequeueAll(); showRequeueDialog = false }) { Text("Queue all") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRequeueDialog = false }) { Text("Cancel") }
+            },
+        )
     }
 
     if (showClearDialog) {
@@ -153,8 +188,9 @@ fun QueueScreen(
 
 @Composable
 private fun QueueRow(item: QueueItem) {
-    val fmt     = SimpleDateFormat("yyyy/MM/dd", Locale.getDefault())
-    val dateStr = item.dateTaken?.let { fmt.format(Date(it)) } ?: "Unknown date"
+    // Queue dates are wall-clock time encoded as UTC ms: format them in UTC.
+    val fmt     = remember { SimpleDateFormat("d MMM yyyy, HH:mm", Locale.getDefault()).apply { timeZone = TimeZone.getTimeZone("UTC") } }
+    val dateStr = item.dateTaken?.let { fmt.format(Date(it)) } ?: "No date — goes to no-date/"
 
     val (statusIcon, statusTint) = when (item.status) {
         CopyStatus.PENDING -> Icons.Default.Schedule      to MaterialTheme.colorScheme.onSurfaceVariant
@@ -175,7 +211,7 @@ private fun QueueRow(item: QueueItem) {
                 when (item.status) {
                     CopyStatus.SKIPPED -> {
                         Text(
-                            "Already on drive — skipped",
+                            item.errorMsg ?: "Already on the drive — skipped",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.tertiary,
                         )

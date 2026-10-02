@@ -1,0 +1,174 @@
+package com.firebolt141.ubertrag.util
+
+import android.content.Context
+import android.net.Uri
+import android.util.Log
+import androidx.documentfile.provider.DocumentFile
+
+/** Result of copying one file into a SAF folder. */
+sealed class CopyOutcome {
+    data class Copied(val file: DocumentFile, val name: String, val bytes: Long) : CopyOutcome()
+    /** A file with the same content (same name family and size) is already there. */
+    data class AlreadyThere(val name: String) : CopyOutcome()
+    data class Failed(val message: String) : CopyOutcome()
+}
+
+/**
+ * Folder operations on a Storage Access Framework tree, with each folder's
+ * listing cached. `DocumentFile.findFile()` lists the whole folder on every
+ * call, which gets very slow for day folders with hundreds of photos.
+ *
+ * Not thread-safe: use one instance per job.
+ */
+class SafTree(private val context: Context) {
+
+    private companion object {
+        const val TAG = "SafTree"
+        /** Generic type so the provider never appends or changes the extension. */
+        const val MIME = "application/octet-stream"
+    }
+
+    private val listings = HashMap<String, MutableMap<String, DocumentFile>>()
+
+    /** Lower-case name → child for [dir]. Leftover temp files from an interrupted copy are removed. */
+    fun children(dir: DocumentFile): MutableMap<String, DocumentFile> =
+        listings.getOrPut(dir.uri.toString()) {
+            val map = HashMap<String, DocumentFile>()
+            for (f in dir.listFiles()) {
+                val n = f.name ?: continue
+                if (n.startsWith(PhotoLogic.TMP_PREFIX)) {
+                    try { f.delete() } catch (_: Exception) { }
+                    continue
+                }
+                map[n.lowercase()] = f
+            }
+            map
+        }
+
+    fun child(dir: DocumentFile, name: String): DocumentFile? = children(dir)[name.lowercase()]
+
+    /** Existing sub-folder [name] of [parent], or a newly created one (null if that fails). */
+    fun dir(parent: DocumentFile, name: String): DocumentFile? {
+        child(parent, name)?.let { if (it.isDirectory) return it }
+        val created = try { parent.createDirectory(name) } catch (e: Exception) {
+            Log.w(TAG, "createDirectory($name) failed: ${e.message}")
+            null
+        } ?: return null
+        children(parent)[(created.name ?: name).lowercase()] = created
+        return created
+    }
+
+    /** Walks/creates root/parts[0]/parts[1]/… */
+    fun dirPath(root: DocumentFile, parts: List<String>): DocumentFile? {
+        var cur: DocumentFile = root
+        for (p in parts) {
+            if (p.isBlank()) continue
+            cur = dir(cur, p) ?: return null
+        }
+        return cur
+    }
+
+    /**
+     * Copies [source] (of [sourceSize] bytes, -1 if unknown) into [destDir] as
+     * [desiredName]. A same-name file of the same size counts as already
+     * there; a different file with that name gets an _1, _2 … suffix.
+     * The data is written to a temporary name first and renamed at the end,
+     * so an interrupted copy never looks like a finished one.
+     */
+    fun copyInto(source: Uri, sourceSize: Long, destDir: DocumentFile, desiredName: String): CopyOutcome {
+        val names = children(destDir)
+        // Same content already present under this name or one of its _N variants?
+        var name = desiredName
+        if (names.containsKey(name.lowercase())) {
+            val dot = desiredName.lastIndexOf('.')
+            val stem = if (dot > 0) desiredName.substring(0, dot) else desiredName
+            val ext = if (dot > 0) desiredName.substring(dot) else ""
+            var i = 0
+            while (true) {
+                val cand = if (i == 0) desiredName else "${stem}_$i$ext"
+                val existing = names[cand.lowercase()]
+                if (existing == null) { name = cand; break }
+                if (sourceSize >= 0 && existing.length() == sourceSize) return CopyOutcome.AlreadyThere(cand)
+                i++
+                if (i > 99_999) return CopyOutcome.Failed("No free file name for $desiredName")
+            }
+        }
+
+        val tmpName = PhotoLogic.TMP_PREFIX + name
+        val tmp = try { destDir.createFile(MIME, tmpName) } catch (e: Exception) { null }
+            ?: return copyDirect(source, sourceSize, destDir, name)
+        val written = try {
+            streamCopy(source, tmp.uri)
+        } catch (e: Exception) {
+            try { tmp.delete() } catch (_: Exception) { }
+            return CopyOutcome.Failed(friendly(e))
+        }
+        if (sourceSize >= 0 && written != sourceSize) {
+            try { tmp.delete() } catch (_: Exception) { }
+            return CopyOutcome.Failed("Copy was incomplete ($written of $sourceSize bytes)")
+        }
+        val renamed = try { tmp.renameTo(name) } catch (_: Exception) { false }
+        if (!renamed) {
+            // Some USB providers don't support rename: fall back to a direct copy.
+            try { tmp.delete() } catch (_: Exception) { }
+            return copyDirect(source, sourceSize, destDir, name)
+        }
+        val finalName = tmp.name ?: name
+        names[finalName.lowercase()] = tmp
+        return CopyOutcome.Copied(tmp, finalName, written)
+    }
+
+    private fun copyDirect(source: Uri, sourceSize: Long, destDir: DocumentFile, name: String): CopyOutcome {
+        val dest = try { destDir.createFile(MIME, name) } catch (e: Exception) { null }
+            ?: return CopyOutcome.Failed("Cannot create $name in ${destDir.name ?: "the folder"}")
+        return try {
+            val written = streamCopy(source, dest.uri)
+            if (sourceSize >= 0 && written != sourceSize) {
+                dest.delete()
+                CopyOutcome.Failed("Copy was incomplete ($written of $sourceSize bytes)")
+            } else {
+                val finalName = dest.name ?: name
+                children(destDir)[finalName.lowercase()] = dest
+                CopyOutcome.Copied(dest, finalName, written)
+            }
+        } catch (e: Exception) {
+            try { dest.delete() } catch (_: Exception) { }
+            CopyOutcome.Failed(friendly(e))
+        }
+    }
+
+    private fun streamCopy(from: Uri, to: Uri): Long {
+        val resolver = context.contentResolver
+        val input = resolver.openInputStream(from) ?: throw java.io.IOException("Cannot read the source file")
+        try {
+            val output = resolver.openOutputStream(to, "w") ?: throw java.io.IOException("Cannot write to the drive")
+            try {
+                return input.copyTo(output, 1 shl 16)
+            } finally {
+                output.close()
+            }
+        } finally {
+            input.close()
+        }
+    }
+
+    /** Plain-English messages for the usual failures. */
+    fun friendly(e: Exception): String {
+        val msg = e.message ?: e.javaClass.simpleName
+        return when {
+            msg.contains("ENOSPC", true) || msg.contains("No space", true) -> "The drive is full"
+            msg.contains("EFBIG", true) || msg.contains("too large", true) ->
+                "File is larger than 4 GB, which this drive (FAT32) cannot store"
+            msg.contains("EACCES", true) || msg.contains("Permission", true) -> "Permission denied"
+            msg.contains("ENOENT", true) || msg.contains("No such file", true) ->
+                "File or folder not found (was the drive disconnected?)"
+            msg.contains("EIO", true) -> "Read/write error (the drive may have been disconnected)"
+            else -> msg
+        }
+    }
+
+    /** True when the error means every remaining file would fail too. */
+    fun isFatal(message: String): Boolean =
+        message == "The drive is full" || message.startsWith("Read/write error") ||
+        message.startsWith("File or folder not found")
+}
