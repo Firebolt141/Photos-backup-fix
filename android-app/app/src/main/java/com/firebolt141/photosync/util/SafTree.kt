@@ -1,5 +1,6 @@
 package com.firebolt141.ubertrag.util
 
+import com.firebolt141.ubertrag.R
 import android.content.Context
 import android.net.Uri
 import android.util.Log
@@ -29,6 +30,9 @@ class SafTree(private val context: Context) {
     }
 
     private val listings = HashMap<String, MutableMap<String, DocumentFile>>()
+
+    /** Resources in the app's chosen language (fixed for this job, so [isFatal] can compare). */
+    private val res = context.loc()
 
     /** Lower-case name → child for [dir]. Leftover temp files from an interrupted copy are removed. */
     fun children(dir: DocumentFile): MutableMap<String, DocumentFile> =
@@ -92,7 +96,7 @@ class SafTree(private val context: Context) {
                     return CopyOutcome.AlreadyThere(cand)
                 }
                 i++
-                if (i > 99_999) return CopyOutcome.Failed("No free file name for $desiredName")
+                if (i > 99_999) return CopyOutcome.Failed(res.getString(R.string.err_no_free_name, desiredName))
             }
         }
 
@@ -107,7 +111,7 @@ class SafTree(private val context: Context) {
         }
         if (sourceSize >= 0 && written != sourceSize) {
             try { tmp.delete() } catch (_: Exception) { }
-            return CopyOutcome.Failed("Copy was incomplete ($written of $sourceSize bytes)")
+            return CopyOutcome.Failed(res.getString(R.string.err_incomplete, written, sourceSize))
         }
         val renamed = try { tmp.renameTo(name) } catch (_: Exception) { false }
         if (!renamed) {
@@ -122,12 +126,12 @@ class SafTree(private val context: Context) {
 
     private fun copyDirect(source: Uri, sourceSize: Long, destDir: DocumentFile, name: String): CopyOutcome {
         val dest = try { destDir.createFile(MIME, name) } catch (e: Exception) { null }
-            ?: return CopyOutcome.Failed("Cannot create $name in ${destDir.name ?: "the folder"}")
+            ?: return CopyOutcome.Failed(res.getString(R.string.err_cannot_create, name, destDir.name ?: res.getString(R.string.err_the_folder)))
         return try {
             val written = streamCopy(source, dest.uri)
             if (sourceSize >= 0 && written != sourceSize) {
                 dest.delete()
-                CopyOutcome.Failed("Copy was incomplete ($written of $sourceSize bytes)")
+                CopyOutcome.Failed(res.getString(R.string.err_incomplete, written, sourceSize))
             } else {
                 val finalName = dest.name ?: name
                 children(destDir)[finalName.lowercase()] = dest
@@ -172,9 +176,9 @@ class SafTree(private val context: Context) {
 
     private fun streamCopy(from: Uri, to: Uri): Long {
         val resolver = context.contentResolver
-        val input = resolver.openInputStream(from) ?: throw java.io.IOException("Cannot read the source file")
+        val input = resolver.openInputStream(from) ?: throw java.io.IOException(res.getString(R.string.err_cannot_read_source))
         try {
-            val output = resolver.openOutputStream(to, "w") ?: throw java.io.IOException("Cannot write to the drive")
+            val output = resolver.openOutputStream(to, "w") ?: throw java.io.IOException(res.getString(R.string.err_cannot_write_drive))
             try {
                 return input.copyTo(output, 1 shl 16)
             } finally {
@@ -189,19 +193,17 @@ class SafTree(private val context: Context) {
     fun friendly(e: Exception): String {
         val msg = e.message ?: e.javaClass.simpleName
         return when {
-            msg.contains("ENOSPC", true) || msg.contains("No space", true) -> "The drive is full"
-            msg.contains("EFBIG", true) || msg.contains("too large", true) ->
-                "File is larger than 4 GB, which this drive (FAT32) cannot store"
-            msg.contains("EACCES", true) || msg.contains("Permission", true) -> "Permission denied"
-            msg.contains("ENOENT", true) || msg.contains("No such file", true) ->
-                "File or folder not found (was the drive disconnected?)"
-            msg.contains("EIO", true) -> "Read/write error (the drive may have been disconnected)"
+            msg.contains("ENOSPC", true) || msg.contains("No space", true) -> res.getString(R.string.err_drive_full)
+            msg.contains("EFBIG", true) || msg.contains("too large", true) -> res.getString(R.string.err_too_large)
+            msg.contains("EACCES", true) || msg.contains("Permission", true) -> res.getString(R.string.err_permission)
+            msg.contains("ENOENT", true) || msg.contains("No such file", true) -> res.getString(R.string.err_not_found)
+            msg.contains("EIO", true) -> res.getString(R.string.err_io)
             else -> msg
         }
     }
 
     /** True when the error means every remaining file would fail too. */
     fun isFatal(message: String): Boolean =
-        message == "The drive is full" || message.startsWith("Read/write error") ||
-        message.startsWith("File or folder not found")
+        message == res.getString(R.string.err_drive_full) || message == res.getString(R.string.err_io) ||
+        message == res.getString(R.string.err_not_found)
 }

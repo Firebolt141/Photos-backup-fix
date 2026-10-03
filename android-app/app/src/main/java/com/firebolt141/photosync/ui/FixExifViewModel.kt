@@ -1,5 +1,7 @@
 package com.firebolt141.ubertrag.ui
 
+import com.firebolt141.ubertrag.util.loc
+import com.firebolt141.ubertrag.R
 import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
@@ -132,9 +134,9 @@ class FixExifViewModel(app: Application) : AndroidViewModel(app) {
     private fun startDriveModeFix() {
         val s = _state.value
         viewModelScope.launch {
-            begin("Fixing dates on the drive")
+            begin(str(R.string.ka_fixing))
             try {
-                log("Checking the drive: ${StorageHelper.folderLabel(s.driveUri).ifBlank { "?" }}")
+                log(str(R.string.log_checking_drive, StorageHelper.folderLabel(s.driveUri, getApplication()).ifBlank { "?" }))
                 val result = repo.fixMissingExif(
                     fixMismatched = s.fixMismatched,
                     onProgress    = ::progress,
@@ -143,26 +145,26 @@ class FixExifViewModel(app: Application) : AndroidViewModel(app) {
                 )
                 log("─────────────────────────────────────")
                 when {
-                    result == null -> log("✗ The drive isn't connected.")
+                    result == null -> log(str(R.string.log_drive_not_connected))
                     result.fixed + result.alreadyHasDate + result.skipped + result.failed == 0 -> {
-                        log("⚠ No photos found in Year / Month / Day folders.")
-                        log("  Expected: drive / 2024 / January / January_07 / photo.jpg")
-                        log("  (Selecting a single year folder as the drive also works.)")
+                        log(str(R.string.log_no_dated_photos))
+                        log(str(R.string.log_expected_layout))
+                        log(str(R.string.log_year_folder_ok))
                     }
                     else -> {
-                        log("Dates written:   ${result.fixed}")
-                        if (result.corrected > 0) log("Corrected:       ${result.corrected}")
-                        log("Already dated:   ${result.alreadyHasDate}")
-                        if (result.mismatched > result.corrected) log("Date ≠ folder:   ${result.mismatched - result.corrected} (left unchanged)")
-                        if (result.skipped > 0) log("Can't store a date (HEIC/RAW/video): ${result.skipped}")
-                        if (result.failed > 0) log("✗ Errors:        ${result.failed}")
+                        log(str(R.string.log_dates_written, result.fixed))
+                        if (result.corrected > 0) log(str(R.string.log_corrected, result.corrected))
+                        log(str(R.string.log_already_dated, result.alreadyHasDate))
+                        if (result.mismatched > result.corrected) log(str(R.string.log_mismatch, result.mismatched - result.corrected))
+                        if (result.skipped > 0) log(str(R.string.log_cant_store, result.skipped))
+                        if (result.failed > 0) log(str(R.string.log_errors, result.failed))
                     }
                 }
-                if (cancel) log("Stopped by you.")
+                if (cancel) log(str(R.string.log_stopped_by_you))
                 _state.update { it.copy(result = FixExifResult.DriveMode(result)) }
             } catch (e: Exception) {
                 log("✗ ${e.message}")
-                _state.update { it.copy(error = e.message ?: "Something went wrong") }
+                _state.update { it.copy(error = e.message ?: str(R.string.something_wrong)) }
             } finally {
                 KeepAlive.end()
                 _state.update { it.copy(running = false, stopping = false) }
@@ -174,7 +176,7 @@ class FixExifViewModel(app: Application) : AndroidViewModel(app) {
         val s = _state.value
         if (s.sourceUri.isBlank() || s.outputUri.isBlank()) return
         viewModelScope.launch {
-            begin("Sorting photos by date")
+            begin(str(R.string.ka_sorting))
             try {
                 val result = repo.fixByFilename(
                     sourceUri  = s.sourceUri,
@@ -189,22 +191,25 @@ class FixExifViewModel(app: Application) : AndroidViewModel(app) {
                     _state.update { it.copy(error = result.errorMsg) }
                 } else {
                     log("─────────────────────────────────────")
-                    log("Sorted into date folders: ${result.copied - result.noDate}")
-                    if (result.exifWritten > 0) log("Dates written:           ${result.exifWritten}")
-                    if (result.noDate > 0) log("No date (→ no-date/):    ${result.noDate}")
-                    if (result.alreadyExists > 0) log("Already there:           ${result.alreadyExists}")
-                    if (result.failed > 0) log("✗ Errors (→ error/):    ${result.failed}")
+                    log(str(R.string.log_sorted, result.copied - result.noDate))
+                    if (result.exifWritten > 0) log(str(R.string.log_dates_written2, result.exifWritten))
+                    if (result.noDate > 0) log(str(R.string.log_no_date, result.noDate))
+                    if (result.alreadyExists > 0) log(str(R.string.log_already_there, result.alreadyExists))
+                    if (result.failed > 0) log(str(R.string.log_errors_dir, result.failed))
                     _state.update { it.copy(result = FixExifResult.FilenameMode(result)) }
                 }
             } catch (e: Exception) {
                 log("✗ ${e.message}")
-                _state.update { it.copy(error = e.message ?: "Something went wrong") }
+                _state.update { it.copy(error = e.message ?: str(R.string.something_wrong)) }
             } finally {
                 KeepAlive.end()
                 _state.update { it.copy(running = false, stopping = false) }
             }
         }
     }
+
+    /** Text in the app's chosen language (log lines are written once, as they happen). */
+    private fun str(id: Int, vararg args: Any): String = getApplication<Application>().loc().getString(id, *args)
 
     private fun log(msg: String) {
         _state.update { s -> s.copy(logLines = (s.logLines + msg).takeLast(500)) }

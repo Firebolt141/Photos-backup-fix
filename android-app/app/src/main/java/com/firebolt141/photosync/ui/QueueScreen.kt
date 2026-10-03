@@ -1,5 +1,10 @@
 package com.firebolt141.ubertrag.ui
 
+import java.text.DateFormat
+import androidx.compose.ui.platform.LocalConfiguration
+import com.firebolt141.ubertrag.R
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -19,10 +24,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.firebolt141.ubertrag.data.CopyStatus
 import com.firebolt141.ubertrag.data.QueueItem
-import java.text.SimpleDateFormat
 import java.util.*
 
-private enum class Filter(val label: String) { All("All"), Pending("Waiting"), Copied("Copied"), Skipped("Skipped"), Failed("Failed") }
+private enum class Filter(val label: Int) {
+    All(R.string.filter_all), Pending(R.string.filter_waiting), Copied(R.string.filter_copied),
+    Skipped(R.string.filter_skipped), Failed(R.string.filter_failed)
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -54,29 +61,29 @@ fun QueueScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text("Queue", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                        Text("${items.size} total", style = MaterialTheme.typography.labelSmall,
+                        Text(stringResource(R.string.queue_title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text(pluralStringResource(R.plurals.n_total, items.size, items.size), style = MaterialTheme.typography.labelSmall,
                              color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
                     }
                 },
                 actions = {
                     IconButton(onClick = { showMenu = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "More")
+                        Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.more))
                     }
                     DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                         DropdownMenuItem(
-                            text = { Text("Remove copied from list") },
+                            text = { Text(stringResource(R.string.queue_remove_copied)) },
                             leadingIcon = { Icon(Icons.Default.DeleteSweep, null) },
                             enabled = copiedCount > 0,
                             onClick = { showMenu = false; showClearDialog = true },
                         )
                         DropdownMenuItem(
-                            text = { Text("Copy everything again (new drive)") },
+                            text = { Text(stringResource(R.string.queue_copy_all_again)) },
                             leadingIcon = { Icon(Icons.Default.Replay, null) },
                             enabled = items.isNotEmpty(),
                             onClick = { showMenu = false; showRequeueDialog = true },
@@ -111,11 +118,11 @@ fun QueueScreen(
                             if (badge != null) {
                                 Row(verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Text(f.label)
+                                    Text(stringResource(f.label))
                                     Badge { Text(badge) }
                                 }
                             } else {
-                                Text(f.label)
+                                Text(stringResource(f.label))
                             }
                         },
                         leadingIcon = if (filter == f) ({
@@ -138,7 +145,7 @@ fun QueueScreen(
                         )
                         Spacer(Modifier.height(12.dp))
                         Text(
-                            if (items.isEmpty()) "Nothing here yet — tap Scan phone first" else "Nothing in this group",
+                            stringResource(if (items.isEmpty()) R.string.queue_empty_scan else R.string.queue_empty_group),
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -159,13 +166,13 @@ fun QueueScreen(
         AlertDialog(
             onDismissRequest = { showRequeueDialog = false },
             icon    = { Icon(Icons.Default.Replay, null) },
-            title   = { Text("Copy everything again?") },
-            text    = { Text("Marks all ${items.size} items as waiting to be copied — useful for a second or new drive. Files that are already on the drive you copy to are recognised and skipped.") },
+            title   = { Text(stringResource(R.string.queue_copy_all_q)) },
+            text    = { Text(pluralStringResource(R.plurals.queue_copy_all_body, items.size, items.size)) },
             confirmButton = {
-                TextButton(onClick = { onRequeueAll(); showRequeueDialog = false }) { Text("Queue all") }
+                TextButton(onClick = { onRequeueAll(); showRequeueDialog = false }) { Text(stringResource(R.string.queue_all)) }
             },
             dismissButton = {
-                TextButton(onClick = { showRequeueDialog = false }) { Text("Cancel") }
+                TextButton(onClick = { showRequeueDialog = false }) { Text(stringResource(R.string.cancel)) }
             },
         )
     }
@@ -174,13 +181,13 @@ fun QueueScreen(
         AlertDialog(
             onDismissRequest = { showClearDialog = false },
             icon    = { Icon(Icons.Default.DeleteSweep, null) },
-            title   = { Text("Clear copied files?") },
-            text    = { Text("Remove $copiedCount copied item${if (copiedCount == 1) "" else "s"} from the queue. This does not delete any files from your phone or drive.") },
+            title   = { Text(stringResource(R.string.queue_clear_q)) },
+            text    = { Text(pluralStringResource(R.plurals.queue_clear_body, copiedCount, copiedCount)) },
             confirmButton = {
-                TextButton(onClick = { onClearCopied(); showClearDialog = false }) { Text("Clear") }
+                TextButton(onClick = { onClearCopied(); showClearDialog = false }) { Text(stringResource(R.string.clear)) }
             },
             dismissButton = {
-                TextButton(onClick = { showClearDialog = false }) { Text("Cancel") }
+                TextButton(onClick = { showClearDialog = false }) { Text(stringResource(R.string.cancel)) }
             },
         )
     }
@@ -189,8 +196,11 @@ fun QueueScreen(
 @Composable
 private fun QueueRow(item: QueueItem) {
     // Queue dates are wall-clock time encoded as UTC ms: format them in UTC.
-    val fmt     = remember { SimpleDateFormat("d MMM yyyy, HH:mm", Locale.getDefault()).apply { timeZone = TimeZone.getTimeZone("UTC") } }
-    val dateStr = item.dateTaken?.let { fmt.format(Date(it)) } ?: "No date — goes to no-date/"
+    val locale  = LocalConfiguration.current.locales[0]
+    val fmt     = remember(locale) {
+        DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT, locale).apply { timeZone = TimeZone.getTimeZone("UTC") }
+    }
+    val dateStr = item.dateTaken?.let { fmt.format(Date(it)) } ?: stringResource(R.string.queue_no_date)
 
     val (statusIcon, statusTint) = when (item.status) {
         CopyStatus.PENDING -> Icons.Default.Schedule      to MaterialTheme.colorScheme.onSurfaceVariant
@@ -211,7 +221,7 @@ private fun QueueRow(item: QueueItem) {
                 when (item.status) {
                     CopyStatus.SKIPPED -> {
                         Text(
-                            item.errorMsg ?: "Already on the drive — skipped",
+                            item.errorMsg ?: stringResource(R.string.queue_already_skipped),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.tertiary,
                         )

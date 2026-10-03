@@ -1,5 +1,10 @@
 package com.firebolt141.ubertrag.ui
 
+import com.firebolt141.ubertrag.util.StorageHelper
+import androidx.compose.ui.platform.LocalContext
+import com.firebolt141.ubertrag.R
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
@@ -45,17 +50,16 @@ fun FixExifScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text(if (filenameMode) "Sort a folder by date" else "Fix dates on the drive")
+                        Text(stringResource(if (filenameMode) R.string.organize_title else R.string.fix_title))
                         Text(
-                            if (filenameMode) "Any folder → Year / Month / Day"
-                            else "Give undated photos their folder's date",
+                            stringResource(if (filenameMode) R.string.organize_subtitle else R.string.fix_subtitle),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = onOpenDrawer) { Icon(Icons.Default.Menu, contentDescription = "Menu") }
+                    IconButton(onClick = onOpenDrawer) { Icon(Icons.Default.Menu, contentDescription = stringResource(R.string.menu)) }
                 },
             )
         }
@@ -70,59 +74,54 @@ fun FixExifScreen(
         ) {
             if (filenameMode) {
                 InfoCard(
-                    "For a messy folder — camera dumps, WhatsApp, Screenshots, old phone backups, sub-folders and all. " +
-                        "Each photo and video is copied to Output / Year / Month / Day using the date inside the file " +
-                        "or in its name (IMG_20240315…). Files with no date go to no-date/ (keeping their sub-folders); " +
-                        "anything unreadable goes to error/. Your originals are never changed."
+                    stringResource(R.string.organize_info)
                 )
-                StepLabel(1, "Folder to sort", done = state.sourceUri.isNotBlank())
+                StepLabel(1, stringResource(R.string.organize_step_source), done = state.sourceUri.isNotBlank())
                 FolderPickerCard(
-                    title    = "Source folder",
-                    subtitle = "Sub-folders are included",
+                    title    = stringResource(R.string.source_folder),
+                    subtitle = stringResource(R.string.subfolders_included),
                     icon     = Icons.Default.FolderOpen,
-                    name     = state.sourceName,
+                    name     = StorageHelper.folderLabel(state.sourceUri, LocalContext.current),
                     enabled  = !state.running,
                     onPick   = { sourcePicker.launch(null) },
                 )
-                StepLabel(2, "Where to put the sorted copies", done = state.outputUri.isNotBlank())
+                StepLabel(2, stringResource(R.string.organize_step_output), done = state.outputUri.isNotBlank())
                 FolderPickerCard(
-                    title    = "Output folder",
-                    subtitle = "e.g. your backup drive or a new empty folder",
+                    title    = stringResource(R.string.output_folder),
+                    subtitle = stringResource(R.string.output_folder_sub),
                     icon     = Icons.AutoMirrored.Filled.DriveFileMove,
-                    name     = state.outputName,
+                    name     = StorageHelper.folderLabel(state.outputUri, LocalContext.current),
                     enabled  = !state.running,
                     onPick   = { outputPicker.launch(null) },
                 )
                 if (state.sourceUri.isNotBlank() && state.sourceUri == state.outputUri) {
-                    Text("Source and output must be different folders.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    Text(stringResource(R.string.source_output_differ), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 }
-                StepLabel(3, "Options")
+                StepLabel(3, stringResource(R.string.step_options))
                 ElevatedCard(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                         OptionSwitch(
-                            "Trust dates already in photos",
-                            "Recommended. Off = always use the date in the file name, when there is one.",
+                            stringResource(R.string.opt_trust_dates),
+                            stringResource(R.string.opt_trust_dates_sub),
                             state.keepExistingDates, !state.running, vm::setKeepExistingDates,
                         )
                         OptionSwitch(
-                            "Rename copies to their date",
-                            "2024-03-15_14-30-22.jpg instead of the original name",
+                            stringResource(R.string.opt_rename),
+                            stringResource(R.string.opt_rename_sub),
                             state.renameToDate, !state.running, vm::setRenameToDate,
                         )
                     }
                 }
             } else {
                 InfoCard(
-                    "For a drive already sorted into Year / Month / Day folders. Photos with no date inside get " +
-                        "the date of the folder they're in, so Google Photos and galleries show them on the right day. " +
-                        "JPEG, PNG and WebP can be updated; HEIC, RAW and video can't store a date this way and are left as they are."
+                    stringResource(R.string.fix_info)
                 )
                 DriveStatusCard(driveUri = state.driveUri, driveConnected = state.driveConnected)
                 ElevatedCard(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                         OptionSwitch(
-                            "Also correct wrong dates",
-                            "Photos whose date is more than a day away from their folder get the folder's day (time of day kept)",
+                            stringResource(R.string.opt_fix_wrong),
+                            stringResource(R.string.opt_fix_wrong_sub),
                             state.fixMismatched, !state.running, vm::setFixMismatched,
                         )
                     }
@@ -136,7 +135,7 @@ fun FixExifScreen(
 
             if (state.running) {
                 JobProgressCard(
-                    title    = if (filenameMode) "Sorting…" else "Checking dates…",
+                    title    = stringResource(if (filenameMode) R.string.sorting else R.string.checking_dates),
                     done     = state.done,
                     total    = state.total,
                     current  = state.currentFile,
@@ -147,12 +146,12 @@ fun FixExifScreen(
                 Button(onClick = vm::startFix, enabled = canStart, modifier = Modifier.fillMaxWidth()) {
                     Icon(if (filenameMode) Icons.Default.CalendarMonth else Icons.Default.AutoFixHigh, null, Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text(if (filenameMode) "Start sorting" else "Fix dates")
+                    Text(stringResource(if (filenameMode) R.string.start_sorting else R.string.fix_dates))
                 }
             }
 
             if (state.error.isNotBlank()) {
-                ResultCard("Couldn't run", ok = false, onDismiss = vm::clearResult) {
+                ResultCard(stringResource(R.string.couldnt_run), ok = false, onDismiss = vm::clearResult) {
                     Text(state.error, style = MaterialTheme.typography.bodySmall)
                 }
             }
@@ -187,45 +186,45 @@ private fun ResultSummaryCard(result: FixExifResult, onDismiss: () -> Unit) {
         is FixExifResult.DriveMode -> {
             val r = result.r
             if (r == null) {
-                ResultCard("The drive isn't connected", ok = false, onDismiss = onDismiss) {}
+                ResultCard(stringResource(R.string.drive_not_connected_title), ok = false, onDismiss = onDismiss) {}
                 return
             }
-            ResultCard(if (r.failed == 0) "Done" else "Done, with problems", ok = r.failed == 0, onDismiss = onDismiss) {
-                ResultRow("Dates written", r.fixed, Icons.Default.AutoFixHigh)
-                if (r.corrected > 0) ResultRow("Wrong dates corrected", r.corrected, Icons.Default.EditCalendar)
-                ResultRow("Already had a date", r.alreadyHasDate, Icons.Default.CheckCircle)
-                if (r.mismatched > r.corrected) ResultRow("Date doesn't match folder (unchanged)", r.mismatched - r.corrected, Icons.Default.Warning)
-                if (r.skipped > 0) ResultRow("Can't store a date (HEIC/RAW/video)", r.skipped, Icons.Default.Block)
-                if (r.failed > 0) ResultRow("Errors", r.failed, Icons.Default.ErrorOutline, MaterialTheme.colorScheme.error)
+            ResultCard(stringResource(if (r.failed == 0) R.string.done else R.string.done_with_problems), ok = r.failed == 0, onDismiss = onDismiss) {
+                ResultRow(stringResource(R.string.res_dates_written), r.fixed, Icons.Default.AutoFixHigh)
+                if (r.corrected > 0) ResultRow(stringResource(R.string.res_wrong_corrected), r.corrected, Icons.Default.EditCalendar)
+                ResultRow(stringResource(R.string.res_already_dated), r.alreadyHasDate, Icons.Default.CheckCircle)
+                if (r.mismatched > r.corrected) ResultRow(stringResource(R.string.res_mismatch_unchanged), r.mismatched - r.corrected, Icons.Default.Warning)
+                if (r.skipped > 0) ResultRow(stringResource(R.string.res_cant_store), r.skipped, Icons.Default.Block)
+                if (r.failed > 0) ResultRow(stringResource(R.string.errors), r.failed, Icons.Default.ErrorOutline, MaterialTheme.colorScheme.error)
                 r.notes.take(5).forEach { Text("• $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                if (r.notes.size > 5) Text("… and ${r.notes.size - 5} more (see the log)", style = MaterialTheme.typography.bodySmall)
+                if (r.notes.size > 5) Text(stringResource(R.string.and_n_more_log, r.notes.size - 5), style = MaterialTheme.typography.bodySmall)
             }
         }
         is FixExifResult.FilenameMode -> {
             val r = result.r
             val title = when {
-                r.stoppedEarly.isNotBlank() -> "Stopped — ${r.stoppedEarly}"
-                r.copied + r.alreadyExists + r.failed == 0 -> "No photos or videos found"
-                r.failed > 0 -> "Done, with problems"
-                else -> "Done"
+                r.stoppedEarly.isNotBlank() -> stringResource(R.string.sum_stopped, r.stoppedEarly)
+                r.copied + r.alreadyExists + r.failed == 0 -> stringResource(R.string.no_media_found)
+                r.failed > 0 -> stringResource(R.string.done_with_problems)
+                else -> stringResource(R.string.done)
             }
             ResultCard(title, ok = r.failed == 0 && r.stoppedEarly.isBlank(), onDismiss = onDismiss) {
-                ResultRow("Sorted into date folders", r.copied - r.noDate, Icons.Default.CalendarMonth)
-                if (r.exifWritten > 0) ResultRow("Date written into the copy", r.exifWritten, Icons.Default.AutoFixHigh)
-                if (r.keptExisting > 0) ResultRow("Kept the photo's own date", r.keptExisting, Icons.Default.CheckCircle)
-                if (r.unsupported > 0) ResultRow("Sorted, date not written (HEIC/video)", r.unsupported, Icons.Default.Info)
-                if (r.noDate > 0) ResultRow("No date found (in no-date/)", r.noDate, Icons.AutoMirrored.Filled.HelpOutline)
-                if (r.alreadyExists > 0) ResultRow("Already in the output", r.alreadyExists, Icons.Default.RemoveCircleOutline)
-                if (r.failed > 0) ResultRow("Errors (copied to error/)", r.failed, Icons.Default.ErrorOutline, MaterialTheme.colorScheme.error)
-                if (r.ignored > 0) ResultRow("Other files left alone (not photos/videos)", r.ignored, Icons.Default.Description)
+                ResultRow(stringResource(R.string.res_sorted), r.copied - r.noDate, Icons.Default.CalendarMonth)
+                if (r.exifWritten > 0) ResultRow(stringResource(R.string.res_date_written_copy), r.exifWritten, Icons.Default.AutoFixHigh)
+                if (r.keptExisting > 0) ResultRow(stringResource(R.string.res_kept_own), r.keptExisting, Icons.Default.CheckCircle)
+                if (r.unsupported > 0) ResultRow(stringResource(R.string.res_sorted_no_write), r.unsupported, Icons.Default.Info)
+                if (r.noDate > 0) ResultRow(stringResource(R.string.res_no_date), r.noDate, Icons.AutoMirrored.Filled.HelpOutline)
+                if (r.alreadyExists > 0) ResultRow(stringResource(R.string.res_already_output), r.alreadyExists, Icons.Default.RemoveCircleOutline)
+                if (r.failed > 0) ResultRow(stringResource(R.string.res_errors_error_dir), r.failed, Icons.Default.ErrorOutline, MaterialTheme.colorScheme.error)
+                if (r.ignored > 0) ResultRow(stringResource(R.string.res_other_left), r.ignored, Icons.Default.Description)
                 if (r.archives > 0) {
                     Text(
-                        "${plural(r.archives, "zip file")} found. Unzip them first (Files app → tap the zip → Extract), then run again.",
+                        pluralStringResource(R.plurals.zip_found_unzip, r.archives, r.archives),
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary,
                     )
                 }
                 if (r.stoppedEarly.isNotBlank()) {
-                    Text("Everything done so far is safe. Run it again to continue — finished files are skipped.", style = MaterialTheme.typography.bodySmall)
+                    Text(stringResource(R.string.run_again_continue), style = MaterialTheme.typography.bodySmall)
                 }
             }
         }

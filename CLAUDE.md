@@ -64,6 +64,12 @@ Photos-backup-fix/
 - Never delete user files: duplicate handling *moves* to `_duplicates/`
 - `core.py` stays stdlib-only and Python 3.7-compatible (no 3.9+ APIs like `Path.is_relative_to`)
 
+### Languages (EN / 日本語)
+
+- All user-visible JS strings go through `t('English text', {vars})` (`{n|one|many}` for English plurals); add the Japanese to `JA` in `templates/i18n_ja.js`. Static HTML is translated by `translatePage()` (text nodes + placeholder/title/aria-label); markup-heavy blocks use `data-i18n-html` keys in `JA_HTML`
+- Server text (log lines, errors, notes) stays English in Python; the UI translates it with the `JA_MSG` regex list via `trMsg()`. Recommendations carry `id` + `vars` from `core._recommend`
+- `i18n_ja.js` is pulled in with Jinja `{% include %}`: it must never contain `{{`, `{%` or `{#`
+
 ---
 
 ## Tool 2 — Android (**Übertrag**)
@@ -168,6 +174,12 @@ Icon assets live in `app/src/main/res/mipmap-*/`:
 - `ic_launcher_round.png` — same image, round crop applied by launcher
 - `ic_launcher_foreground.png` — adaptive icon foreground at 108dp per density (108 / 162 / 216 / 324 / 432 px)
 - `mipmap-anydpi/ic_launcher.xml` — adaptive icon XML referencing `@mipmap/ic_launcher_foreground` + `@color/ic_launcher_background`
+
+### Languages (EN / 日本語)
+
+- Strings live in `res/values/strings.xml` + `res/values-ja/strings.xml`; every new string needs both. Use `stringResource` / `pluralStringResource` in Compose
+- The choice is AppCompat per-app locales (`AppLanguage.set`, drawer → Language; `locales_config.xml` for Android 13+ settings). `MainActivity` must stay an `AppCompatActivity`
+- Non-UI code (services, processors, ViewModels) must get text via `context.loc().getString(...)` so it follows the app's choice; ViewModel state that is shown later uses `UiText`
 
 ### Unit tests
 

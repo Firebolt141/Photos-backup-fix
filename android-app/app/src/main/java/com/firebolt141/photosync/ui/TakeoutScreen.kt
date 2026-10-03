@@ -1,5 +1,10 @@
 package com.firebolt141.ubertrag.ui
 
+import com.firebolt141.ubertrag.util.StorageHelper
+import androidx.compose.ui.platform.LocalContext
+import com.firebolt141.ubertrag.R
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
@@ -33,16 +38,16 @@ fun TakeoutScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text("Import Google Takeout")
+                        Text(stringResource(R.string.takeout_title))
                         Text(
-                            "Restore dates, places and captions",
+                            stringResource(R.string.takeout_subtitle),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = onOpenDrawer) { Icon(Icons.Default.Menu, contentDescription = "Menu") }
+                    IconButton(onClick = onOpenDrawer) { Icon(Icons.Default.Menu, contentDescription = stringResource(R.string.menu)) }
                 },
             )
         }
@@ -56,50 +61,48 @@ fun TakeoutScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             InfoCard(
-                "Google Takeout strips dates and places out of your photos and puts them in .json files next to them. " +
-                    "This reads those files and copies every photo and video into Output / Year / Month / Day with the " +
-                    "right date (and GPS and caption for JPEG/PNG/WebP). Your Takeout folder is not changed."
+                stringResource(R.string.takeout_info)
             )
 
-            StepLabel(1, "Unzip the Takeout download", done = state.sourceUri.isNotBlank())
+            StepLabel(1, stringResource(R.string.takeout_step_unzip), done = state.sourceUri.isNotBlank())
             Text(
-                "Takeout arrives as .zip files. In the Files app tap each zip → Extract. Extract all parts into the same folder.",
+                stringResource(R.string.takeout_unzip_how),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             FolderPickerCard(
-                title    = "Takeout folder",
-                subtitle = "The extracted \"Takeout\" folder (or \"Google Photos\" inside it)",
+                title    = stringResource(R.string.takeout_folder),
+                subtitle = stringResource(R.string.takeout_folder_sub),
                 icon     = Icons.Default.FolderZip,
-                name     = state.sourceName,
+                name     = StorageHelper.folderLabel(state.sourceUri, LocalContext.current),
                 enabled  = !state.running,
                 onPick   = { sourcePicker.launch(null) },
             )
 
-            StepLabel(2, "Where to put the photos", done = state.outputUri.isNotBlank())
+            StepLabel(2, stringResource(R.string.takeout_step_output), done = state.outputUri.isNotBlank())
             FolderPickerCard(
-                title    = "Output folder",
-                subtitle = "Your backup drive or a new empty folder",
+                title    = stringResource(R.string.output_folder),
+                subtitle = stringResource(R.string.takeout_output_sub),
                 icon     = Icons.AutoMirrored.Filled.DriveFileMove,
-                name     = state.outputName,
+                name     = StorageHelper.folderLabel(state.outputUri, LocalContext.current),
                 enabled  = !state.running,
                 onPick   = { outputPicker.launch(null) },
             )
             if (state.sourceUri.isNotBlank() && state.sourceUri == state.outputUri) {
-                Text("Source and output must be different folders.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.source_output_differ), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
 
-            StepLabel(3, "Options")
+            StepLabel(3, stringResource(R.string.step_options))
             ElevatedCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                     OptionSwitch(
-                        "Keep dates already in photos",
-                        "Recommended. Camera dates are usually more precise than Google's",
+                        stringResource(R.string.opt_keep_dates),
+                        stringResource(R.string.opt_keep_dates_sub),
                         state.skipIfHasExif, !state.running, vm::setSkipIfHasExif,
                     )
                     OptionSwitch(
-                        "Rename copies to their date",
-                        "2024-03-15_14-30-22.jpg instead of the original name",
+                        stringResource(R.string.opt_rename),
+                        stringResource(R.string.opt_rename_sub),
                         state.renameToDate, !state.running, vm::setRenameToDate,
                     )
                 }
@@ -107,7 +110,7 @@ fun TakeoutScreen(
 
             if (state.running) {
                 JobProgressCard(
-                    title    = "Importing…",
+                    title    = stringResource(R.string.importing),
                     done     = state.done,
                     total    = state.total,
                     current  = state.currentFile,
@@ -122,7 +125,7 @@ fun TakeoutScreen(
                 ) {
                     Icon(Icons.Default.PlayArrow, null, Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("Start import")
+                    Text(stringResource(R.string.start_import))
                 }
             }
 
@@ -138,37 +141,37 @@ fun TakeoutScreen(
 @Composable
 private fun TakeoutResultCard(r: TakeoutResult, onDismiss: () -> Unit) {
     if (r.errorMsg.isNotBlank()) {
-        ResultCard("Could not start", ok = false, onDismiss = onDismiss) {
+        ResultCard(stringResource(R.string.could_not_start), ok = false, onDismiss = onDismiss) {
             Text(r.errorMsg, style = MaterialTheme.typography.bodySmall)
         }
         return
     }
     val title = when {
-        r.stoppedEarly.isNotBlank() -> "Stopped — ${r.stoppedEarly}"
-        r.total == 0 -> "No photos or videos found"
-        r.errors > 0 -> "Done, with problems"
-        else -> "Done — ${plural(r.total, "file")}"
+        r.stoppedEarly.isNotBlank() -> stringResource(R.string.sum_stopped, r.stoppedEarly)
+        r.total == 0 -> stringResource(R.string.no_media_found)
+        r.errors > 0 -> stringResource(R.string.done_with_problems)
+        else -> pluralStringResource(R.plurals.done_n_files, r.total, r.total)
     }
     ResultCard(title, ok = r.errors == 0 && r.stoppedEarly.isBlank() && r.total > 0, onDismiss = onDismiss) {
-        if (r.fixed > 0) ResultRow("Date from Google's .json", r.fixed, Icons.Default.AutoFixHigh)
-        if (r.fromFilename > 0) ResultRow("Date from the file name", r.fromFilename, Icons.Default.TextFields)
-        if (r.keptExisting > 0) ResultRow("Kept the photo's own date", r.keptExisting, Icons.Default.CheckCircle)
-        if (r.unsupported > 0) ResultRow("Sorted, date not written (HEIC/video)", r.unsupported, Icons.Default.Info)
-        if (r.noDate > 0) ResultRow("No date found (in no-date/)", r.noDate, Icons.AutoMirrored.Filled.HelpOutline)
-        if (r.alreadyThere > 0) ResultRow("Already in the output (duplicates/earlier run)", r.alreadyThere, Icons.Default.RemoveCircleOutline)
-        if (r.errors > 0) ResultRow("Errors (copied to error/)", r.errors, Icons.Default.ErrorOutline, MaterialTheme.colorScheme.error)
-        if (r.ignored > 0) ResultRow("Other files left alone", r.ignored, Icons.Default.Description)
+        if (r.fixed > 0) ResultRow(stringResource(R.string.res_date_json), r.fixed, Icons.Default.AutoFixHigh)
+        if (r.fromFilename > 0) ResultRow(stringResource(R.string.res_date_name), r.fromFilename, Icons.Default.TextFields)
+        if (r.keptExisting > 0) ResultRow(stringResource(R.string.res_kept_own), r.keptExisting, Icons.Default.CheckCircle)
+        if (r.unsupported > 0) ResultRow(stringResource(R.string.res_sorted_no_write), r.unsupported, Icons.Default.Info)
+        if (r.noDate > 0) ResultRow(stringResource(R.string.res_no_date), r.noDate, Icons.AutoMirrored.Filled.HelpOutline)
+        if (r.alreadyThere > 0) ResultRow(stringResource(R.string.res_already_output_dup), r.alreadyThere, Icons.Default.RemoveCircleOutline)
+        if (r.errors > 0) ResultRow(stringResource(R.string.res_errors_error_dir), r.errors, Icons.Default.ErrorOutline, MaterialTheme.colorScheme.error)
+        if (r.ignored > 0) ResultRow(stringResource(R.string.res_other_left_short), r.ignored, Icons.Default.Description)
         if (r.archives > 0) {
             Text(
-                "${plural(r.archives, "zip file")} still packed. Extract ${if (r.archives == 1) "it" else "them"} (Files app → tap the zip → Extract) and run again.",
+                pluralStringResource(R.plurals.zips_still_packed, r.archives, r.archives),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary,
             )
         }
         if (r.total == 0 && r.archives == 0) {
-            Text("Pick the folder you extracted the Takeout zips into.", style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.takeout_pick_extracted), style = MaterialTheme.typography.bodySmall)
         }
         if (r.stoppedEarly.isNotBlank()) {
-            Text("Everything done so far is safe. Run it again to continue — finished files are skipped.", style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.run_again_continue), style = MaterialTheme.typography.bodySmall)
         }
     }
 }

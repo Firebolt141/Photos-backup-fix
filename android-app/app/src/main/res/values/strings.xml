@@ -1,4 +1,368 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="app_name">Übertrag</string>
+<!-- Generated from the Übertrag string table; edit both languages together. -->
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="PluralsCandidate,TypographyDashes">
+    <string name="app_name" translatable="false">Übertrag</string>
+    <string name="drawer_tagline">Photo backup &amp; repair</string>
+    <string name="nav_start">Start here</string>
+    <string name="nav_section_phone">This phone</string>
+    <string name="nav_home">Back up phone</string>
+    <string name="nav_queue">Backup list</string>
+    <string name="nav_section_folder">A folder of photos</string>
+    <string name="nav_takeout">Import Google Takeout</string>
+    <string name="nav_organize">Sort a folder by date</string>
+    <string name="nav_section_drive">Backup drive</string>
+    <string name="nav_fix">Fix dates on the drive</string>
+    <string name="nav_rename">Update folder names</string>
+    <string name="nav_section_language">Language</string>
+    <string name="lang_system">Phone setting</string>
+    <string name="menu">Menu</string>
+    <string name="select_folder">Select folder</string>
+    <string name="change_folder">Change folder</string>
+    <string name="backup_drive">Backup drive</string>
+    <string name="drive_connected">Connected and ready</string>
+    <string name="drive_not_connected">Not connected — plug the drive in (or select it again)</string>
+    <string name="drive_none_pick">No drive selected yet. Plug in your USB drive or SD card, then tap Select drive and choose its top folder.</string>
+    <string name="drive_none_elsewhere">No drive selected yet. Select one on the Back up phone screen.</string>
+    <string name="select_drive">Select drive</string>
+    <string name="change_drive">Change drive</string>
+    <string name="forget">Forget</string>
+    <string name="stopping_after_file">Stopping after this file…</string>
+    <string name="stop">Stop</string>
+    <string name="keeps_going">You can leave the app — this keeps going. Keep the drive connected until it finishes.</string>
+    <string name="working">Working…</string>
+    <string name="log">Log</string>
+    <string name="done">Done</string>
+    <string name="start_question">What would you like to do?</string>
+    <string name="start_intro">Pick what matches your photos. Every tool copies or fixes files without deleting anything, and every file ends up in a folder: Year / Month / Day, no-date/, or error/.</string>
+    <string name="start_section_phone">Photos on this phone</string>
+    <string name="start_backup_title">Back up this phone to a drive</string>
+    <string name="start_backup_body">Copy the gallery to a USB drive or SD card, sorted by date. Run it again any time — only new photos are copied.</string>
+    <string name="start_section_folder">A folder of photos</string>
+    <string name="start_takeout_title">I have a Google Takeout export</string>
+    <string name="start_takeout_body">Unzipped Takeout folders with .json files. Restores the real dates, places and captions and sorts everything by date.</string>
+    <string name="start_organize_title">Sort a messy folder by date</string>
+    <string name="start_organize_body">Years of photos in random folders and sub-folders (old phones, WhatsApp, camera dumps). Copies them into Year / Month / Day.</string>
+    <string name="start_section_drive">Your backup drive</string>
+    <string name="start_fix_title">Photos show the wrong date</string>
+    <string name="start_fix_body">Writes each Year / Month / Day folder\'s date into photos on the drive that don\'t have one.</string>
+    <string name="start_rename_title">Update old folder names</string>
+    <string name="start_rename_body">Turns 2024 / 01 / 15 folders from older versions into 2024 / January / January_15.</string>
+    <string name="home_title">Back up phone</string>
+    <string name="home_subtitle">Copy photos &amp; videos to a USB drive or SD card</string>
+    <string name="queue">Queue</string>
+    <string name="step_choose_drive">Choose your backup drive</string>
+    <string name="step_find_photos">Find photos to back up</string>
+    <string name="scan_explain">Looks through your gallery and adds anything new to the list. Already-copied items are remembered.</string>
+    <string name="scanning">Scanning…</string>
+    <string name="scan_phone">Scan phone</string>
+    <string name="stat_to_copy">To copy</string>
+    <string name="stat_copied">Copied</string>
+    <string name="stat_already_there">Already there</string>
+    <string name="see_the_list" formatted="true">See the list (%1$d)</string>
+    <string name="step_copy">Copy to the drive</string>
+    <string name="copy_explain">Files go into Year / Month / Day folders, e.g. 2024 / March / March_15. Nothing is deleted from the phone. Files already on the drive are skipped.</string>
+    <string name="range_beginning">the beginning</string>
+    <string name="range_today">today</string>
+    <string name="range_only" formatted="true">Only %1$s → %2$s</string>
+    <string name="range_all">All dates</string>
+    <string name="clear">Clear</string>
+    <string name="change">Change</string>
+    <string name="limit_dates">Limit dates</string>
+    <string name="stop_copying">Stop copying</string>
+    <string name="copy">Copy</string>
+    <string name="hint_choose_drive_first">Choose a drive first (step 1).</string>
+    <string name="hint_connect_drive">Connect the drive to copy.</string>
+    <string name="hint_scan_first">Scan first (step 2).</string>
+    <string name="hint_all_backed_up">Everything in the list is already backed up.</string>
+    <string name="copying_to_drive">Copying to the drive…</string>
+    <string name="speed_mbps" formatted="true">%1$s MB/s</string>
+    <string name="cancel">Cancel</string>
+    <string name="ok">OK</string>
+    <string name="perm_partial_title">Only some photos are shared</string>
+    <string name="perm_title">Allow access to your photos</string>
+    <string name="perm_partial_body">You chose to share only selected photos, so only those can be backed up. Allow all photos and videos to back up everything.</string>
+    <string name="perm_body">Übertrag needs to read your photos and videos to copy them. Nothing leaves your phone except to the drive you choose.</string>
+    <string name="allow">Allow</string>
+    <string name="open_settings">Open settings</string>
+    <string name="sum_couldnt_start">Couldn\'t start</string>
+    <string name="sum_stopped" formatted="true">Stopped — %1$s</string>
+    <string name="sum_nothing">Nothing to copy</string>
+    <string name="sum_problems">Finished with problems</string>
+    <string name="sum_complete">Backup complete</string>
+    <string name="row_copied">Copied</string>
+    <string name="row_no_date">Without a date (in no-date/)</string>
+    <string name="row_on_drive">Already on the drive</string>
+    <string name="row_gone">No longer on the phone</string>
+    <string name="row_failed">Failed</string>
+    <string name="mb_written" formatted="true">%1$s MB written</string>
+    <string name="copy_continue_hint">Everything copied so far is safe. Tap Copy again to continue.</string>
+    <string name="see_failed">See which files failed</string>
+    <string name="msg_keep_access_denied">Android didn\'t allow keeping access to that folder. Pick the drive itself (or a folder on it) again.</string>
+    <string name="scan_allow_first">Allow access to photos and videos first.</string>
+    <string name="scan_looking">Looking through your photos and videos…</string>
+    <string name="scan_none_new">No new photos or videos since the last scan.</string>
+    <string name="scan_failed" formatted="true">Scan failed: %1$s</string>
+    <string name="copy_couldnt_start" formatted="true">Couldn\'t start copying: %1$s</string>
+    <string name="requeued_all">Everything is queued again. Files already on the drive will be skipped.</string>
+    <string name="starting">Starting…</string>
+    <string name="ka_renaming">Renaming folders</string>
+    <string name="rename_failed">Rename failed</string>
+    <string name="drive_not_connected_short">The drive isn\'t connected.</string>
+    <string name="rename_nothing_dry">Everything already uses the current names — nothing to do.</string>
+    <string name="rename_nothing">Nothing to rename.</string>
+    <string name="rename_done" formatted="true">Done — %1$d renamed</string>
+    <string name="rename_done_merged" formatted="true">Done — %1$d renamed, %2$d merged</string>
+    <string name="rename_title">Update folder names</string>
+    <string name="rename_subtitle">Old 01 / 15 folders → January / January_15</string>
+    <string name="rename_info">Older versions made folders like 2024 / 01 / 15 or 2024 / March / March 7. This gives them the current names (2024 / January / January_15, March_07) so everything sorts the same way. If both an old and a new folder exist for the same day, their photos are merged; identical files are never duplicated. Nothing is deleted.</string>
+    <string name="rename_step_check">Check what would change</string>
+    <string name="rename_check_drive">Check the drive</string>
+    <string name="rename_step_rename">Rename</string>
+    <string name="rename_folders">Rename folders</string>
+    <string name="rename_folders_renamed">Folders renamed</string>
+    <string name="rename_folders_merged">Folders merged</string>
+    <string name="rename_files_moved">Files moved while merging</string>
+    <string name="rename_identical_left">Identical files left in the old folder</string>
+    <string name="problems">Problems</string>
+    <string name="and_n_more" formatted="true">… and %1$d more</string>
+    <string name="filter_all">All</string>
+    <string name="filter_waiting">Waiting</string>
+    <string name="filter_copied">Copied</string>
+    <string name="filter_skipped">Skipped</string>
+    <string name="filter_failed">Failed</string>
+    <string name="queue_title">Queue</string>
+    <string name="back">Back</string>
+    <string name="more">More</string>
+    <string name="queue_remove_copied">Remove copied from list</string>
+    <string name="queue_copy_all_again">Copy everything again (new drive)</string>
+    <string name="queue_empty_scan">Nothing here yet — tap Scan phone first</string>
+    <string name="queue_empty_group">Nothing in this group</string>
+    <string name="queue_copy_all_q">Copy everything again?</string>
+    <string name="queue_all">Queue all</string>
+    <string name="queue_clear_q">Clear copied files?</string>
+    <string name="queue_no_date">No date — goes to no-date/</string>
+    <string name="queue_already_skipped">Already on the drive — skipped</string>
+    <string name="organize_title">Sort a folder by date</string>
+    <string name="fix_title">Fix dates on the drive</string>
+    <string name="organize_subtitle">Any folder → Year / Month / Day</string>
+    <string name="fix_subtitle">Give undated photos their folder\'s date</string>
+    <string name="organize_info">For a messy folder — camera dumps, WhatsApp, Screenshots, old phone backups, sub-folders and all. Each photo and video is copied to Output / Year / Month / Day using the date inside the file or in its name (IMG_20240315…). Files with no date go to no-date/ (keeping their sub-folders); anything unreadable goes to error/. Your originals are never changed.</string>
+    <string name="organize_step_source">Folder to sort</string>
+    <string name="source_folder">Source folder</string>
+    <string name="subfolders_included">Sub-folders are included</string>
+    <string name="organize_step_output">Where to put the sorted copies</string>
+    <string name="output_folder">Output folder</string>
+    <string name="output_folder_sub">e.g. your backup drive or a new empty folder</string>
+    <string name="source_output_differ">Source and output must be different folders.</string>
+    <string name="step_options">Options</string>
+    <string name="opt_trust_dates">Trust dates already in photos</string>
+    <string name="opt_trust_dates_sub">Recommended. Off = always use the date in the file name, when there is one.</string>
+    <string name="opt_rename">Rename copies to their date</string>
+    <string name="opt_rename_sub">2024-03-15_14-30-22.jpg instead of the original name</string>
+    <string name="fix_info">For a drive already sorted into Year / Month / Day folders. Photos with no date inside get the date of the folder they\'re in, so Google Photos and galleries show them on the right day. JPEG, PNG and WebP can be updated; HEIC, RAW and video can\'t store a date this way and are left as they are.</string>
+    <string name="opt_fix_wrong">Also correct wrong dates</string>
+    <string name="opt_fix_wrong_sub">Photos whose date is more than a day away from their folder get the folder\'s day (time of day kept)</string>
+    <string name="sorting">Sorting…</string>
+    <string name="checking_dates">Checking dates…</string>
+    <string name="start_sorting">Start sorting</string>
+    <string name="fix_dates">Fix dates</string>
+    <string name="couldnt_run">Couldn\'t run</string>
+    <string name="drive_not_connected_title">The drive isn\'t connected</string>
+    <string name="done_with_problems">Done, with problems</string>
+    <string name="res_dates_written">Dates written</string>
+    <string name="res_wrong_corrected">Wrong dates corrected</string>
+    <string name="res_already_dated">Already had a date</string>
+    <string name="res_mismatch_unchanged">Date doesn\'t match folder (unchanged)</string>
+    <string name="res_cant_store">Can\'t store a date (HEIC/RAW/video)</string>
+    <string name="errors">Errors</string>
+    <string name="and_n_more_log" formatted="true">… and %1$d more (see the log)</string>
+    <string name="no_media_found">No photos or videos found</string>
+    <string name="res_sorted">Sorted into date folders</string>
+    <string name="res_date_written_copy">Date written into the copy</string>
+    <string name="res_kept_own">Kept the photo\'s own date</string>
+    <string name="res_sorted_no_write">Sorted, date not written (HEIC/video)</string>
+    <string name="res_no_date">No date found (in no-date/)</string>
+    <string name="res_already_output">Already in the output</string>
+    <string name="res_errors_error_dir">Errors (copied to error/)</string>
+    <string name="res_other_left">Other files left alone (not photos/videos)</string>
+    <string name="run_again_continue">Everything done so far is safe. Run it again to continue — finished files are skipped.</string>
+    <string name="takeout_title">Import Google Takeout</string>
+    <string name="takeout_subtitle">Restore dates, places and captions</string>
+    <string name="takeout_info">Google Takeout strips dates and places out of your photos and puts them in .json files next to them. This reads those files and copies every photo and video into Output / Year / Month / Day with the right date (and GPS and caption for JPEG/PNG/WebP). Your Takeout folder is not changed.</string>
+    <string name="takeout_step_unzip">Unzip the Takeout download</string>
+    <string name="takeout_unzip_how">Takeout arrives as .zip files. In the Files app tap each zip → Extract. Extract all parts into the same folder.</string>
+    <string name="takeout_folder">Takeout folder</string>
+    <string name="takeout_folder_sub">The extracted \"Takeout\" folder (or \"Google Photos\" inside it)</string>
+    <string name="takeout_step_output">Where to put the photos</string>
+    <string name="takeout_output_sub">Your backup drive or a new empty folder</string>
+    <string name="opt_keep_dates">Keep dates already in photos</string>
+    <string name="opt_keep_dates_sub">Recommended. Camera dates are usually more precise than Google\'s</string>
+    <string name="importing">Importing…</string>
+    <string name="start_import">Start import</string>
+    <string name="could_not_start">Could not start</string>
+    <string name="res_date_json">Date from Google\'s .json</string>
+    <string name="res_date_name">Date from the file name</string>
+    <string name="res_already_output_dup">Already in the output (duplicates/earlier run)</string>
+    <string name="res_other_left_short">Other files left alone</string>
+    <string name="takeout_pick_extracted">Pick the folder you extracted the Takeout zips into.</string>
+    <string name="ka_fixing">Fixing dates on the drive</string>
+    <string name="ka_sorting">Sorting photos by date</string>
+    <string name="ka_importing">Importing Google Takeout</string>
+    <string name="log_checking_drive" formatted="true">Checking the drive: %1$s</string>
+    <string name="log_drive_not_connected">✗ The drive isn\'t connected.</string>
+    <string name="log_no_dated_photos">⚠ No photos found in Year / Month / Day folders.</string>
+    <string name="log_expected_layout">  Expected: drive / 2024 / January / January_07 / photo.jpg</string>
+    <string name="log_year_folder_ok">  (Selecting a single year folder as the drive also works.)</string>
+    <string name="log_dates_written" formatted="true">Dates written:   %1$d</string>
+    <string name="log_corrected" formatted="true">Corrected:       %1$d</string>
+    <string name="log_already_dated" formatted="true">Already dated:   %1$d</string>
+    <string name="log_mismatch" formatted="true">Date ≠ folder:   %1$d (left unchanged)</string>
+    <string name="log_cant_store" formatted="true">Can\'t store a date (HEIC/RAW/video): %1$d</string>
+    <string name="log_errors" formatted="true">✗ Errors:        %1$d</string>
+    <string name="log_stopped_by_you">Stopped by you.</string>
+    <string name="something_wrong">Something went wrong</string>
+    <string name="log_sorted" formatted="true">Sorted into date folders: %1$d</string>
+    <string name="log_dates_written2" formatted="true">Dates written:           %1$d</string>
+    <string name="log_no_date" formatted="true">No date (→ no-date/):    %1$d</string>
+    <string name="log_already_there" formatted="true">Already there:           %1$d</string>
+    <string name="log_errors_dir" formatted="true">✗ Errors (→ error/):    %1$d</string>
+    <string name="ch_copy_progress">Copy progress</string>
+    <string name="n_copying">Copying…</string>
+    <string name="n_starting_copy">Starting copy…</string>
+    <string name="n_copying_name" formatted="true">Copying %1$s</string>
+    <string name="n_finishing">Finishing…</string>
+    <string name="copy_failed">Copy failed</string>
+    <string name="stopped">Stopped</string>
+    <string name="time_limit_reached">Android\'s background time limit was reached — tap Copy to continue</string>
+    <string name="n_copying_to_drive_progress" formatted="true">Copying to drive · %1$d of %2$d</string>
+    <string name="n_copying_to_drive">Copying to drive</string>
+    <string name="n_part_copied" formatted="true">%1$d copied</string>
+    <string name="n_part_on_drive" formatted="true">%1$d already on the drive</string>
+    <string name="n_part_gone" formatted="true">%1$d no longer on the phone</string>
+    <string name="n_part_failed" formatted="true">%1$d failed</string>
+    <string name="n_part_stopped" formatted="true">Stopped: %1$s</string>
+    <string name="n_sum_couldnt_start">Copy couldn\'t start</string>
+    <string name="n_sum_stopped">Copy stopped</string>
+    <string name="n_sum_problems">Copy finished with problems</string>
+    <string name="n_sum_complete">Copy complete</string>
+    <string name="n_progress_of" formatted="true"> · %1$d of %2$d</string>
+    <string name="ka_keep_connected">Keep the drive connected until this finishes</string>
+    <string name="no_drive_selected">No drive selected</string>
+    <string name="drive_not_writable">The drive isn\'t connected (or can\'t be written to)</string>
+    <string name="cannot_open_drive">Cannot open the drive folder — select it again</string>
+    <string name="stopped_by_you">Stopped by you</string>
+    <string name="no_longer_on_phone">No longer on the phone</string>
+    <string name="cannot_create_folder" formatted="true">Cannot create folder %1$s</string>
+    <string name="cannot_open_source">Cannot open the source folder. Select it again.</string>
+    <string name="cannot_open_output">Cannot open the output folder. Select it again.</string>
+    <string name="cannot_open_takeout_src">Cannot open the selected source folder. Try selecting it again.</string>
+    <string name="cannot_open_takeout_out">Cannot open the selected output folder. Try selecting it again.</string>
+    <string name="err_drive_full">The drive is full</string>
+    <string name="err_too_large">File is larger than 4 GB, which this drive (FAT32) cannot store</string>
+    <string name="err_permission">Permission denied</string>
+    <string name="err_not_found">File or folder not found (was the drive disconnected?)</string>
+    <string name="err_io">Read/write error (the drive may have been disconnected)</string>
+    <string name="err_no_free_name" formatted="true">No free file name for %1$s</string>
+    <string name="err_incomplete" formatted="true">Copy was incomplete (%1$d of %2$d bytes)</string>
+    <string name="err_cannot_create" formatted="true">Cannot create %1$s in %2$s</string>
+    <string name="err_the_folder">the folder</string>
+    <string name="err_cannot_read_source">Cannot read the source file</string>
+    <string name="err_cannot_write_drive">Cannot write to the drive</string>
+    <string name="drive_top_level">Drive (top level)</string>
+    <string name="ren_merge_suffix" formatted="true">%1$s (merge)</string>
+    <string name="ren_could_not_rename" formatted="true">Could not rename %1$s</string>
+    <string name="ren_could_not_open" formatted="true">Could not open %1$s: %2$s</string>
+    <string name="ren_could_not_move_folder" formatted="true">Could not move folder %1$s</string>
+    <string name="ren_could_not_move" formatted="true">Could not move %1$s</string>
+    <string name="ren_kept_existing" formatted="true">%1$s kept %2$d file(s) that already exist in %3$s</string>
+    <string name="tk_same_folders">The source and output must be different folders.</string>
+    <string name="tk_looking" formatted="true">Looking through %1$s…</string>
+    <string name="tk_zips_found" formatted="true">⚠ %1$d zip/archive file(s) found: unzip them first (Files app → tap the zip → Extract), then run again.</string>
+    <string name="tk_others_left" formatted="true">%1$d file(s) that aren\'t photos or videos are left alone.</string>
+    <string name="tk_found" formatted="true">Found %1$d photo(s) and video(s).</string>
+    <string name="tk_stopping" formatted="true">✗ Stopping: %1$s. Files done so far are safe; run again to continue.</string>
+    <string name="tk_empty_file">The file is empty (0 bytes), probably a broken copy</string>
+    <string name="tk_already_in" formatted="true">=  %1$s already in %2$s</string>
+    <string name="tk_no_date" formatted="true">⚠  %1$s: no date found → %2$s</string>
+    <string name="tk_kept" formatted="true">✓  %1$s → %2$s (kept its own date)</string>
+    <string name="tk_cant_store" formatted="true">→  %1$s → %2$s (this format can\'t store a date)</string>
+    <string name="tk_not_written" formatted="true">→  %1$s → %2$s (date not written: %3$s)</string>
+    <string name="tk_ok" formatted="true">✓  %1$s → %2$s</string>
+    <string name="tk_from_name" formatted="true">✓  %1$s → %2$s (date from name)</string>
+    <string name="tk_failed_copied" formatted="true">✗  %1$s: %2$s (copied to error/)</string>
+    <string name="tk_failed" formatted="true">✗  %1$s: %2$s</string>
+    <string name="tk_cannot_read">Cannot read the file</string>
+    <string name="fx_and_more" formatted="true">  … and %1$d more</string>
+    <string name="fx_found" formatted="true">Found %1$d photo(s) and video(s) in dated folders.</string>
+    <string name="fx_mismatch" formatted="true">≠  %1$s has %2$s, folder says %3$s (left unchanged)</string>
+    <string name="fx_corrected" formatted="true">✓  %1$s corrected to %2$s</string>
+    <string name="fx_written" formatted="true">✓  %1$s → %2$s</string>
+    <string name="fx_error" formatted="true">✗  %1$s: %2$s</string>
+    <string name="fx_error_msg" formatted="true">✗ %1$s</string>
+    <string name="fx_stopped" formatted="true">Stopped: %1$s</string>
+    <string name="fx_not_year" formatted="true">skipped folder that is not a year: %1$s</string>
+    <string name="fx_not_month" formatted="true">skipped folder that is not a month: %1$s</string>
+    <string name="fx_loose" formatted="true">%1$d file(s) directly in %2$s have no day folder; left as they are</string>
+    <string name="fx_not_day" formatted="true">skipped folder that is not a day: %1$s</string>
+    <string name="fx_not_real_date" formatted="true">not a real date: %1$s</string>
+    <string name="fx_could_not_open" formatted="true">could not open %1$s: %2$s</string>
+    <string name="fx_no_name">File has no name</string>
+    <string name="fx_cannot_open" formatted="true">Cannot open %1$s</string>
+    <string name="fx_cannot_write" formatted="true">Cannot write %1$s</string>
+    <string name="fx_write_incomplete">Write was incomplete — check the drive</string>
+    <string name="fx_could_not_restore" formatted="true">Could not restore %1$s — its data is in %2$s</string>
+    <string name="fx_could_not_finish" formatted="true">Could not finish writing %1$s — its data is in %2$s</string>
+    <string name="internal_storage">Internal storage</string>
+    <plurals name="n_waiting">
+        <item quantity="one">%1$d waiting</item>
+        <item quantity="other">%1$d waiting</item>
+    </plurals>
+    <plurals name="n_lines">
+        <item quantity="one">%1$d line</item>
+        <item quantity="other">%1$d lines</item>
+    </plurals>
+    <plurals name="copy_n_files">
+        <item quantity="one">Copy %1$d file</item>
+        <item quantity="other">Copy %1$d files</item>
+    </plurals>
+    <plurals name="retry_n_failed">
+        <item quantity="one">Retry %1$d failed file</item>
+        <item quantity="other">Retry %1$d failed files</item>
+    </plurals>
+    <plurals name="scan_found_new">
+        <item quantity="one">Found %1$d new photo or video.</item>
+        <item quantity="other">Found %1$d new photos and videos.</item>
+    </plurals>
+    <plurals name="rename_to_update">
+        <item quantity="one">%1$d folder to update.</item>
+        <item quantity="other">%1$d folders to update.</item>
+    </plurals>
+    <plurals name="rename_done_problems">
+        <item quantity="one">Done — %2$d renamed, %3$d merged, %1$d problem</item>
+        <item quantity="other">Done — %2$d renamed, %3$d merged, %1$d problems</item>
+    </plurals>
+    <plurals name="n_total">
+        <item quantity="one">%1$d total</item>
+        <item quantity="other">%1$d total</item>
+    </plurals>
+    <plurals name="queue_copy_all_body">
+        <item quantity="one">Marks all %1$d item as waiting to be copied — useful for a second or new drive. Files that are already on the drive you copy to are recognised and skipped.</item>
+        <item quantity="other">Marks all %1$d items as waiting to be copied — useful for a second or new drive. Files that are already on the drive you copy to are recognised and skipped.</item>
+    </plurals>
+    <plurals name="queue_clear_body">
+        <item quantity="one">Remove %1$d copied item from the queue. This does not delete any files from your phone or drive.</item>
+        <item quantity="other">Remove %1$d copied items from the queue. This does not delete any files from your phone or drive.</item>
+    </plurals>
+    <plurals name="zip_found_unzip">
+        <item quantity="one">%1$d zip file found. Unzip it first (Files app → tap the zip → Extract), then run again.</item>
+        <item quantity="other">%1$d zip files found. Unzip them first (Files app → tap the zip → Extract), then run again.</item>
+    </plurals>
+    <plurals name="done_n_files">
+        <item quantity="one">Done — %1$d file</item>
+        <item quantity="other">Done — %1$d files</item>
+    </plurals>
+    <plurals name="zips_still_packed">
+        <item quantity="one">%1$d zip file still packed. Extract it (Files app → tap the zip → Extract) and run again.</item>
+        <item quantity="other">%1$d zip files still packed. Extract them (Files app → tap the zip → Extract) and run again.</item>
+    </plurals>
 </resources>

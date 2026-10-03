@@ -1,5 +1,7 @@
 package com.firebolt141.ubertrag.ui
 
+import com.firebolt141.ubertrag.util.loc
+import com.firebolt141.ubertrag.R
 import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
@@ -89,7 +91,7 @@ class TakeoutViewModel(app: Application) : AndroidViewModel(app) {
         cancel = false
         viewModelScope.launch {
             _state.update { it.copy(running = true, stopping = false, done = 0, total = 0, currentFile = "", result = null, logLines = emptyList()) }
-            KeepAlive.begin(getApplication(), "Importing Google Takeout")
+            KeepAlive.begin(getApplication(), getApplication<Application>().loc().getString(R.string.ka_importing))
             val result = try {
                 repo.processTakeout(
                     sourceUri   = srcUri,
@@ -103,7 +105,7 @@ class TakeoutViewModel(app: Application) : AndroidViewModel(app) {
                     isCancelled = { cancel },
                 )
             } catch (e: Exception) {
-                TakeoutResult(errorMsg = e.message ?: "Something went wrong")
+                TakeoutResult(errorMsg = e.message ?: getApplication<Application>().loc().getString(R.string.something_wrong))
             } finally {
                 KeepAlive.end()
             }

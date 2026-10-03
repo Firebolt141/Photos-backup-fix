@@ -1,5 +1,6 @@
 package com.firebolt141.ubertrag.util
 
+import com.firebolt141.ubertrag.R
 import android.content.Context
 import android.util.Log
 import androidx.documentfile.provider.DocumentFile
@@ -62,18 +63,19 @@ object TakeoutProcessor {
         onLog:      (String) -> Unit = {},
         isCancelled: () -> Boolean = { false },
     ): TakeoutResult {
+        val res = context.loc()
         Log.d(TAG, "process() source=${sourceRoot.uri} output=${outputRoot.uri} $options")
         val outputId = docId(outputRoot)
         if (outputId == docId(sourceRoot)) {
-            return TakeoutResult(errorMsg = "The source and output must be different folders.")
+            return TakeoutResult(errorMsg = res.getString(R.string.tk_same_folders))
         }
         val items = mutableListOf<Item>()
         val counts = IntArray(2)                       // [ignored, archives]
-        onLog("Looking through ${sourceRoot.name ?: "the folder"}…")
+        onLog(res.getString(R.string.tk_looking, sourceRoot.name ?: res.getString(R.string.err_the_folder)))
         collect(sourceRoot, emptyList(), items, counts, outputId)
-        if (counts[1] > 0) onLog("⚠ ${counts[1]} zip/archive file(s) found: unzip them first (Files app → tap the zip → Extract), then run again.")
-        if (counts[0] > 0) onLog("${counts[0]} file(s) that aren't photos or videos are left alone.")
-        onLog("Found ${items.size} photo(s) and video(s).")
+        if (counts[1] > 0) onLog(res.getString(R.string.tk_zips_found, counts[1]))
+        if (counts[0] > 0) onLog(res.getString(R.string.tk_others_left, counts[0]))
+        onLog(res.getString(R.string.tk_found, items.size))
         if (items.isEmpty()) {
             return TakeoutResult(ignored = counts[0], archives = counts[1])
         }
@@ -89,18 +91,18 @@ object TakeoutProcessor {
             val name = item.file.name ?: return@forEachIndexed
             onProgress(idx + 1, items.size, name)
             val outcome = try {
-                processOne(item, name, tree, sidecarMaps, outputRoot, context, options, zone, onLog)
+                processOne(item, name, tree, sidecarMaps, outputRoot, context, options, zone, onLog, res)
             } catch (e: Exception) {
                 Log.e(TAG, "Error processing $name", e)
-                fail(item, name, tree, outputRoot, tree.friendly(e), onLog)
+                fail(item, name, tree, outputRoot, tree.friendly(e), onLog, res)
             }
             n[outcome.first.ordinal]++
             if (outcome.second.isNotEmpty() && tree.isFatal(outcome.second)) {
                 stopped = outcome.second
-                onLog("✗ Stopping: ${outcome.second}. Files done so far are safe; run again to continue.")
+                onLog(res.getString(R.string.tk_stopping, outcome.second))
             }
         }
-        if (isCancelled() && stopped.isEmpty()) stopped = "Stopped by you"
+        if (isCancelled() && stopped.isEmpty()) stopped = res.getString(R.string.stopped_by_you)
         val r = TakeoutResult(
             total        = items.size,
             fixed        = n[Outcome.FIXED.ordinal],
@@ -168,9 +170,10 @@ object TakeoutProcessor {
         options: TakeoutOptions,
         zone: ZoneId,
         onLog: (String) -> Unit,
+        res: Context,
     ): Pair<Outcome, String> {
         val size = item.file.length()
-        if (size == 0L) return fail(item, name, tree, outputRoot, "The file is empty (0 bytes), probably a broken copy", onLog)
+        if (size == 0L) return fail(item, name, tree, outputRoot, res.getString(R.string.tk_empty_file), onLog, res)
 
         // Sidecar metadata
         var meta = TakeoutMeta()
@@ -214,7 +217,7 @@ object TakeoutProcessor {
         val parts = if (place != null) PhotoLogic.dateFolders(place.wallMs)
                     else listOf(PhotoLogic.NO_DATE_DIR) + item.relDirs
         val destDir = tree.dirPath(outputRoot, parts)
-            ?: return fail(item, name, tree, outputRoot, "Cannot create folder ${parts.joinToString("/")}", onLog)
+            ?: return fail(item, name, tree, outputRoot, res.getString(R.string.cannot_create_folder, parts.joinToString("/")), onLog, res)
         val outName = if (options.renameToDate && place != null) PhotoLogic.dateFileName(place, name) else name
 
         val writable = PhotoLogic.isWritable(name)
@@ -244,39 +247,39 @@ object TakeoutProcessor {
         }
         val copied = when (outcome) {
             is CopyOutcome.AlreadyThere -> {
-                onLog("=  $name already in ${parts.joinToString("/")}")
+                onLog(res.getString(R.string.tk_already_in, name, parts.joinToString("/")))
                 return Outcome.ALREADY to ""
             }
-            is CopyOutcome.Failed -> return fail(item, name, tree, outputRoot, outcome.message, onLog)
+            is CopyOutcome.Failed -> return fail(item, name, tree, outputRoot, outcome.message, onLog, res)
             is CopyOutcome.Copied -> outcome
         }
         val where = parts.joinToString("/") + "/" + copied.name
 
         return when {
-            place == null -> { onLog("⚠  $name: no date found → $where"); Outcome.NO_DATE to "" }
-            keepEmbedded || place.source == "embedded" -> { onLog("✓  $name → $where (kept its own date)"); Outcome.KEPT to "" }
-            !writable -> { onLog("→  $name → $where (this format can't store a date)"); Outcome.UNSUPPORTED to "" }
-            exifError.isNotEmpty() -> { onLog("→  $name → $where (date not written: $exifError)"); Outcome.UNSUPPORTED to "" }
-            place.source == "sidecar" -> { onLog("✓  $name → $where"); Outcome.FIXED to "" }
-            else -> { onLog("✓  $name → $where (date from name)"); Outcome.FROM_FILENAME to "" }
+            place == null -> { onLog(res.getString(R.string.tk_no_date, name, where)); Outcome.NO_DATE to "" }
+            keepEmbedded || place.source == "embedded" -> { onLog(res.getString(R.string.tk_kept, name, where)); Outcome.KEPT to "" }
+            !writable -> { onLog(res.getString(R.string.tk_cant_store, name, where)); Outcome.UNSUPPORTED to "" }
+            exifError.isNotEmpty() -> { onLog(res.getString(R.string.tk_not_written, name, where, exifError)); Outcome.UNSUPPORTED to "" }
+            place.source == "sidecar" -> { onLog(res.getString(R.string.tk_ok, name, where)); Outcome.FIXED to "" }
+            else -> { onLog(res.getString(R.string.tk_from_name, name, where)); Outcome.FROM_FILENAME to "" }
         }
     }
 
     /** Last resort: copy the file to error/<original sub-folders>/ so nothing is lost. */
     private fun fail(
-        item: Item, name: String, tree: SafTree, outputRoot: DocumentFile, msg: String, onLog: (String) -> Unit,
+        item: Item, name: String, tree: SafTree, outputRoot: DocumentFile, msg: String, onLog: (String) -> Unit, res: Context,
     ): Pair<Outcome, String> {
         if (!tree.isFatal(msg)) {
             val dir = tree.dirPath(outputRoot, listOf(PhotoLogic.ERROR_DIR) + item.relDirs)
             if (dir != null) {
                 val r = tree.copyInto(item.file.uri, item.file.length(), dir, name)
                 if (r is CopyOutcome.Copied || r is CopyOutcome.AlreadyThere) {
-                    onLog("✗  $name: $msg (copied to error/)")
+                    onLog(res.getString(R.string.tk_failed_copied, name, msg))
                     return Outcome.ERROR to msg
                 }
             }
         }
-        onLog("✗  $name: $msg")
+        onLog(res.getString(R.string.tk_failed, name, msg))
         return Outcome.ERROR to msg
     }
 
@@ -296,7 +299,7 @@ object TakeoutProcessor {
         try {
             context.contentResolver.openInputStream(source)?.use { inp ->
                 tmp.outputStream().use { out -> inp.copyTo(out) }
-            } ?: throw java.io.IOException("Cannot read the file")
+            } ?: throw java.io.IOException(context.loc().getString(R.string.tk_cannot_read))
 
             val exif = ExifInterface(tmp.absolutePath)
             var changed = false

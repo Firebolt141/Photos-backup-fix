@@ -1,5 +1,8 @@
 package com.firebolt141.ubertrag.ui
 
+import com.firebolt141.ubertrag.R
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -28,9 +31,9 @@ fun StartScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Übertrag") },
+                title = { Text(stringResource(R.string.app_name)) },
                 navigationIcon = {
-                    IconButton(onClick = onOpenDrawer) { Icon(Icons.Default.Menu, contentDescription = "Menu") }
+                    IconButton(onClick = onOpenDrawer) { Icon(Icons.Default.Menu, contentDescription = stringResource(R.string.menu)) }
                 },
             )
         }
@@ -43,48 +46,47 @@ fun StartScreen(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("What would you like to do?", style = MaterialTheme.typography.headlineSmall)
+            Text(stringResource(R.string.start_question), style = MaterialTheme.typography.headlineSmall)
             Text(
-                "Pick what matches your photos. Every tool copies or fixes files without deleting anything, " +
-                    "and every file ends up in a folder: Year / Month / Day, no-date/, or error/.",
+                stringResource(R.string.start_intro),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            SectionLabel("Photos on this phone")
+            SectionLabel(stringResource(R.string.start_section_phone))
             TaskCard(
                 icon = Icons.Default.PhoneAndroid,
-                title = "Back up this phone to a drive",
-                body = "Copy the gallery to a USB drive or SD card, sorted by date. Run it again any time — only new photos are copied.",
-                badge = if (state.pendingCount > 0) "${state.pendingCount} waiting" else "",
+                title = stringResource(R.string.start_backup_title),
+                body = stringResource(R.string.start_backup_body),
+                badge = if (state.pendingCount > 0) pluralStringResource(R.plurals.n_waiting, state.pendingCount, state.pendingCount) else "",
                 onClick = { onNavigate("home") },
             )
 
-            SectionLabel("A folder of photos")
+            SectionLabel(stringResource(R.string.start_section_folder))
             TaskCard(
                 icon = Icons.Default.FolderZip,
-                title = "I have a Google Takeout export",
-                body = "Unzipped Takeout folders with .json files. Restores the real dates, places and captions and sorts everything by date.",
+                title = stringResource(R.string.start_takeout_title),
+                body = stringResource(R.string.start_takeout_body),
                 onClick = { onNavigate("takeout") },
             )
             TaskCard(
                 icon = Icons.Default.CalendarMonth,
-                title = "Sort a messy folder by date",
-                body = "Years of photos in random folders and sub-folders (old phones, WhatsApp, camera dumps). Copies them into Year / Month / Day.",
+                title = stringResource(R.string.start_organize_title),
+                body = stringResource(R.string.start_organize_body),
                 onClick = { onNavigate("organize") },
             )
 
-            SectionLabel("Your backup drive")
+            SectionLabel(stringResource(R.string.start_section_drive))
             TaskCard(
                 icon = Icons.Default.AutoFixHigh,
-                title = "Photos show the wrong date",
-                body = "Writes each Year / Month / Day folder's date into photos on the drive that don't have one.",
+                title = stringResource(R.string.start_fix_title),
+                body = stringResource(R.string.start_fix_body),
                 onClick = { onNavigate("fix-exif") },
             )
             TaskCard(
                 icon = Icons.Default.DriveFileRenameOutline,
-                title = "Update old folder names",
-                body = "Turns 2024 / 01 / 15 folders from older versions into 2024 / January / January_15.",
+                title = stringResource(R.string.start_rename_title),
+                body = stringResource(R.string.start_rename_body),
                 onClick = { onNavigate("rename-folders") },
             )
             Spacer(Modifier.height(8.dp))

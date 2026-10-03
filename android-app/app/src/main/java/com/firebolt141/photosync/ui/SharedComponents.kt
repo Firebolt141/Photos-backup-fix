@@ -1,5 +1,8 @@
 package com.firebolt141.ubertrag.ui
 
+import com.firebolt141.ubertrag.R
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -102,7 +105,7 @@ fun FolderPickerCard(
             FilledTonalButton(onClick = onPick, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Default.FolderOpen, null, Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
-                Text(if (name.isBlank()) "Select folder" else "Change folder")
+                Text(stringResource(if (name.isBlank()) R.string.select_folder else R.string.change_folder))
             }
         }
     }
@@ -125,25 +128,24 @@ fun DriveStatusCard(
             uri?.let(onDriveSelected)
         }
     } else null
-    val folderName = com.firebolt141.ubertrag.util.StorageHelper.folderLabel(driveUri)
+    val folderName = com.firebolt141.ubertrag.util.StorageHelper.folderLabel(driveUri, androidx.compose.ui.platform.LocalContext.current)
 
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            CardTitle(Icons.Default.Storage, "Backup drive")
+            CardTitle(Icons.Default.Storage, stringResource(R.string.backup_drive))
 
             val (icon, color, label) = when {
                 driveConnected -> Triple(
                     Icons.Default.CheckCircle, MaterialTheme.colorScheme.secondary,
-                    "Connected and ready",
+                    stringResource(R.string.drive_connected),
                 )
                 driveUri != null -> Triple(
                     Icons.Default.Warning, MaterialTheme.colorScheme.error,
-                    "Not connected — plug the drive in (or select it again)",
+                    stringResource(R.string.drive_not_connected),
                 )
                 else -> Triple(
                     Icons.Default.Info, MaterialTheme.colorScheme.onSurfaceVariant,
-                    if (drivePicker != null) "No drive selected yet. Plug in your USB drive or SD card, then tap Select drive and choose its top folder."
-                    else "No drive selected yet. Select one on the Back up phone screen.",
+                    stringResource(if (drivePicker != null) R.string.drive_none_pick else R.string.drive_none_elsewhere),
                 )
             }
 
@@ -171,10 +173,10 @@ fun DriveStatusCard(
                     FilledTonalButton(onClick = { drivePicker.launch(null) }, enabled = enabled) {
                         Icon(Icons.Default.FolderOpen, null, Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
-                        Text(if (driveUri == null) "Select drive" else "Change drive")
+                        Text(stringResource(if (driveUri == null) R.string.select_drive else R.string.change_drive))
                     }
                     if (driveUri != null && onForget != null) {
-                        OutlinedButton(onClick = onForget, enabled = enabled) { Text("Forget") }
+                        OutlinedButton(onClick = onForget, enabled = enabled) { Text(stringResource(R.string.forget)) }
                     }
                 }
             }
@@ -202,7 +204,7 @@ fun JobProgressCard(
                 CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    if (stopping) "Stopping after this file…" else title,
+                    if (stopping) stringResource(R.string.stopping_after_file) else title,
                     style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f),
                 )
@@ -235,12 +237,12 @@ fun JobProgressCard(
                     TextButton(onClick = onStop, enabled = !stopping) {
                         Icon(Icons.Default.Stop, null, Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("Stop")
+                        Text(stringResource(R.string.stop))
                     }
                 }
             }
             Text(
-                "You can leave the app — this keeps going. Keep the drive connected until it finishes.",
+                stringResource(R.string.keeps_going),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
             )
@@ -261,9 +263,9 @@ fun LogPanel(lines: List<String>, running: Boolean) {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (running) CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 2.dp)
-                Text(if (running) "Working…" else "Log", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(if (running) R.string.working else R.string.log), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.weight(1f))
-                Text("${lines.size} lines", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(pluralStringResource(R.plurals.n_lines, lines.size, lines.size), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
             Box(
@@ -321,11 +323,9 @@ fun ResultCard(
             }
             content()
             if (onDismiss != null) {
-                TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) { Text("Done") }
+                TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) { Text(stringResource(R.string.done)) }
             }
         }
     }
 }
 
-/** "1 photo" / "3 photos". */
-fun plural(n: Int, one: String, many: String = one + "s") = "$n ${if (n == 1) one else many}"

@@ -39,6 +39,10 @@ android {
     buildFeatures { compose = true }
 
     packaging { resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" } }
+
+    // The language can be switched inside the app, so every install needs
+    // every language (a Play bundle would otherwise ship only the phone's).
+    bundle { language { enableSplit = false } }
 }
 
 // AGP 9 compiles Kotlin itself (no separate kotlin-android plugin).
@@ -46,6 +50,8 @@ kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarg
 
 dependencies {
     implementation(libs.core.ktx)
+    // In-app language (English / 日本語) on every Android version
+    implementation(libs.appcompat)
 
     // Compose
     implementation(platform(libs.compose.bom))

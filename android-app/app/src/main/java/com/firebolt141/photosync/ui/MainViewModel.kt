@@ -1,5 +1,7 @@
 package com.firebolt141.ubertrag.ui
 
+import com.firebolt141.ubertrag.util.loc
+import com.firebolt141.ubertrag.R
 import android.Manifest
 import android.app.Application
 import android.content.Intent
@@ -32,7 +34,7 @@ enum class MediaAccess { FULL, PARTIAL, NONE }
 /** State of the Rename Drive Folders screen. */
 data class RenameUi(
     val running: Boolean = false,
-    val status: String = "",
+    val status: UiText = UiText.None,
     val preview: RenameResult? = null,   // result of "Check" (nothing changed yet)
     val result: RenameResult? = null,    // result of the real run
 )
@@ -47,18 +49,17 @@ data class UiState(
     val driveLabel: String      = "",
     val driveConnected: Boolean = false,
     val scanning: Boolean       = false,
-    val scanMessage: String     = "",
+    val scanMessage: UiText     = UiText.None,
     val fromDateMs: Long        = 0L,
     val toDateMs: Long          = 0L,
     val copyProgress: CopyProgress? = null,
     val lastSummary: CopySummary? = null,
     val mediaAccess: MediaAccess = MediaAccess.FULL,
     val rename: RenameUi        = RenameUi(),
-    val message: String         = "",
+    val message: UiText         = UiText.None,
 ) {
     // Kept for older callers
     val renaming: Boolean get() = rename.running
-    val renameStatus: String get() = rename.status
 }
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -66,10 +67,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val repo      = SyncRepository(app)
     private val prefs     = Prefs(app)
-    private val _scan     = MutableStateFlow(false to "")
+    private val _scan     = MutableStateFlow<Pair<Boolean, UiText>>(false to UiText.None)
     private val _renameUi = MutableStateFlow(RenameUi())
     private val _access   = MutableStateFlow(checkAccess())
-    private val _message  = MutableStateFlow("")
+    private val _message  = MutableStateFlow<UiText>(UiText.None)
 
     private val _dateRange = combine(prefs.fromDateMs, prefs.toDateMs) { f, t -> f to t }
 
@@ -149,11 +150,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun onDriveSelected(uri: Uri) {
         viewModelScope.launch {
             if (!StorageHelper.takePersistablePermission(getApplication(), uri)) {
-                say("Android didn't allow keeping access to that folder. Pick the drive itself (or a folder on it) again.")
+                say(UiText.Res(R.string.msg_keep_access_denied))
                 return@launch
             }
             prefs.saveDriveUri(uri.toString())
-            say("")
+            say(UiText.None)
         }
     }
 
@@ -167,23 +168,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (_scan.value.first) return
         refreshAccess()
         if (_access.value == MediaAccess.NONE) {
-            _scan.value = false to "Allow access to photos and videos first."
+            _scan.value = false to UiText.Res(R.string.scan_allow_first)
             return
         }
         viewModelScope.launch {
-            _scan.value = true to "Looking through your photos and videos…"
+            _scan.value = true to UiText.Res(R.string.scan_looking)
             val msg = try {
                 val n = repo.scanMedia()
-                when (n) {
-                    0 -> "No new photos or videos since the last scan."
-                    1 -> "Found 1 new photo or video."
-                    else -> "Found $n new photos and videos."
-                }
+                if (n == 0) UiText.Res(R.string.scan_none_new) else UiText.Plural(R.plurals.scan_found_new, n, n)
             } catch (e: SecurityException) {
                 refreshAccess()
-                "Allow access to photos and videos first."
+                UiText.Res(R.string.scan_allow_first)
             } catch (e: Exception) {
-                "Scan failed: ${e.message}"
+                UiText.Res(R.string.scan_failed, e.message ?: e.javaClass.simpleName)
             }
             _scan.value = false to msg
         }
@@ -200,7 +197,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         try {
             getApplication<Application>().startForegroundService(intent)
         } catch (e: Exception) {
-            say("Couldn't start copying: ${e.message}")
+            say(UiText.Res(R.string.copy_couldnt_start, e.message ?: e.javaClass.simpleName))
         }
     }
 
@@ -227,13 +224,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun requeueAll() {
         viewModelScope.launch {
             repo.requeueAll()
-            say("Everything is queued again. Files already on the drive will be skipped.")
+            say(UiText.Res(R.string.requeued_all))
         }
     }
 
-    fun dismissMessage() = say("")
+    fun dismissMessage() = say(UiText.None)
 
-    private fun say(msg: String) { _message.value = msg }
+    private fun say(msg: UiText) { _message.value = msg }
 
     // ── rename legacy folders ────────────────────────────────────────────
 
@@ -241,26 +238,27 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun renameOldFolders(dryRun: Boolean = false) {
         if (_renameUi.value.running) return
         viewModelScope.launch {
-            _renameUi.value = _renameUi.value.copy(running = true, status = "Starting…", result = null,
+            _renameUi.value = _renameUi.value.copy(running = true, status = UiText.Res(R.string.starting), result = null,
                 preview = if (dryRun) null else _renameUi.value.preview)
-            if (!dryRun) KeepAlive.begin(getApplication(), "Renaming folders")
+            if (!dryRun) KeepAlive.begin(getApplication(), getApplication<Application>().loc().getString(R.string.ka_renaming))
             val r = try {
                 repo.renameLegacyFolders(dryRun) { path ->
-                    _renameUi.value = _renameUi.value.copy(status = path)
+                    _renameUi.value = _renameUi.value.copy(status = UiText.Raw(path))
                     if (!dryRun) KeepAlive.update(getApplication(), path, 0, 0)
                 }
             } catch (e: Exception) {
-                RenameResult(errors = 1, problems = listOf(e.message ?: "Rename failed"))
+                RenameResult(errors = 1, problems = listOf(e.message ?: getApplication<Application>().loc().getString(R.string.rename_failed)))
             } finally {
                 if (!dryRun) KeepAlive.end()
             }
             val status = when {
-                r == null -> "The drive isn't connected."
-                dryRun && r.changes.isEmpty() -> "Everything already uses the current names — nothing to do."
-                dryRun -> "${r.changes.size} folder${if (r.changes.size == 1) "" else "s"} to update."
-                r.renamed + r.merged == 0 && r.errors == 0 -> "Nothing to rename."
-                r.errors == 0 -> "Done — ${r.renamed} renamed" + if (r.merged > 0) ", ${r.merged} merged" else ""
-                else -> "Done — ${r.renamed} renamed, ${r.merged} merged, ${r.errors} problem${if (r.errors == 1) "" else "s"}"
+                r == null -> UiText.Res(R.string.drive_not_connected_short)
+                dryRun && r.changes.isEmpty() -> UiText.Res(R.string.rename_nothing_dry)
+                dryRun -> UiText.Plural(R.plurals.rename_to_update, r.changes.size, r.changes.size)
+                r.renamed + r.merged == 0 && r.errors == 0 -> UiText.Res(R.string.rename_nothing)
+                r.errors == 0 && r.merged == 0 -> UiText.Res(R.string.rename_done, r.renamed)
+                r.errors == 0 -> UiText.Res(R.string.rename_done_merged, r.renamed, r.merged)
+                else -> UiText.Plural(R.plurals.rename_done_problems, r.errors, r.errors, r.renamed, r.merged)
             }
             _renameUi.value = RenameUi(
                 running = false, status = status,

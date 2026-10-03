@@ -1,5 +1,6 @@
 package com.firebolt141.ubertrag.service
 
+import com.firebolt141.ubertrag.util.loc
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
@@ -63,7 +64,7 @@ class KeepAliveService : Service() {
         fun build(context: Context, text: String, done: Int, total: Int) =
             NotificationCompat.Builder(context, CopyService.CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_notification)
-                .setContentTitle(KeepAlive.title.ifBlank { "Working…" } + if (total > 0) " · $done of $total" else "")
+                .setContentTitle(KeepAlive.title.ifBlank { context.loc().getString(R.string.working) } + if (total > 0) context.loc().getString(R.string.n_progress_of, done, total) else "")
                 .setContentText(text)
                 .setContentIntent(CopyService.openAppIntent(context))
                 .apply { if (total > 0) setProgress(total, done, false) else setProgress(0, 0, true) }
@@ -82,7 +83,7 @@ class KeepAliveService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val n = build(this, "Keep the drive connected until this finishes", 0, 0)
+        val n = build(this, loc().getString(R.string.ka_keep_connected), 0, 0)
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 startForeground(NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)

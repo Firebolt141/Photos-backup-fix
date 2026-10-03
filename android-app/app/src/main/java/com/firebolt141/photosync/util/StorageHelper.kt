@@ -1,6 +1,7 @@
 package com.firebolt141.ubertrag.util
 
 import android.content.Context
+import com.firebolt141.ubertrag.R
 import android.content.Intent
 import android.net.Uri
 import androidx.core.net.toUri
@@ -43,15 +44,16 @@ object StorageHelper {
         }
     }
 
-    /** "Photos" for content://…/tree/primary:Backups/Photos; "" if unknown. */
-    fun folderLabel(uriString: String?): String {
+    /** "Photos" for content://…/tree/primary:Backups/Photos; "" if unknown. Pass [context] for translated labels. */
+    fun folderLabel(uriString: String?, context: Context? = null): String {
         if (uriString.isNullOrBlank()) return ""
+        val res = context?.loc()
         return try {
             val seg = uriString.toUri().lastPathSegment ?: return ""
             val afterColon = seg.substringAfterLast(':')
             when {
-                afterColon.isBlank() && seg.startsWith("primary") -> "Internal storage"
-                afterColon.isBlank() -> "Drive (top level)"
+                afterColon.isBlank() && seg.startsWith("primary") -> res?.getString(R.string.internal_storage) ?: "Internal storage"
+                afterColon.isBlank() -> res?.getString(R.string.drive_top_level) ?: "Drive (top level)"
                 else -> afterColon.substringAfterLast('/')
             }
         } catch (_: Exception) { "" }
@@ -79,7 +81,7 @@ object StorageHelper {
         onProgress: (String) -> Unit,
     ): RenameResult {
         Log.d(TAG, "renameLegacyFolders root=${root.name} dryRun=$dryRun")
-        val acc = Acc()
+        val acc = Acc(context.loc())
         val rootYear = PhotoLogic.parseYearFolder(root.name ?: "")
         val years = if (rootYear != null) listOf(root) else
             list(root, acc).filter { it.isDirectory && PhotoLogic.parseYearFolder(it.name ?: "") != null }
@@ -100,8 +102,7 @@ object StorageHelper {
                     val newName = PhotoLogic.legacyDayRename(month, dName) ?: continue
                     onProgress("$yearName/$wantMonth/$newName")
                     val target = byName[newName.lowercase()]?.takeIf { it.uri != dayDir.uri }
-                    acc.changes += "$yearName/$mName/$dName → $yearName/$wantMonth/$newName" +
-                        if (target != null) " (merge)" else ""
+                    acc.changes += acc.merge("$yearName/$mName/$dName → $yearName/$wantMonth/$newName", target != null)
                     if (dryRun) continue
                     if (target != null) {
                         mergeInto(context, dayDir, monthDir, target, acc)
@@ -109,7 +110,7 @@ object StorageHelper {
                         acc.renamed++
                         byName[newName.lowercase()] = dayDir
                     } else {
-                        acc.fail("Could not rename $yearName/$mName/$dName")
+                        acc.fail(acc.res.getString(R.string.ren_could_not_rename, "$yearName/$mName/$dName"))
                     }
                 }
 
@@ -119,11 +120,11 @@ object StorageHelper {
                 val existing = list(yearDir, acc).firstOrNull {
                     it.isDirectory && it.uri != monthDir.uri && (it.name ?: "").equals(wantMonth, ignoreCase = true)
                 }
-                acc.changes += "$yearName/$mName → $yearName/$wantMonth" + if (existing != null) " (merge)" else ""
+                acc.changes += acc.merge("$yearName/$mName → $yearName/$wantMonth", existing != null)
                 if (dryRun) continue
                 if (existing != null) mergeInto(context, monthDir, yearDir, existing, acc)
                 else if (renameDir(monthDir, wantMonth)) acc.renamed++
-                else acc.fail("Could not rename $yearName/$mName")
+                else acc.fail(acc.res.getString(R.string.ren_could_not_rename, "$yearName/$mName"))
             }
         }
         val r = RenameResult(acc.renamed, acc.merged, acc.moved, acc.identical, acc.errors, acc.changes, acc.problems)
@@ -131,7 +132,8 @@ object StorageHelper {
         return r
     }
 
-    private class Acc {
+    private class Acc(val res: Context) {
+        fun merge(line: String, merging: Boolean) = if (merging) res.getString(R.string.ren_merge_suffix, line) else line
         var renamed = 0; var merged = 0; var moved = 0; var identical = 0; var errors = 0
         val changes = mutableListOf<String>()
         val problems = mutableListOf<String>()
@@ -141,7 +143,7 @@ object StorageHelper {
     private fun list(dir: DocumentFile, acc: Acc): List<DocumentFile> = try {
         dir.listFiles().toList()
     } catch (e: Exception) {
-        acc.fail("Could not open ${dir.name}: ${e.message}")
+        acc.fail(acc.res.getString(R.string.ren_could_not_open, dir.name ?: "?", e.message ?: ""))
         emptyList()
     }
 
@@ -171,7 +173,7 @@ object StorageHelper {
             if (child.isDirectory) {
                 if (clash != null && clash.isDirectory) mergeInto(context, child, src, clash, acc)
                 else if (clash == null && moveDoc(context, child, src, dest)) { acc.moved++ ; destChildren[n.lowercase()] = child }
-                else acc.fail("Could not move folder ${src.name}/$n")
+                else acc.fail(acc.res.getString(R.string.ren_could_not_move_folder, "${src.name}/$n"))
                 continue
             }
             if (clash != null && sameContent(context, child, clash)) {
@@ -186,7 +188,7 @@ object StorageHelper {
             // Name taken by a different file (or the provider can't move): copy under a free name, then delete.
             val free = PhotoLogic.uniqueName(n) { destChildren.containsKey(it.lowercase()) }
             val copy = try { dest.createFile("application/octet-stream", free) } catch (_: Exception) { null }
-            if (copy == null) { acc.fail("Could not move ${src.name}/$n"); continue }
+            if (copy == null) { acc.fail(acc.res.getString(R.string.ren_could_not_move, "${src.name}/$n")); continue }
             val ok = try {
                 val written = context.contentResolver.openInputStream(child.uri)?.use { inp ->
                     context.contentResolver.openOutputStream(copy.uri, "w")?.use { out -> inp.copyTo(out) }
@@ -199,7 +201,7 @@ object StorageHelper {
                 acc.moved++
             } else {
                 try { copy.delete() } catch (_: Exception) { }
-                acc.fail("Could not move ${src.name}/$n")
+                acc.fail(acc.res.getString(R.string.ren_could_not_move, "${src.name}/$n"))
             }
         }
         val leftover = try { src.listFiles().size } catch (_: Exception) { -1 }
@@ -209,7 +211,7 @@ object StorageHelper {
         } else if (leftover > 0) {
             // Identical duplicates stay behind; say so instead of silently keeping the old folder.
             acc.merged++
-            if (acc.problems.size < 50) acc.problems += "${srcParent.name}/${src.name} kept $leftover file(s) that already exist in ${dest.name}"
+            if (acc.problems.size < 50) acc.problems += acc.res.getString(R.string.ren_kept_existing, "${srcParent.name}/${src.name}", leftover, dest.name ?: "")
         }
     }
 

@@ -1,0 +1,354 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generated from the Übertrag string table; edit both languages together. -->
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="PluralsCandidate,TypographyDashes">
+    <string name="drawer_tagline">写真のバックアップと修復</string>
+    <string name="nav_start">はじめに</string>
+    <string name="nav_section_phone">このスマホ</string>
+    <string name="nav_home">スマホをバックアップ</string>
+    <string name="nav_queue">バックアップ一覧</string>
+    <string name="nav_section_folder">写真フォルダ</string>
+    <string name="nav_takeout">Google Takeout を取り込む</string>
+    <string name="nav_organize">フォルダを日付で整理</string>
+    <string name="nav_section_drive">バックアップドライブ</string>
+    <string name="nav_fix">ドライブの日付を修復</string>
+    <string name="nav_rename">フォルダ名を更新</string>
+    <string name="nav_section_language">言語</string>
+    <string name="lang_system">スマホの設定</string>
+    <string name="menu">メニュー</string>
+    <string name="select_folder">フォルダを選ぶ</string>
+    <string name="change_folder">フォルダを変更</string>
+    <string name="backup_drive">バックアップドライブ</string>
+    <string name="drive_connected">接続済み・準備完了</string>
+    <string name="drive_not_connected">未接続 — ドライブをつなぐ（または選び直す）</string>
+    <string name="drive_none_pick">まだドライブが選ばれていません。USB ドライブか SD カードをつないでから「ドライブを選ぶ」をタップし、いちばん上のフォルダを選んでください。</string>
+    <string name="drive_none_elsewhere">まだドライブが選ばれていません。「スマホをバックアップ」画面で選んでください。</string>
+    <string name="select_drive">ドライブを選ぶ</string>
+    <string name="change_drive">ドライブを変更</string>
+    <string name="forget">登録を解除</string>
+    <string name="stopping_after_file">このファイルが終わったら停止します…</string>
+    <string name="stop">停止</string>
+    <string name="keeps_going">アプリを閉じても処理は続きます。終わるまでドライブはつないだままにしてください。</string>
+    <string name="working">処理中…</string>
+    <string name="log">ログ</string>
+    <string name="done">完了</string>
+    <string name="start_question">何をしますか？</string>
+    <string name="start_intro">お手持ちの写真に合うものを選んでください。どのツールもファイルを削除せずにコピー・修正し、すべてのファイルが「年 / 月 / 日」・no-date/・error/ のいずれかのフォルダに入ります。</string>
+    <string name="start_section_phone">このスマホの写真</string>
+    <string name="start_backup_title">このスマホをドライブにバックアップ</string>
+    <string name="start_backup_body">ギャラリーの写真を日付順に整理して USB ドライブや SD カードにコピーします。何度実行しても、コピーされるのは新しい写真だけです。</string>
+    <string name="start_section_folder">写真フォルダ</string>
+    <string name="start_takeout_title">Google Takeout のデータがある</string>
+    <string name="start_takeout_body">.json ファイルの入った展開済みの Takeout フォルダ。本当の日付・場所・説明を復元し、すべてを日付順に整理します。</string>
+    <string name="start_organize_title">バラバラのフォルダを日付で整理</string>
+    <string name="start_organize_body">あちこちのフォルダやサブフォルダにある何年分もの写真（古いスマホ、WhatsApp、カメラから取り込んだ写真など）。「年 / 月 / 日」にコピーします。</string>
+    <string name="start_section_drive">バックアップドライブ</string>
+    <string name="start_fix_title">写真の日付が正しくない</string>
+    <string name="start_fix_body">ドライブ上の日付のない写真に、入っている「年 / 月 / 日」フォルダの日付を書き込みます。</string>
+    <string name="start_rename_title">古いフォルダ名を更新</string>
+    <string name="start_rename_body">以前のバージョンの 2024 / 01 / 15 形式のフォルダを 2024 / January / January_15 に変えます。</string>
+    <string name="home_title">スマホをバックアップ</string>
+    <string name="home_subtitle">写真と動画を USB ドライブや SD カードにコピー</string>
+    <string name="queue">一覧</string>
+    <string name="step_choose_drive">バックアップ先のドライブを選ぶ</string>
+    <string name="step_find_photos">バックアップする写真を探す</string>
+    <string name="scan_explain">ギャラリーを調べて、新しいものを一覧に追加します。コピー済みのものは記録されています。</string>
+    <string name="scanning">調べています…</string>
+    <string name="scan_phone">スマホを調べる</string>
+    <string name="stat_to_copy">コピー待ち</string>
+    <string name="stat_copied">コピー済み</string>
+    <string name="stat_already_there">すでにあり</string>
+    <string name="see_the_list" formatted="true">一覧を見る（%1$d）</string>
+    <string name="step_copy">ドライブにコピー</string>
+    <string name="copy_explain">ファイルは「年 / 月 / 日」のフォルダ（例：2024 / March / March_15）に入ります。スマホからは何も削除しません。ドライブにすでにあるファイルは飛ばします。</string>
+    <string name="range_beginning">最初</string>
+    <string name="range_today">今日</string>
+    <string name="range_only" formatted="true">%1$s 〜 %2$s のみ</string>
+    <string name="range_all">すべての日付</string>
+    <string name="clear">クリア</string>
+    <string name="change">変更</string>
+    <string name="limit_dates">期間を指定</string>
+    <string name="stop_copying">コピーを停止</string>
+    <string name="copy">コピー</string>
+    <string name="hint_choose_drive_first">先にドライブを選んでください（手順 1）。</string>
+    <string name="hint_connect_drive">コピーするにはドライブをつないでください。</string>
+    <string name="hint_scan_first">先にスマホを調べてください（手順 2）。</string>
+    <string name="hint_all_backed_up">一覧のものはすべてバックアップ済みです。</string>
+    <string name="copying_to_drive">ドライブにコピーしています…</string>
+    <string name="speed_mbps" formatted="true">%1$s MB/秒</string>
+    <string name="cancel">キャンセル</string>
+    <string name="ok">OK</string>
+    <string name="perm_partial_title">一部の写真だけが共有されています</string>
+    <string name="perm_title">写真へのアクセスを許可してください</string>
+    <string name="perm_partial_body">選んだ写真だけを共有する設定になっているため、バックアップできるのはその写真だけです。すべてをバックアップするには、すべての写真と動画へのアクセスを許可してください。</string>
+    <string name="perm_body">コピーするために、Übertrag が写真と動画を読み取る必要があります。選んだドライブ以外には何も送られません。</string>
+    <string name="allow">許可</string>
+    <string name="open_settings">設定を開く</string>
+    <string name="sum_couldnt_start">開始できませんでした</string>
+    <string name="sum_stopped" formatted="true">停止 — %1$s</string>
+    <string name="sum_nothing">コピーするものはありません</string>
+    <string name="sum_problems">完了（問題あり）</string>
+    <string name="sum_complete">バックアップ完了</string>
+    <string name="row_copied">コピー済み</string>
+    <string name="row_no_date">日付なし（no-date/ に保存）</string>
+    <string name="row_on_drive">ドライブにすでにあり</string>
+    <string name="row_gone">スマホから削除済み</string>
+    <string name="row_failed">失敗</string>
+    <string name="mb_written" formatted="true">%1$s MB を書き込み</string>
+    <string name="copy_continue_hint">ここまでにコピーしたものは無事です。もう一度「コピー」をタップすると続きから再開します。</string>
+    <string name="see_failed">失敗したファイルを見る</string>
+    <string name="msg_keep_access_denied">Android がそのフォルダへのアクセスを保持できませんでした。ドライブ自体（またはその中のフォルダ）をもう一度選んでください。</string>
+    <string name="scan_allow_first">先に写真と動画へのアクセスを許可してください。</string>
+    <string name="scan_looking">写真と動画を調べています…</string>
+    <string name="scan_none_new">前回から新しい写真や動画はありません。</string>
+    <string name="scan_failed" formatted="true">調べられませんでした：%1$s</string>
+    <string name="copy_couldnt_start" formatted="true">コピーを開始できませんでした：%1$s</string>
+    <string name="requeued_all">すべてをもう一度コピー待ちにしました。ドライブにすでにあるファイルは飛ばします。</string>
+    <string name="starting">開始しています…</string>
+    <string name="ka_renaming">フォルダ名を変更中</string>
+    <string name="rename_failed">名前を変更できませんでした</string>
+    <string name="drive_not_connected_short">ドライブがつながっていません。</string>
+    <string name="rename_nothing_dry">すべて現在の名前になっています。することはありません。</string>
+    <string name="rename_nothing">名前を変えるものはありません。</string>
+    <string name="rename_done" formatted="true">完了 — 名前を変更 %1$d</string>
+    <string name="rename_done_merged" formatted="true">完了 — 名前を変更 %1$d、統合 %2$d</string>
+    <string name="rename_title">フォルダ名を更新</string>
+    <string name="rename_subtitle">古い 01 / 15 形式 → January / January_15</string>
+    <string name="rename_info">以前のバージョンでは 2024 / 01 / 15 や 2024 / March / March 7 のようなフォルダを作っていました。これを現在の名前（2024 / January / January_15、March_07）に変えて、すべて同じ順に並ぶようにします。同じ日の古いフォルダと新しいフォルダが両方ある場合は写真を統合し、同じ内容のファイルが重複することはありません。何も削除しません。</string>
+    <string name="rename_step_check">何が変わるかを確認</string>
+    <string name="rename_check_drive">ドライブを確認</string>
+    <string name="rename_step_rename">名前を変更</string>
+    <string name="rename_folders">フォルダ名を変更</string>
+    <string name="rename_folders_renamed">名前を変えたフォルダ</string>
+    <string name="rename_folders_merged">統合したフォルダ</string>
+    <string name="rename_files_moved">統合で移動したファイル</string>
+    <string name="rename_identical_left">古いフォルダに残した同じ内容のファイル</string>
+    <string name="problems">問題</string>
+    <string name="and_n_more" formatted="true">… ほか %1$d 件</string>
+    <string name="filter_all">すべて</string>
+    <string name="filter_waiting">待機中</string>
+    <string name="filter_copied">コピー済み</string>
+    <string name="filter_skipped">スキップ</string>
+    <string name="filter_failed">失敗</string>
+    <string name="queue_title">一覧</string>
+    <string name="back">戻る</string>
+    <string name="more">その他</string>
+    <string name="queue_remove_copied">コピー済みを一覧から外す</string>
+    <string name="queue_copy_all_again">すべてをもう一度コピー（新しいドライブ用）</string>
+    <string name="queue_empty_scan">まだ何もありません — 先に「スマホを調べる」をタップしてください</string>
+    <string name="queue_empty_group">このグループには何もありません</string>
+    <string name="queue_copy_all_q">すべてをもう一度コピーしますか？</string>
+    <string name="queue_all">すべてコピー待ちにする</string>
+    <string name="queue_clear_q">コピー済みのファイルを外しますか？</string>
+    <string name="queue_no_date">日付なし — no-date/ に入ります</string>
+    <string name="queue_already_skipped">ドライブにすでにあり — スキップ</string>
+    <string name="organize_title">フォルダを日付で整理</string>
+    <string name="fix_title">ドライブの日付を修復</string>
+    <string name="organize_subtitle">どんなフォルダも → 年 / 月 / 日</string>
+    <string name="fix_subtitle">日付のない写真にフォルダの日付を付ける</string>
+    <string name="organize_info">バラバラのフォルダ向けです（カメラから取り込んだ写真、WhatsApp、スクリーンショット、古いスマホのバックアップなど、サブフォルダも含めて）。写真と動画を、ファイルの中の日付またはファイル名の日付（IMG_20240315… など）を使って「出力先 / 年 / 月 / 日」にコピーします。日付のないファイルは no-date/ に（サブフォルダの構成のまま）、読めないファイルは error/ に入ります。元のファイルは変更しません。</string>
+    <string name="organize_step_source">整理するフォルダ</string>
+    <string name="source_folder">元のフォルダ</string>
+    <string name="subfolders_included">サブフォルダも含みます</string>
+    <string name="organize_step_output">整理したコピーの保存先</string>
+    <string name="output_folder">出力先フォルダ</string>
+    <string name="output_folder_sub">例：バックアップドライブや新しい空のフォルダ</string>
+    <string name="source_output_differ">元のフォルダと出力先は別のフォルダにしてください。</string>
+    <string name="step_options">オプション</string>
+    <string name="opt_trust_dates">写真にある日付を使う</string>
+    <string name="opt_trust_dates_sub">おすすめ。オフにすると、ファイル名に日付があれば常にそちらを使います。</string>
+    <string name="opt_rename">コピーのファイル名を日付にする</string>
+    <string name="opt_rename_sub">元の名前の代わりに 2024-03-15_14-30-22.jpg のような名前にします</string>
+    <string name="fix_info">すでに「年 / 月 / 日」のフォルダに整理されたドライブ向けです。中に日付のない写真に、入っているフォルダの日付を付けるので、Google フォトやギャラリーで正しい日に表示されます。JPEG・PNG・WebP は更新できますが、HEIC・RAW・動画はこの方法では日付を保存できないため、そのままにします。</string>
+    <string name="opt_fix_wrong">間違った日付も直す</string>
+    <string name="opt_fix_wrong_sub">フォルダの日付と1日以上ずれている写真を、フォルダの日に直します（時刻はそのまま）</string>
+    <string name="sorting">整理しています…</string>
+    <string name="checking_dates">日付を確認しています…</string>
+    <string name="start_sorting">整理を開始</string>
+    <string name="fix_dates">日付を修復</string>
+    <string name="couldnt_run">実行できませんでした</string>
+    <string name="drive_not_connected_title">ドライブがつながっていません</string>
+    <string name="done_with_problems">完了（問題あり）</string>
+    <string name="res_dates_written">日付を書き込み</string>
+    <string name="res_wrong_corrected">間違った日付を修正</string>
+    <string name="res_already_dated">すでに日付あり</string>
+    <string name="res_mismatch_unchanged">フォルダと日付が違う（変更せず）</string>
+    <string name="res_cant_store">日付を保存できない（HEIC・RAW・動画）</string>
+    <string name="errors">エラー</string>
+    <string name="and_n_more_log" formatted="true">… ほか %1$d 件（ログを参照）</string>
+    <string name="no_media_found">写真や動画が見つかりませんでした</string>
+    <string name="res_sorted">日付フォルダに整理</string>
+    <string name="res_date_written_copy">コピーに日付を書き込み</string>
+    <string name="res_kept_own">写真の元の日付のまま</string>
+    <string name="res_sorted_no_write">整理済み・日付は未書き込み（HEIC・動画）</string>
+    <string name="res_no_date">日付なし（no-date/ に保存）</string>
+    <string name="res_already_output">出力先にすでにあり</string>
+    <string name="res_errors_error_dir">エラー（error/ にコピー）</string>
+    <string name="res_other_left">その他のファイル（写真・動画以外）はそのまま</string>
+    <string name="run_again_continue">ここまでの処理は無事です。もう一度実行すると続きから再開します（済んだファイルは飛ばします）。</string>
+    <string name="takeout_title">Google Takeout を取り込む</string>
+    <string name="takeout_subtitle">日付・場所・説明を復元</string>
+    <string name="takeout_info">Google Takeout では写真から日付と場所が取り除かれ、隣の .json ファイルに入っています。そのファイルを読み取り、写真と動画をすべて正しい日付で「出力先 / 年 / 月 / 日」にコピーします（JPEG・PNG・WebP には位置情報と説明も）。Takeout フォルダは変更しません。</string>
+    <string name="takeout_step_unzip">Takeout のダウンロードを展開</string>
+    <string name="takeout_unzip_how">Takeout は .zip ファイルで届きます。ファイルアプリで各 zip をタップ → 展開してください。分割されたものはすべて同じフォルダに展開します。</string>
+    <string name="takeout_folder">Takeout フォルダ</string>
+    <string name="takeout_folder_sub">展開した「Takeout」フォルダ（またはその中の「Google Photos」）</string>
+    <string name="takeout_step_output">写真の保存先</string>
+    <string name="takeout_output_sub">バックアップドライブや新しい空のフォルダ</string>
+    <string name="opt_keep_dates">写真にある日付をそのまま使う</string>
+    <string name="opt_keep_dates_sub">おすすめ。カメラの日付はたいてい Google の日付より正確です</string>
+    <string name="importing">取り込んでいます…</string>
+    <string name="start_import">取り込みを開始</string>
+    <string name="could_not_start">開始できませんでした</string>
+    <string name="res_date_json">Google の .json の日付</string>
+    <string name="res_date_name">ファイル名の日付</string>
+    <string name="res_already_output_dup">出力先にすでにあり（重複・以前の実行）</string>
+    <string name="res_other_left_short">その他のファイルはそのまま</string>
+    <string name="takeout_pick_extracted">Takeout の zip を展開したフォルダを選んでください。</string>
+    <string name="ka_fixing">ドライブの日付を修復中</string>
+    <string name="ka_sorting">写真を日付で整理中</string>
+    <string name="ka_importing">Google Takeout を取り込み中</string>
+    <string name="log_checking_drive" formatted="true">ドライブを確認しています：%1$s</string>
+    <string name="log_drive_not_connected">✗ ドライブがつながっていません。</string>
+    <string name="log_no_dated_photos">⚠ 「年 / 月 / 日」のフォルダに写真が見つかりませんでした。</string>
+    <string name="log_expected_layout">  想定している形式：ドライブ / 2024 / January / January_07 / photo.jpg</string>
+    <string name="log_year_folder_ok">  （1つの年のフォルダをドライブとして選んでもかまいません。）</string>
+    <string name="log_dates_written" formatted="true">日付を書き込み：%1$d</string>
+    <string name="log_corrected" formatted="true">修正：%1$d</string>
+    <string name="log_already_dated" formatted="true">日付あり：%1$d</string>
+    <string name="log_mismatch" formatted="true">日付 ≠ フォルダ：%1$d（変更せず）</string>
+    <string name="log_cant_store" formatted="true">日付を保存できない（HEIC・RAW・動画）：%1$d</string>
+    <string name="log_errors" formatted="true">✗ エラー：%1$d</string>
+    <string name="log_stopped_by_you">停止しました。</string>
+    <string name="something_wrong">問題が発生しました</string>
+    <string name="log_sorted" formatted="true">日付フォルダに整理：%1$d</string>
+    <string name="log_dates_written2" formatted="true">日付を書き込み：%1$d</string>
+    <string name="log_no_date" formatted="true">日付なし（→ no-date/）：%1$d</string>
+    <string name="log_already_there" formatted="true">すでにあり：%1$d</string>
+    <string name="log_errors_dir" formatted="true">✗ エラー（→ error/）：%1$d</string>
+    <string name="ch_copy_progress">コピーの進行状況</string>
+    <string name="n_copying">コピー中…</string>
+    <string name="n_starting_copy">コピーを開始しています…</string>
+    <string name="n_copying_name" formatted="true">%1$s をコピー中</string>
+    <string name="n_finishing">仕上げています…</string>
+    <string name="copy_failed">コピーに失敗しました</string>
+    <string name="stopped">停止しました</string>
+    <string name="time_limit_reached">Android のバックグラウンド実行時間の上限に達しました — 「コピー」をタップすると続きから再開します</string>
+    <string name="n_copying_to_drive_progress" formatted="true">ドライブにコピー中 · %1$d / %2$d</string>
+    <string name="n_copying_to_drive">ドライブにコピー中</string>
+    <string name="n_part_copied" formatted="true">%1$d 件コピー</string>
+    <string name="n_part_on_drive" formatted="true">%1$d 件はドライブにすでにあり</string>
+    <string name="n_part_gone" formatted="true">%1$d 件はスマホから削除済み</string>
+    <string name="n_part_failed" formatted="true">%1$d 件失敗</string>
+    <string name="n_part_stopped" formatted="true">停止：%1$s</string>
+    <string name="n_sum_couldnt_start">コピーを開始できませんでした</string>
+    <string name="n_sum_stopped">コピーを停止しました</string>
+    <string name="n_sum_problems">コピー完了（問題あり）</string>
+    <string name="n_sum_complete">コピー完了</string>
+    <string name="n_progress_of" formatted="true"> · %1$d / %2$d</string>
+    <string name="ka_keep_connected">終わるまでドライブをつないだままにしてください</string>
+    <string name="no_drive_selected">ドライブが選ばれていません</string>
+    <string name="drive_not_writable">ドライブがつながっていない（または書き込めない）状態です</string>
+    <string name="cannot_open_drive">ドライブのフォルダを開けません — もう一度選んでください</string>
+    <string name="stopped_by_you">停止しました</string>
+    <string name="no_longer_on_phone">スマホから削除済み</string>
+    <string name="cannot_create_folder" formatted="true">フォルダ %1$s を作成できません</string>
+    <string name="cannot_open_source">元のフォルダを開けません。もう一度選んでください。</string>
+    <string name="cannot_open_output">出力先フォルダを開けません。もう一度選んでください。</string>
+    <string name="cannot_open_takeout_src">選んだ元のフォルダを開けません。もう一度選んでみてください。</string>
+    <string name="cannot_open_takeout_out">選んだ出力先フォルダを開けません。もう一度選んでみてください。</string>
+    <string name="err_drive_full">ドライブがいっぱいです</string>
+    <string name="err_too_large">4 GB を超えるファイルは、このドライブ（FAT32）に保存できません</string>
+    <string name="err_permission">アクセスが拒否されました</string>
+    <string name="err_not_found">ファイルまたはフォルダが見つかりません（ドライブが取り外されましたか？）</string>
+    <string name="err_io">読み書きエラー（ドライブが取り外された可能性があります）</string>
+    <string name="err_no_free_name" formatted="true">%1$s に使える空きファイル名がありません</string>
+    <string name="err_incomplete" formatted="true">コピーが不完全です（%2$d バイト中 %1$d バイト）</string>
+    <string name="err_cannot_create" formatted="true">%2$s に %1$s を作成できません</string>
+    <string name="err_the_folder">フォルダ</string>
+    <string name="err_cannot_read_source">元のファイルを読み込めません</string>
+    <string name="err_cannot_write_drive">ドライブに書き込めません</string>
+    <string name="drive_top_level">ドライブ（最上位）</string>
+    <string name="ren_merge_suffix" formatted="true">%1$s（統合）</string>
+    <string name="ren_could_not_rename" formatted="true">%1$s の名前を変更できませんでした</string>
+    <string name="ren_could_not_open" formatted="true">%1$s を開けませんでした：%2$s</string>
+    <string name="ren_could_not_move_folder" formatted="true">フォルダ %1$s を移動できませんでした</string>
+    <string name="ren_could_not_move" formatted="true">%1$s を移動できませんでした</string>
+    <string name="ren_kept_existing" formatted="true">%1$s には、%3$s にすでにあるファイルが %2$d 件残っています</string>
+    <string name="tk_same_folders">元のフォルダと出力先は別のフォルダにしてください。</string>
+    <string name="tk_looking" formatted="true">%1$s を調べています…</string>
+    <string name="tk_zips_found" formatted="true">⚠ zip などのアーカイブが %1$d 個あります。先に展開してから（ファイルアプリ → zip をタップ → 展開）、もう一度実行してください。</string>
+    <string name="tk_others_left" formatted="true">写真・動画ではないファイル %1$d 件はそのままにします。</string>
+    <string name="tk_found" formatted="true">写真・動画が %1$d 件見つかりました。</string>
+    <string name="tk_stopping" formatted="true">✗ 停止します：%1$s。ここまでのファイルは無事です。もう一度実行すると続きから再開します。</string>
+    <string name="tk_empty_file">ファイルが空です（0 バイト）。コピーに失敗したものと思われます</string>
+    <string name="tk_already_in" formatted="true">=  %1$s は %2$s にすでにあります</string>
+    <string name="tk_no_date" formatted="true">⚠  %1$s：日付なし → %2$s</string>
+    <string name="tk_kept" formatted="true">✓  %1$s → %2$s（元の日付のまま）</string>
+    <string name="tk_cant_store" formatted="true">→  %1$s → %2$s（日付を保存できない形式）</string>
+    <string name="tk_not_written" formatted="true">→  %1$s → %2$s（日付は未書き込み：%3$s）</string>
+    <string name="tk_ok" formatted="true">✓  %1$s → %2$s</string>
+    <string name="tk_from_name" formatted="true">✓  %1$s → %2$s（ファイル名の日付）</string>
+    <string name="tk_failed_copied" formatted="true">✗  %1$s：%2$s（error/ にコピー）</string>
+    <string name="tk_failed" formatted="true">✗  %1$s：%2$s</string>
+    <string name="tk_cannot_read">ファイルを読み込めません</string>
+    <string name="fx_and_more" formatted="true">  … ほか %1$d 件</string>
+    <string name="fx_found" formatted="true">日付フォルダ内に写真・動画が %1$d 件見つかりました。</string>
+    <string name="fx_mismatch" formatted="true">≠  %1$s の日付は %2$s、フォルダは %3$s（変更せず）</string>
+    <string name="fx_corrected" formatted="true">✓  %1$s を %2$s に修正</string>
+    <string name="fx_written" formatted="true">✓  %1$s → %2$s</string>
+    <string name="fx_error" formatted="true">✗  %1$s：%2$s</string>
+    <string name="fx_error_msg" formatted="true">✗ %1$s</string>
+    <string name="fx_stopped" formatted="true">停止：%1$s</string>
+    <string name="fx_not_year" formatted="true">年のフォルダではないので飛ばしました：%1$s</string>
+    <string name="fx_not_month" formatted="true">月のフォルダではないので飛ばしました：%1$s</string>
+    <string name="fx_loose" formatted="true">%2$s の直下にあるファイル %1$d 件は日のフォルダがないので、そのままにしました</string>
+    <string name="fx_not_day" formatted="true">日のフォルダではないので飛ばしました：%1$s</string>
+    <string name="fx_not_real_date" formatted="true">存在しない日付：%1$s</string>
+    <string name="fx_could_not_open" formatted="true">%1$s を開けませんでした：%2$s</string>
+    <string name="fx_no_name">ファイルに名前がありません</string>
+    <string name="fx_cannot_open" formatted="true">%1$s を開けません</string>
+    <string name="fx_cannot_write" formatted="true">%1$s に書き込めません</string>
+    <string name="fx_write_incomplete">書き込みが不完全です — ドライブを確認してください</string>
+    <string name="fx_could_not_restore" formatted="true">%1$s を元に戻せませんでした — データは %2$s にあります</string>
+    <string name="fx_could_not_finish" formatted="true">%1$s の書き込みを完了できませんでした — データは %2$s にあります</string>
+    <string name="internal_storage">内部ストレージ</string>
+    <plurals name="n_waiting">
+        <item quantity="other">%1$d 件が待機中</item>
+    </plurals>
+    <plurals name="n_lines">
+        <item quantity="other">%1$d 行</item>
+    </plurals>
+    <plurals name="copy_n_files">
+        <item quantity="other">%1$d 件をコピー</item>
+    </plurals>
+    <plurals name="retry_n_failed">
+        <item quantity="other">失敗した %1$d 件を再試行</item>
+    </plurals>
+    <plurals name="scan_found_new">
+        <item quantity="other">新しい写真・動画が %1$d 件見つかりました。</item>
+    </plurals>
+    <plurals name="rename_to_update">
+        <item quantity="other">更新するフォルダが %1$d 個あります。</item>
+    </plurals>
+    <plurals name="rename_done_problems">
+        <item quantity="other">完了 — 名前を変更 %2$d、統合 %3$d、問題 %1$d</item>
+    </plurals>
+    <plurals name="n_total">
+        <item quantity="other">全 %1$d 件</item>
+    </plurals>
+    <plurals name="queue_copy_all_body">
+        <item quantity="other">%1$d 件すべてをコピー待ちに戻します。2台目や新しいドライブに便利です。コピー先のドライブにすでにあるファイルは自動で飛ばします。</item>
+    </plurals>
+    <plurals name="queue_clear_body">
+        <item quantity="other">コピー済みの %1$d 件を一覧から外します。スマホやドライブのファイルは削除しません。</item>
+    </plurals>
+    <plurals name="zip_found_unzip">
+        <item quantity="other">zip ファイルが %1$d 個あります。先に展開してから（ファイルアプリ → zip をタップ → 展開）、もう一度実行してください。</item>
+    </plurals>
+    <plurals name="done_n_files">
+        <item quantity="other">完了 — %1$d 件</item>
+    </plurals>
+    <plurals name="zips_still_packed">
+        <item quantity="other">未展開の zip ファイルが %1$d 個あります。展開してから（ファイルアプリ → zip をタップ → 展開）、もう一度実行してください。</item>
+    </plurals>
+</resources>

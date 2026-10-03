@@ -1,5 +1,9 @@
 package com.firebolt141.ubertrag.ui
 
+import androidx.compose.runtime.remember
+import com.firebolt141.ubertrag.util.AppLanguage
+import com.firebolt141.ubertrag.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -20,9 +24,9 @@ fun AppDrawerContent(
     ModalDrawerSheet {
         Column(Modifier.verticalScroll(rememberScrollState())) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 20.dp)) {
-                Text("Übertrag", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
+                Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
                 Text(
-                    "Photo backup & repair",
+                    stringResource(R.string.drawer_tagline),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -30,19 +34,22 @@ fun AppDrawerContent(
             HorizontalDivider()
             Spacer(Modifier.height(8.dp))
 
-            Item(Icons.Default.Explore, "Start here", "start", currentRoute, onNavigate)
+            Item(Icons.Default.Explore, stringResource(R.string.nav_start), "start", currentRoute, onNavigate)
 
-            Section("This phone")
-            Item(Icons.Default.PhoneAndroid, "Back up phone", "home", currentRoute, onNavigate)
-            Item(Icons.AutoMirrored.Filled.List, "Backup list", "queue", currentRoute, onNavigate)
+            Section(stringResource(R.string.nav_section_phone))
+            Item(Icons.Default.PhoneAndroid, stringResource(R.string.nav_home), "home", currentRoute, onNavigate)
+            Item(Icons.AutoMirrored.Filled.List, stringResource(R.string.nav_queue), "queue", currentRoute, onNavigate)
 
-            Section("A folder of photos")
-            Item(Icons.Default.FolderZip, "Import Google Takeout", "takeout", currentRoute, onNavigate)
-            Item(Icons.Default.CalendarMonth, "Sort a folder by date", "organize", currentRoute, onNavigate)
+            Section(stringResource(R.string.nav_section_folder))
+            Item(Icons.Default.FolderZip, stringResource(R.string.nav_takeout), "takeout", currentRoute, onNavigate)
+            Item(Icons.Default.CalendarMonth, stringResource(R.string.nav_organize), "organize", currentRoute, onNavigate)
 
-            Section("Backup drive")
-            Item(Icons.Default.AutoFixHigh, "Fix dates on the drive", "fix-exif", currentRoute, onNavigate)
-            Item(Icons.Default.DriveFileRenameOutline, "Update folder names", "rename-folders", currentRoute, onNavigate)
+            Section(stringResource(R.string.nav_section_drive))
+            Item(Icons.Default.AutoFixHigh, stringResource(R.string.nav_fix), "fix-exif", currentRoute, onNavigate)
+            Item(Icons.Default.DriveFileRenameOutline, stringResource(R.string.nav_rename), "rename-folders", currentRoute, onNavigate)
+
+            Section(stringResource(R.string.nav_section_language))
+            LanguagePicker()
             Spacer(Modifier.height(16.dp))
         }
     }
@@ -70,4 +77,27 @@ private fun Section(text: String) {
         style    = MaterialTheme.typography.labelMedium,
         color    = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+}
+
+/** English / 日本語 / follow the phone. The screen redraws in the new language. */
+@Composable
+private fun LanguagePicker() {
+    val current = remember { AppLanguage.current() }
+    val options = listOf(
+        AppLanguage.SYSTEM to stringResource(R.string.lang_system),
+        AppLanguage.ENGLISH to "English",
+        AppLanguage.JAPANESE to "日本語",
+    )
+    Row(
+        Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        options.forEach { (tag, label) ->
+            FilterChip(
+                selected = current == tag,
+                onClick  = { if (current != tag) AppLanguage.set(tag) },
+                label    = { Text(label) },
+            )
+        }
+    }
 }

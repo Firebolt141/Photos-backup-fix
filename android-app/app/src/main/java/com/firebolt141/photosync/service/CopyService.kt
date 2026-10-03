@@ -1,5 +1,6 @@
 package com.firebolt141.ubertrag.service
 
+import com.firebolt141.ubertrag.util.loc
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -54,7 +55,7 @@ class CopyService : Service() {
 
         fun ensureChannel(context: Context) {
             context.getSystemService(NotificationManager::class.java)!!.createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "Copy progress", NotificationManager.IMPORTANCE_LOW)
+                NotificationChannel(CHANNEL_ID, context.loc().getString(R.string.ch_copy_progress), NotificationManager.IMPORTANCE_LOW)
             )
         }
 
@@ -76,7 +77,7 @@ class CopyService : Service() {
         // Must be in the foreground within a few seconds of startForegroundService(),
         // even when the request turns out to be a duplicate.
         val running = copyJob?.isActive == true
-        if (!goForeground(buildProgressNotif(if (running) "Copying…" else "Starting copy…", 0, 0))) {
+        if (!goForeground(buildProgressNotif(str(if (running) R.string.n_copying else R.string.n_starting_copy), 0, 0))) {
             if (!running) stopSelf()
             return START_NOT_STICKY
         }
@@ -130,7 +131,7 @@ class CopyService : Service() {
                     if (now - lastNotifyMs > 700 || done == total) {
                         lastNotifyMs = now
                         notifManager.notify(NOTIF_ID, buildProgressNotif(
-                            if (name.isNotEmpty()) "Copying $name" else "Finishing…", done, total,
+                            if (name.isNotEmpty()) str(R.string.n_copying_name, name) else str(R.string.n_finishing), done, total,
                         ))
                     }
                 }
@@ -139,10 +140,10 @@ class CopyService : Service() {
                 summary = null
             } catch (e: Exception) {
                 Log.e(TAG, "copy failed", e)
-                summary = CopySummary(problem = e.message ?: "Copy failed")
+                summary = CopySummary(problem = e.message ?: str(R.string.copy_failed))
             } finally {
-                val s = (summary ?: CopySummary(stoppedEarly = "Stopped")).let {
-                    if (timedOut) it.copy(stoppedEarly = "Android's background time limit was reached — tap Copy to continue") else it
+                val s = (summary ?: CopySummary(stoppedEarly = str(R.string.stopped))).let {
+                    if (timedOut) it.copy(stoppedEarly = str(R.string.time_limit_reached)) else it
                 }
                 lastSummary.value = s
                 copyProgress.value = null
@@ -161,6 +162,9 @@ class CopyService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    /** Text in the app's chosen language. */
+    private fun str(id: Int, vararg args: Any): String = loc().getString(id, *args)
 
     /**
      * Android 15+ limits data-sync foreground services to ~6 h a day and calls
@@ -182,10 +186,10 @@ class CopyService : Service() {
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(if (total > 0) "Copying to drive · $done of $total" else "Copying to drive")
+            .setContentTitle(if (total > 0) str(R.string.n_copying_to_drive_progress, done, total) else str(R.string.n_copying_to_drive))
             .setContentText(text)
             .setContentIntent(openAppIntent(this))
-            .addAction(0, "Stop", stop)
+            .addAction(0, str(R.string.stop), stop)
             .apply {
                 if (total > 0) setProgress(total, done, false)
                 else setProgress(0, 0, true)
@@ -199,16 +203,16 @@ class CopyService : Service() {
         if (summary.total == 0 && summary.problem.isBlank() && summary.stoppedEarly.isBlank()) return
         val parts = mutableListOf<String>()
         if (summary.problem.isNotBlank()) parts += summary.problem
-        if (summary.total > 0) parts += "${summary.copied} copied"
-        if (summary.skipped > 0) parts += "${summary.skipped} already on the drive"
-        if (summary.gone    > 0) parts += "${summary.gone} no longer on the phone"
-        if (summary.failed  > 0) parts += "${summary.failed} failed"
-        if (summary.stoppedEarly.isNotBlank()) parts += "Stopped: ${summary.stoppedEarly}"
+        if (summary.total > 0) parts += str(R.string.n_part_copied, summary.copied)
+        if (summary.skipped > 0) parts += str(R.string.n_part_on_drive, summary.skipped)
+        if (summary.gone    > 0) parts += str(R.string.n_part_gone, summary.gone)
+        if (summary.failed  > 0) parts += str(R.string.n_part_failed, summary.failed)
+        if (summary.stoppedEarly.isNotBlank()) parts += str(R.string.n_part_stopped, summary.stoppedEarly)
         val title = when {
-            summary.problem.isNotBlank() -> "Copy couldn't start"
-            summary.stoppedEarly.isNotBlank() -> "Copy stopped"
-            summary.failed > 0 -> "Copy finished with problems"
-            else -> "Copy complete"
+            summary.problem.isNotBlank() -> str(R.string.n_sum_couldnt_start)
+            summary.stoppedEarly.isNotBlank() -> str(R.string.n_sum_stopped)
+            summary.failed > 0 -> str(R.string.n_sum_problems)
+            else -> str(R.string.n_sum_complete)
         }
         notifManager.notify(
             NOTIF_SUMMARY,

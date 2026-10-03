@@ -1,5 +1,7 @@
 package com.firebolt141.ubertrag.ui
 
+import com.firebolt141.ubertrag.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -26,16 +28,16 @@ fun RenameFoldersScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text("Update folder names")
+                        Text(stringResource(R.string.rename_title))
                         Text(
-                            "Old 01 / 15 folders → January / January_15",
+                            stringResource(R.string.rename_subtitle),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = onOpenDrawer) { Icon(Icons.Default.Menu, contentDescription = "Menu") }
+                    IconButton(onClick = onOpenDrawer) { Icon(Icons.Default.Menu, contentDescription = stringResource(R.string.menu)) }
                 },
             )
         }
@@ -49,32 +51,29 @@ fun RenameFoldersScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             InfoCard(
-                "Older versions made folders like 2024 / 01 / 15 or 2024 / March / March 7. This gives them the " +
-                    "current names (2024 / January / January_15, March_07) so everything sorts the same way. " +
-                    "If both an old and a new folder exist for the same day, their photos are merged; " +
-                    "identical files are never duplicated. Nothing is deleted."
+                stringResource(R.string.rename_info)
             )
 
             DriveStatusCard(driveUri = state.driveUri, driveConnected = state.driveConnected)
 
             if (state.driveConnected) {
-                StepLabel(1, "Check what would change", done = r.preview != null)
+                StepLabel(1, stringResource(R.string.rename_step_check), done = r.preview != null)
                 OutlinedButton(onClick = onCheck, enabled = !r.running, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Default.Search, null, Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("Check the drive")
+                    Text(stringResource(R.string.rename_check_drive))
                 }
 
                 r.preview?.let { p ->
-                    ResultCard(r.status, ok = true) {
+                    ResultCard(r.status.text(), ok = true) {
                         p.changes.take(30).forEach {
                             Text(it, style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace))
                         }
-                        if (p.changes.size > 30) Text("… and ${p.changes.size - 30} more", style = MaterialTheme.typography.bodySmall)
+                        if (p.changes.size > 30) Text(stringResource(R.string.and_n_more, p.changes.size - 30), style = MaterialTheme.typography.bodySmall)
                     }
                 }
 
-                StepLabel(2, "Rename", done = r.result != null)
+                StepLabel(2, stringResource(R.string.rename_step_rename), done = r.result != null)
                 Button(
                     onClick  = onRename,
                     enabled  = !r.running && (r.preview?.changes?.isNotEmpty() ?: true),
@@ -82,27 +81,27 @@ fun RenameFoldersScreen(
                 ) {
                     Icon(Icons.Default.DriveFileRenameOutline, null, Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("Rename folders")
+                    Text(stringResource(R.string.rename_folders))
                 }
 
                 if (r.running) {
-                    JobProgressCard(title = "Working…", done = 0, total = 0, current = r.status)
+                    JobProgressCard(title = stringResource(R.string.working), done = 0, total = 0, current = r.status.text())
                 }
 
                 r.result?.let { res ->
-                    ResultCard(r.status, ok = res.errors == 0) {
-                        if (res.renamed > 0) ResultRow("Folders renamed", res.renamed, Icons.Default.DriveFileRenameOutline)
-                        if (res.merged > 0) ResultRow("Folders merged", res.merged, Icons.AutoMirrored.Filled.MergeType)
-                        if (res.filesMoved > 0) ResultRow("Files moved while merging", res.filesMoved, Icons.AutoMirrored.Filled.DriveFileMove)
-                        if (res.identical > 0) ResultRow("Identical files left in the old folder", res.identical, Icons.Default.ContentCopy)
-                        if (res.errors > 0) ResultRow("Problems", res.errors, Icons.Default.ErrorOutline, MaterialTheme.colorScheme.error)
+                    ResultCard(r.status.text(), ok = res.errors == 0) {
+                        if (res.renamed > 0) ResultRow(stringResource(R.string.rename_folders_renamed), res.renamed, Icons.Default.DriveFileRenameOutline)
+                        if (res.merged > 0) ResultRow(stringResource(R.string.rename_folders_merged), res.merged, Icons.AutoMirrored.Filled.MergeType)
+                        if (res.filesMoved > 0) ResultRow(stringResource(R.string.rename_files_moved), res.filesMoved, Icons.AutoMirrored.Filled.DriveFileMove)
+                        if (res.identical > 0) ResultRow(stringResource(R.string.rename_identical_left), res.identical, Icons.Default.ContentCopy)
+                        if (res.errors > 0) ResultRow(stringResource(R.string.problems), res.errors, Icons.Default.ErrorOutline, MaterialTheme.colorScheme.error)
                         res.problems.take(10).forEach {
                             Text("• $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
-                if (!r.running && r.preview == null && r.result == null && r.status.isNotBlank()) {
-                    Text(r.status, style = MaterialTheme.typography.bodySmall)
+                if (!r.running && r.preview == null && r.result == null && !r.status.isEmpty) {
+                    Text(r.status.text(), style = MaterialTheme.typography.bodySmall)
                 }
             }
         }

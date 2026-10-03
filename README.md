@@ -7,6 +7,8 @@ Put the right dates back on your photos, and get years of scattered pictures int
 
 Both tools use the same folder layout (`2024/March/March_15/`), so they can share one drive.
 
+Both tools speak **English and Japanese (日本語)**. In the browser app, use the **EN / 日本語** switch at the bottom of the sidebar (a Japanese browser starts in Japanese). On Android, open the menu → **Language**, or on Android 13+ use *Settings → Apps → Übertrag → Language*.
+
 <p align="center">
   <img src="docs/screenshots/02-start-here.png" alt="Start here: the app looks at a folder and recommends what to do" width="900">
 </p>

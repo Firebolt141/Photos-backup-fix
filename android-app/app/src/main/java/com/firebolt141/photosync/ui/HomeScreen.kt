@@ -1,5 +1,10 @@
 package com.firebolt141.ubertrag.ui
 
+import java.text.DateFormat
+import androidx.compose.ui.platform.LocalConfiguration
+import com.firebolt141.ubertrag.R
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import android.Manifest
 import android.content.Intent
 import android.net.Uri
@@ -28,7 +33,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import com.firebolt141.ubertrag.repository.CopySummary
-import java.text.SimpleDateFormat
 import java.util.*
 
 /** Gallery permissions for this Android version (+ notifications so progress is visible). */
@@ -79,9 +83,10 @@ fun HomeScreen(
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { onPermissionsChanged() }
 
     val snackbar = remember { SnackbarHostState() }
+    val messageText = state.message.text()
     LaunchedEffect(state.message) {
-        if (state.message.isNotBlank()) {
-            snackbar.showSnackbar(state.message, withDismissAction = true)
+        if (!state.message.isEmpty) {
+            snackbar.showSnackbar(messageText, withDismissAction = true)
             onDismissMessage()
         }
     }
@@ -96,23 +101,23 @@ fun HomeScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text("Back up phone")
+                        Text(stringResource(R.string.home_title))
                         Text(
-                            "Copy photos & videos to a USB drive or SD card",
+                            stringResource(R.string.home_subtitle),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = onOpenDrawer) { Icon(Icons.Default.Menu, contentDescription = "Menu") }
+                    IconButton(onClick = onOpenDrawer) { Icon(Icons.Default.Menu, contentDescription = stringResource(R.string.menu)) }
                 },
                 actions = {
                     IconButton(onClick = onViewQueue) {
                         BadgedBox(badge = {
                             if (state.pendingCount > 0) Badge { Text("${state.pendingCount}") }
                         }) {
-                            Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Queue")
+                            Icon(Icons.AutoMirrored.Filled.List, contentDescription = stringResource(R.string.queue))
                         }
                     }
                 },
@@ -142,7 +147,7 @@ fun HomeScreen(
             }
 
             // ── Step 1: drive ────────────────────────────────────────────
-            StepLabel(1, "Choose your backup drive", done = state.driveConnected)
+            StepLabel(1, stringResource(R.string.step_choose_drive), done = state.driveConnected)
             DriveStatusCard(
                 driveUri        = state.driveUri,
                 driveConnected  = state.driveConnected,
@@ -152,11 +157,11 @@ fun HomeScreen(
             )
 
             // ── Step 2: scan ─────────────────────────────────────────────
-            StepLabel(2, "Find photos to back up", done = state.queue.isNotEmpty() && !state.scanning)
+            StepLabel(2, stringResource(R.string.step_find_photos), done = state.queue.isNotEmpty() && !state.scanning)
             ElevatedCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        "Looks through your gallery and adds anything new to the list. Already-copied items are remembered.",
+                        stringResource(R.string.scan_explain),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -168,36 +173,35 @@ fun HomeScreen(
                         if (state.scanning) {
                             CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
                             Spacer(Modifier.width(8.dp))
-                            Text("Scanning…")
+                            Text(stringResource(R.string.scanning))
                         } else {
                             Icon(Icons.Default.Search, null, Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("Scan phone")
+                            Text(stringResource(R.string.scan_phone))
                         }
                     }
-                    if (state.scanMessage.isNotBlank() && !state.scanning) {
-                        Text(state.scanMessage, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+                    if (!state.scanMessage.isEmpty && !state.scanning) {
+                        Text(state.scanMessage.text(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        StatTile("To copy", state.pendingCount, Icons.Default.Schedule, Modifier.weight(1f))
-                        StatTile("Copied", state.copiedCount, Icons.Default.CheckCircle, Modifier.weight(1f))
-                        StatTile("Already there", state.skippedCount, Icons.Default.RemoveCircleOutline, Modifier.weight(1f))
+                        StatTile(stringResource(R.string.stat_to_copy), state.pendingCount, Icons.Default.Schedule, Modifier.weight(1f))
+                        StatTile(stringResource(R.string.stat_copied), state.copiedCount, Icons.Default.CheckCircle, Modifier.weight(1f))
+                        StatTile(stringResource(R.string.stat_already_there), state.skippedCount, Icons.Default.RemoveCircleOutline, Modifier.weight(1f))
                     }
                     if (state.queue.isNotEmpty()) {
                         TextButton(onClick = onViewQueue, contentPadding = PaddingValues(0.dp)) {
-                            Text("See the list (${state.queue.size})")
+                            Text(stringResource(R.string.see_the_list, state.queue.size))
                         }
                     }
                 }
             }
 
             // ── Step 3: copy ─────────────────────────────────────────────
-            StepLabel(3, "Copy to the drive")
+            StepLabel(3, stringResource(R.string.step_copy))
             ElevatedCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        "Files go into Year / Month / Day folders, e.g. 2024 / March / March_15. " +
-                            "Nothing is deleted from the phone. Files already on the drive are skipped.",
+                        stringResource(R.string.copy_explain),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -206,21 +210,21 @@ fun HomeScreen(
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.DateRange, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
                         Spacer(Modifier.width(8.dp))
-                        val dateFmt = remember {
-                            SimpleDateFormat("MMM d, yyyy", Locale.getDefault()).apply { timeZone = TimeZone.getTimeZone("UTC") }
+                        val locale = LocalConfiguration.current.locales[0]
+                        val dateFmt = remember(locale) {
+                            DateFormat.getDateInstance(DateFormat.MEDIUM, locale).apply { timeZone = TimeZone.getTimeZone("UTC") }
                         }
+                        val fromLabel = if (state.fromDateMs > 0) dateFmt.format(Date(state.fromDateMs)) else stringResource(R.string.range_beginning)
+                        val toLabel   = if (state.toDateMs > 0) dateFmt.format(Date(state.toDateMs)) else stringResource(R.string.range_today)
                         Text(
-                            if (hasDateFilter) {
-                                val from = if (state.fromDateMs > 0) dateFmt.format(Date(state.fromDateMs)) else "the beginning"
-                                val to   = if (state.toDateMs > 0) dateFmt.format(Date(state.toDateMs)) else "today"
-                                "Only $from → $to"
-                            } else "All dates",
+                            if (hasDateFilter) stringResource(R.string.range_only, fromLabel, toLabel)
+                            else stringResource(R.string.range_all),
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.weight(1f),
                         )
-                        if (hasDateFilter) TextButton(onClick = onClearDateRange, enabled = !copying) { Text("Clear") }
+                        if (hasDateFilter) TextButton(onClick = onClearDateRange, enabled = !copying) { Text(stringResource(R.string.clear)) }
                         TextButton(onClick = { showDatePicker = true }, enabled = !copying) {
-                            Text(if (hasDateFilter) "Change" else "Limit dates")
+                            Text(stringResource(if (hasDateFilter) R.string.change else R.string.limit_dates))
                         }
                     }
 
@@ -228,7 +232,7 @@ fun HomeScreen(
                         OutlinedButton(onClick = onStopCopy, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.Default.Stop, null, Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("Stop copying")
+                            Text(stringResource(R.string.stop_copying))
                         }
                     } else {
                         Button(
@@ -238,13 +242,13 @@ fun HomeScreen(
                         ) {
                             Icon(Icons.Default.ContentCopy, null, Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text(if (state.pendingCount > 0) "Copy ${plural(state.pendingCount, "file")}" else "Copy")
+                            Text(if (state.pendingCount > 0) pluralStringResource(R.plurals.copy_n_files, state.pendingCount, state.pendingCount) else stringResource(R.string.copy))
                         }
                         val hint = when {
-                            state.driveUri == null -> "Choose a drive first (step 1)."
-                            !state.driveConnected -> "Connect the drive to copy."
-                            state.pendingCount == 0 && state.queue.isEmpty() -> "Scan first (step 2)."
-                            state.pendingCount == 0 -> "Everything in the list is already backed up."
+                            state.driveUri == null -> stringResource(R.string.hint_choose_drive_first)
+                            !state.driveConnected -> stringResource(R.string.hint_connect_drive)
+                            state.pendingCount == 0 && state.queue.isEmpty() -> stringResource(R.string.hint_scan_first)
+                            state.pendingCount == 0 -> stringResource(R.string.hint_all_backed_up)
                             else -> ""
                         }
                         if (hint.isNotBlank()) {
@@ -256,7 +260,7 @@ fun HomeScreen(
                         OutlinedButton(onClick = onRetryFailed, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.Default.Refresh, null, Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("Retry ${plural(state.failedCount, "failed file")}")
+                            Text(pluralStringResource(R.plurals.retry_n_failed, state.failedCount, state.failedCount))
                         }
                     }
                 }
@@ -266,11 +270,11 @@ fun HomeScreen(
             AnimatedVisibility(visible = state.copyProgress != null, enter = fadeIn(), exit = fadeOut()) {
                 state.copyProgress?.let { p ->
                     JobProgressCard(
-                        title   = "Copying to the drive…",
+                        title   = stringResource(R.string.copying_to_drive),
                         done    = p.done,
                         total   = p.total,
                         current = p.currentName,
-                        extra   = if (p.speedMBps > 0.01) "%.1f MB/s".format(p.speedMBps) else "",
+                        extra   = if (p.speedMBps > 0.01) stringResource(R.string.speed_mbps, "%.1f".format(p.speedMBps)) else "",
                         onStop  = onStopCopy,
                     )
                 }
@@ -298,9 +302,9 @@ fun HomeScreen(
                         dateRangeState.selectedEndDateMillis ?: 0L,
                     )
                     showDatePicker = false
-                }) { Text("OK") }
+                }) { Text(stringResource(R.string.ok)) }
             },
-            dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text(stringResource(R.string.cancel)) } },
         ) {
             DateRangePicker(state = dateRangeState, modifier = Modifier.height(500.dp))
         }
@@ -314,15 +318,14 @@ private fun PermissionCard(partial: Boolean, onAllow: () -> Unit, onSettings: ()
         colors   = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            CardTitle(Icons.Default.PhotoLibrary, if (partial) "Only some photos are shared" else "Allow access to your photos")
+            CardTitle(Icons.Default.PhotoLibrary, stringResource(if (partial) R.string.perm_partial_title else R.string.perm_title))
             Text(
-                if (partial) "You chose to share only selected photos, so only those can be backed up. Allow all photos and videos to back up everything."
-                else "Übertrag needs to read your photos and videos to copy them. Nothing leaves your phone except to the drive you choose.",
+                stringResource(if (partial) R.string.perm_partial_body else R.string.perm_body),
                 style = MaterialTheme.typography.bodySmall,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onAllow) { Text("Allow") }
-                OutlinedButton(onClick = onSettings) { Text("Open settings") }
+                Button(onClick = onAllow) { Text(stringResource(R.string.allow)) }
+                OutlinedButton(onClick = onSettings) { Text(stringResource(R.string.open_settings)) }
             }
         }
     }
@@ -346,23 +349,23 @@ private fun StatTile(label: String, value: Int, icon: ImageVector, modifier: Mod
 private fun CopySummaryCard(s: CopySummary, onDismiss: () -> Unit, onViewQueue: () -> Unit) {
     val ok = s.problem.isBlank() && s.failed == 0 && s.stoppedEarly.isBlank()
     val title = when {
-        s.problem.isNotBlank() -> "Couldn't start"
-        s.stoppedEarly.isNotBlank() -> "Stopped — ${s.stoppedEarly}"
-        s.total == 0 -> "Nothing to copy"
-        s.failed > 0 -> "Finished with problems"
-        else -> "Backup complete"
+        s.problem.isNotBlank() -> stringResource(R.string.sum_couldnt_start)
+        s.stoppedEarly.isNotBlank() -> stringResource(R.string.sum_stopped, s.stoppedEarly)
+        s.total == 0 -> stringResource(R.string.sum_nothing)
+        s.failed > 0 -> stringResource(R.string.sum_problems)
+        else -> stringResource(R.string.sum_complete)
     }
     ResultCard(title, ok, onDismiss) {
         if (s.problem.isNotBlank()) Text(s.problem, style = MaterialTheme.typography.bodySmall)
-        if (s.copied > 0) ResultRow("Copied", s.copied, Icons.Default.CheckCircle)
-        if (s.noDate > 0) ResultRow("Without a date (in no-date/)", s.noDate, Icons.AutoMirrored.Filled.HelpOutline)
-        if (s.skipped > 0) ResultRow("Already on the drive", s.skipped, Icons.Default.RemoveCircleOutline)
-        if (s.gone > 0) ResultRow("No longer on the phone", s.gone, Icons.Default.DeleteOutline)
-        if (s.failed > 0) ResultRow("Failed", s.failed, Icons.Default.ErrorOutline, MaterialTheme.colorScheme.error)
-        if (s.bytes > 0) Text("%.1f MB written".format(s.bytes / 1_048_576.0), style = MaterialTheme.typography.labelSmall)
+        if (s.copied > 0) ResultRow(stringResource(R.string.row_copied), s.copied, Icons.Default.CheckCircle)
+        if (s.noDate > 0) ResultRow(stringResource(R.string.row_no_date), s.noDate, Icons.AutoMirrored.Filled.HelpOutline)
+        if (s.skipped > 0) ResultRow(stringResource(R.string.row_on_drive), s.skipped, Icons.Default.RemoveCircleOutline)
+        if (s.gone > 0) ResultRow(stringResource(R.string.row_gone), s.gone, Icons.Default.DeleteOutline)
+        if (s.failed > 0) ResultRow(stringResource(R.string.row_failed), s.failed, Icons.Default.ErrorOutline, MaterialTheme.colorScheme.error)
+        if (s.bytes > 0) Text(stringResource(R.string.mb_written, "%.1f".format(s.bytes / 1_048_576.0)), style = MaterialTheme.typography.labelSmall)
         if (s.stoppedEarly.isNotBlank() && s.problem.isBlank()) {
-            Text("Everything copied so far is safe. Tap Copy again to continue.", style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.copy_continue_hint), style = MaterialTheme.typography.bodySmall)
         }
-        if (s.failed > 0) TextButton(onClick = onViewQueue, contentPadding = PaddingValues(0.dp)) { Text("See which files failed") }
+        if (s.failed > 0) TextButton(onClick = onViewQueue, contentPadding = PaddingValues(0.dp)) { Text(stringResource(R.string.see_failed)) }
     }
 }

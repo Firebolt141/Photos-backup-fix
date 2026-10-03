@@ -1,5 +1,7 @@
 package com.firebolt141.ubertrag.repository
 
+import com.firebolt141.ubertrag.util.loc
+import com.firebolt141.ubertrag.R
 import android.content.ContentUris
 import android.content.Context
 import android.net.Uri
@@ -46,6 +48,9 @@ data class CopySummary(
 class SyncRepository(private val context: Context) {
 
     private companion object { const val TAG = "SyncRepository" }
+
+    /** Text in the app's chosen language (results, statuses stored in the queue). */
+    private fun str(id: Int, vararg args: Any): String = context.loc().getString(id, *args)
 
     private val db    = AppDatabase.get(context)
     private val dao   = db.queueDao()
@@ -161,11 +166,11 @@ class SyncRepository(private val context: Context) {
     ): CopySummary = withContext(Dispatchers.IO) {
         Log.d(TAG, "copyPending start")
         val driveUriStr = prefs.driveUri.first()
-            ?: return@withContext CopySummary(problem = "No drive selected")
+            ?: return@withContext CopySummary(problem = str(R.string.no_drive_selected))
         if (!StorageHelper.isDriveMounted(context, driveUriStr))
-            return@withContext CopySummary(problem = "The drive isn't connected (or can't be written to)")
+            return@withContext CopySummary(problem = str(R.string.drive_not_writable))
         val root = DocumentFile.fromTreeUri(context, driveUriStr.toUri())
-            ?: return@withContext CopySummary(problem = "Cannot open the drive folder — select it again")
+            ?: return@withContext CopySummary(problem = str(R.string.cannot_open_drive))
         if (!prefs.wallDatesMigrated.first()) scanMedia()
 
         // Picker dates are midnight UTC of the chosen days; queue dates are wall-clock in UTC ms.
@@ -184,12 +189,12 @@ class SyncRepository(private val context: Context) {
 
         Log.d(TAG, "copyPending: ${pending.size} items to copy")
         for (item in pending) {
-            if (isCancelled()) { stopped = "Stopped by you"; break }
+            if (isCancelled()) { stopped = str(R.string.stopped_by_you); break }
             onProgress(done, pending.size, item.displayName, calcSpeed(totalBytes, startMs))
             val srcUri = sourceUri(item)
             val size = sourceSize(srcUri)
             if (size == null) {
-                dao.updateStatusAndError(item.id, CopyStatus.SKIPPED, "No longer on the phone")
+                dao.updateStatusAndError(item.id, CopyStatus.SKIPPED, str(R.string.no_longer_on_phone))
                 gone++; done++
                 continue
             }
@@ -197,8 +202,8 @@ class SyncRepository(private val context: Context) {
             val destDir = tree.dirPath(root, parts)
             val outcome = if (destDir == null) {
                 CopyOutcome.Failed(
-                    if (StorageHelper.isDriveMounted(context, driveUriStr)) "Cannot create folder ${parts.joinToString("/")}"
-                    else "File or folder not found (was the drive disconnected?)"
+                    if (StorageHelper.isDriveMounted(context, driveUriStr)) str(R.string.cannot_create_folder, parts.joinToString("/"))
+                    else str(R.string.err_not_found)
                 )
             } else try {
                 tree.copyInto(srcUri, size, destDir, item.displayName)
@@ -293,9 +298,9 @@ class SyncRepository(private val context: Context) {
     ): FixByFilenameResult = withContext(Dispatchers.IO) {
         Log.d(TAG, "fixByFilename source=$sourceUri output=$outputUri")
         val src = treeOrNull(sourceUri)
-            ?: return@withContext FixByFilenameResult(errorMsg = "Cannot open the source folder. Select it again.")
+            ?: return@withContext FixByFilenameResult(errorMsg = str(R.string.cannot_open_source))
         val out = treeOrNull(outputUri)
-            ?: return@withContext FixByFilenameResult(errorMsg = "Cannot open the output folder. Select it again.")
+            ?: return@withContext FixByFilenameResult(errorMsg = str(R.string.cannot_open_output))
         ExifFixer.fixByFilename(src, out, context, onLog, onProgress, keepExistingDates, renameToDate, isCancelled)
     }
 
@@ -309,9 +314,9 @@ class SyncRepository(private val context: Context) {
     ): TakeoutResult = withContext(Dispatchers.IO) {
         Log.d(TAG, "processTakeout start — source=$sourceUri output=$outputUri")
         val sourceRoot = treeOrNull(sourceUri)
-            ?: return@withContext TakeoutResult(errorMsg = "Cannot open the selected source folder. Try selecting it again.")
+            ?: return@withContext TakeoutResult(errorMsg = str(R.string.cannot_open_takeout_src))
         val outputRoot = treeOrNull(outputUri)
-            ?: return@withContext TakeoutResult(errorMsg = "Cannot open the selected output folder. Try selecting it again.")
+            ?: return@withContext TakeoutResult(errorMsg = str(R.string.cannot_open_takeout_out))
         TakeoutProcessor.process(sourceRoot, outputRoot, context, options, onProgress, onLog, isCancelled)
     }
 
