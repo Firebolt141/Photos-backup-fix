@@ -22,8 +22,9 @@ import time
 
 from pathlib import Path
 
+from core import __version__ as core_version
 from core import (OUTPUT_MODES, ArchiveExtractor, DriveFixer, DuplicateFinder, FolderRenamer,
-                  ProcessOptions, Processor, _fmt_size, analyze_folder, find_archives)
+                  ProcessOptions, Processor, _fmt_size, analyze_folder, find_archives, safe_console)
 
 
 def _printer(verbose: bool):
@@ -55,6 +56,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog='cli.py', description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('-v', '--verbose', action='store_true', help='log every file')
+    ap.add_argument('--version', action='version', version='Photos Backup Fix ' + core_version)
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument('-v', '--verbose', action='store_true', default=argparse.SUPPRESS,
                         help='log every file')
@@ -106,6 +108,7 @@ def main(argv=None) -> int:
     p.add_argument('folder')
 
     a = ap.parse_args(argv)
+    safe_console()
     if a.cmd == 'analyze':
         return _analyze(a.folder)
     cb = dict(on_log=_printer(a.verbose), on_progress=_progress())

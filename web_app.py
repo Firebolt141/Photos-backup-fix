@@ -675,13 +675,14 @@ def main(argv=None) -> None:
     ap.add_argument('--port', type=int, default=5000)
     ap.add_argument('--no-browser', action='store_true', help="don't open a browser tab")
     args = ap.parse_args(argv)
+    core.safe_console()
 
     port = _free_port(args.port)
     _allowed_hosts.update({f'127.0.0.1:{port}', f'localhost:{port}'})
     url = f'http://127.0.0.1:{port}'
-    print('\n  Photos Backup Fix')
-    print('  ─────────────────────────────────────')
-    print(f'  Web UI → {url}')
+    print(f'\n  Photos Backup Fix {core.__version__}')
+    print('  -------------------------------------')
+    print(f'  Web UI -> {url}')
     print('  Press Ctrl+C to quit\n')
     if not args.no_browser:
         threading.Thread(target=lambda: (time.sleep(1.3), webbrowser.open(url)), daemon=True).start()

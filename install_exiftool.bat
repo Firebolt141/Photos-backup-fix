@@ -28,11 +28,13 @@ if %ERRORLEVEL% == 0 (
 
 echo.
 echo Automatic installation not available.
-echo Please install ExifTool manually:
-echo   1. Go to https://exiftool.org
-echo   2. Download the "Windows Executable" zip
-echo   3. Extract exiftool(-k).exe, rename it to exiftool.exe
-echo   4. Place exiftool.exe in a folder on your PATH (e.g. C:\Windows\System32)
+echo Easiest: just run Start.bat - it downloads ExifTool into the tools folder.
+echo.
+echo Or install it by hand:
+echo   1. Go to https://exiftool.org and download the "Windows Executable" zip
+echo   2. Put the zip ^(or everything inside it^) in the "tools" folder next to Start.bat.
+echo      Start.bat renames exiftool^(-k^).exe and keeps the exiftool_files folder beside it.
+echo      ^(Copying only the .exe does not work: it needs the exiftool_files folder.^)
 echo.
 pause
 goto :end
@@ -43,7 +45,7 @@ if %ERRORLEVEL% == 0 (
     echo.
     echo ExifTool installed successfully:
     exiftool -ver
-    echo You can now run:  python app.py
+    echo You can now run:  Start.bat
 ) else (
     echo.
     echo Installation may require a terminal restart to take effect.

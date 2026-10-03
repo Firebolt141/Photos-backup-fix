@@ -21,7 +21,10 @@ Folder layout, fallback folders (no-date/, error/) and EXIF tag choices
 match the Android app (Übertrag) so both tools can share one drive.
 """
 
+
 from __future__ import annotations
+
+__version__ = '5.0.0'
 
 import csv
 import hashlib
@@ -738,6 +741,17 @@ def parse_meta(json_path: Path) -> Meta:
                        if isinstance(p, dict) and isinstance(p.get('name'), str) and p['name'].strip()]
     meta.favorited = data.get('favorited') is True
     return meta
+
+
+def safe_console() -> None:
+    """Never crash on printing: when stdout/stderr go to a file or a legacy
+    Windows code page (cp1252/cp437), unprintable characters (─, →, emoji in
+    file names) become '?' instead of raising UnicodeEncodeError."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(errors='replace')   # Python 3.7+
+        except (AttributeError, ValueError, OSError):
+            pass
 
 
 # ── ExifTool ──────────────────────────────────────────────────────────────────

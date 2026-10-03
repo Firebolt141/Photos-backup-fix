@@ -1,0 +1,15 @@
+# Windows scripts need CRLF line endings: cmd.exe misreads LF-only batch files
+# (labels/goto), and this also applies to "Download ZIP" and release archives.
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
+gradlew.bat text eol=crlf
+
+# Unix scripts must keep LF
+*.sh   text eol=lf
+gradlew text eol=lf
+
+# Binary
+*.jar  binary
+*.png  binary
+*.zip  binary

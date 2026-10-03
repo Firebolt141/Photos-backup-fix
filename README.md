@@ -17,7 +17,7 @@ Both tools use the same folder layout (`2024/March/March_15/`), so they can shar
 
 ### Quick start
 
-1. Download this repository as a zip ([**Code → Download ZIP**](https://github.com/Firebolt141/Photos-backup-fix/archive/refs/heads/main.zip)) and extract it anywhere.
+1. Download **`PhotosBackupFix-Windows-<version>.zip`** from the [latest release](https://github.com/Firebolt141/Photos-backup-fix/releases/latest) (or the repository zip via **Code → Download ZIP**) and extract it anywhere.
 2. Double-click **`Start.bat`**. The first time, it downloads ExifTool, installs Python and Flask if needed, then opens the app in your browser.
 3. On the **Overview** page, paste or browse to your photo folder and press **Look at this folder**.
 4. Press **Set it up** on the suggested step, choose an output folder, press **Preview**, and when it looks right, **Apply**.
@@ -176,6 +176,8 @@ Photos-backup-fix/
 
 ## Tool 2 — Android: **Übertrag**
 
+**Download:** `Ubertrag-<version>.apk` from the [latest release](https://github.com/Firebolt141/Photos-backup-fix/releases/latest). Open it on the phone and allow "install unknown apps" when asked.
+
 **Übertrag** is an Android app (Android 8 or newer) that backs up the phone's photos to a USB drive or SD card, imports Google Takeout, sorts messy folders by date and repairs dates. No computer needed. It uses the same `2024/March/March_15/` layout as the Windows tool, so both can work on the same drive.
 
 The app opens on **Start here**, which asks what you have and sends you to the right tool:
@@ -268,7 +270,9 @@ The tests cover `PhotoLogic`: Takeout sidecar matching (including truncated and 
 
 ## Troubleshooting
 
-**Windows — "ExifTool not found"** — Run `Start.bat` which downloads it automatically.
+**Windows — "ExifTool not found"** — `Start.bat` downloads it into the `tools` folder automatically. If your network blocks that, download the *Windows Executable* zip from [exiftool.org](https://exiftool.org) and put the zip (or everything inside it, including the `exiftool_files` folder) in `tools`, then run `Start.bat` again. It renames `exiftool(-k).exe` and arranges the files for you. Copying only the `.exe` does not work.
+
+**Windows — the Start.bat window closes or stops at a step** — Run it again: since v5.0.0 it always stays open on an error and says what to do. If an antivirus quarantined `tools\exiftool.exe`, allow it and run `Start.bat` again.
 
 **Windows — "This archive looks incomplete or damaged"** — That Takeout zip didn't finish downloading. Download just that part again from Google Takeout and run *Unpack archives* again (finished files are skipped).
 

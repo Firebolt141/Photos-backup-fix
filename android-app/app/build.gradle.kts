@@ -12,8 +12,8 @@ android {
         applicationId   = "com.firebolt141.ubertrag"
         minSdk          = 26
         targetSdk       = 36
-        versionCode     = 3
-        versionName     = "1.2.0"
+        versionCode     = 5
+        versionName     = "5.0.0"
     }
 
     buildTypes {
