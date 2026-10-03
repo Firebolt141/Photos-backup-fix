@@ -35,6 +35,7 @@ class CopyService : Service() {
     private var copyJob: Job? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private var lastNotifyMs = 0L
+    @Volatile private var timedOut = false
 
     companion object {
         private const val TAG    = "CopyService"
@@ -133,11 +134,16 @@ class CopyService : Service() {
                         ))
                     }
                 }
+            } catch (e: CancellationException) {
+                // Service torn down mid-copy (time limit or system); not an error.
+                summary = null
             } catch (e: Exception) {
                 Log.e(TAG, "copy failed", e)
                 summary = CopySummary(problem = e.message ?: "Copy failed")
             } finally {
-                val s = summary ?: CopySummary(stoppedEarly = "Stopped")
+                val s = (summary ?: CopySummary(stoppedEarly = "Stopped")).let {
+                    if (timedOut) it.copy(stoppedEarly = "Android's background time limit was reached — tap Copy to continue") else it
+                }
                 lastSummary.value = s
                 copyProgress.value = null
                 showSummaryNotification(s)
@@ -155,6 +161,18 @@ class CopyService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    /**
+     * Android 15+ limits data-sync foreground services to ~6 h a day and calls
+     * this when the time is up; the service must stop within seconds or the
+     * app crashes. Stop cleanly — files copied so far are kept.
+     */
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        Log.w(TAG, "foreground time limit reached; stopping")
+        timedOut = true
+        stopRequested = true
+        stopSelf()
+    }
 
     private fun buildProgressNotif(text: String, done: Int, total: Int): Notification {
         val stop = PendingIntent.getService(

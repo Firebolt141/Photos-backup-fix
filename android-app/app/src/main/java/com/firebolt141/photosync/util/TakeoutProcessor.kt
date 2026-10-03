@@ -197,10 +197,10 @@ object TakeoutProcessor {
         // Date priority: photoTakenTime → filename → creationTime (upload date)
         var date: PhotoDate? = null
         if (meta.timestampSec != null && meta.timestampSource == "photoTakenTime") {
-            date = PhotoDate.fromEpochSec(meta.timestampSec!!, "sidecar")
+            date = PhotoDate.fromEpochSec(meta.timestampSec, "sidecar")
         }
         if (date == null) date = PhotoLogic.dateFromFilename(name, zone)
-        if (date == null && meta.timestampSec != null) date = PhotoDate.fromEpochSec(meta.timestampSec!!, "sidecar")
+        if (date == null && meta.timestampSec != null) date = PhotoDate.fromEpochSec(meta.timestampSec, "sidecar")
 
         val embedded = if (options.skipIfHasExif || date == null) DateExtractor.embedded(context, item.file.uri, name) else null
         val keepEmbedded = embedded != null && options.skipIfHasExif
@@ -310,7 +310,7 @@ object TakeoutProcessor {
                 changed = true
             }
             if (wantsGps && exif.latLong == null) {
-                exif.setLatLong(meta.latitude!!, meta.longitude!!)
+                exif.setLatLong(meta.latitude, meta.longitude)
                 meta.altitude?.let { alt ->
                     exif.setAttribute(ExifInterface.TAG_GPS_ALTITUDE, "${kotlin.math.abs(alt).toLong()}/1")
                     exif.setAttribute(ExifInterface.TAG_GPS_ALTITUDE_REF, if (alt >= 0) "0" else "1")

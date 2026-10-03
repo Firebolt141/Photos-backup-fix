@@ -2047,7 +2047,7 @@ def plan_folder_renames(root: Path) -> List[Tuple[Path, str]]:
                 day = parse_day_folder(ddir.name)
                 if day is None:
                     continue
-                prefix = re.split(r'[_ ]', ddir.name, 1)[0] if re.search(r'[_ ]', ddir.name) else ''
+                prefix = re.split(r'[_ ]', ddir.name, maxsplit=1)[0] if re.search(r'[_ ]', ddir.name) else ''
                 if prefix and parse_month_folder(prefix) not in (None, month):
                     continue        # e.g. February_07 inside January/ — leave for a human
                 want = f'{mname}_{day:02d}'

@@ -91,7 +91,7 @@ Build: Kotlin + Jetpack Compose + Room + DataStore
 | File | Purpose |
 |---|---|
 | `util/PhotoLogic.kt` | Pure Kotlin (unit-tested): filename dates, folder names/parsing, sidecar matching, `PhotoDate` |
-| `util/SafTree.kt` | Cached SAF listings; `copyInto()` = temp name → size check → rename; same name+size = `AlreadyThere`, else `_N` |
+| `util/SafTree.kt` | Cached SAF listings; `copyInto()` = temp name → size check → rename; same name+size+content sample = `AlreadyThere`, else `_N` |
 | `util/TakeoutProcessor.kt` | Shared engine for Takeout + "sort a folder"; every file → dated dir, `no-date/<rel>`, or `error/<rel>`; fatal errors stop the run |
 | `util/ExifFixer.kt` | `fixMissingExif()` (in place, via sibling temp file) + `fixByFilename()` (delegates to TakeoutProcessor, `useSidecars=false`) |
 | `util/StorageHelper.kt` | `isDriveMounted`, `folderLabel`, `renameLegacyFolders(context, root, dryRun)` with merge |
@@ -167,7 +167,7 @@ Icon assets live in `app/src/main/res/mipmap-*/`:
 - `ic_launcher.png` — legacy launcher icon at each density (48 / 72 / 96 / 144 / 192 px)
 - `ic_launcher_round.png` — same image, round crop applied by launcher
 - `ic_launcher_foreground.png` — adaptive icon foreground at 108dp per density (108 / 162 / 216 / 324 / 432 px)
-- `mipmap-anydpi-v26/ic_launcher.xml` — adaptive icon XML referencing `@mipmap/ic_launcher_foreground` + `@color/ic_launcher_background`
+- `mipmap-anydpi/ic_launcher.xml` — adaptive icon XML referencing `@mipmap/ic_launcher_foreground` + `@color/ic_launcher_background`
 
 ### Unit tests
 

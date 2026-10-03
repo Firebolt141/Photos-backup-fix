@@ -138,13 +138,13 @@ python cli.py takeout --help        &:: all options
 
 ### Manual setup
 
-Requires Python 3.7+, Flask (`pip install flask`) and ExifTool (on PATH or in `.\tools\`).
+Requires Python 3.9+, Flask 3 (`pip install -r requirements.txt`) and ExifTool (on PATH or in `.\tools\`). `core.py` and `cli.py` alone need only the standard library (Python 3.7+).
 
 ```bat
 python web_app.py [--port 5000] [--no-browser]
 ```
 
-Tests: `pip install pytest` and then `python -m pytest tests/`. The integration tests need ExifTool, and the video test needs ffmpeg.
+Tests: `pip install -r requirements-dev.txt` and then `python -m pytest tests/`. The integration tests need ExifTool, and the video test needs ffmpeg.
 
 ### Project layout
 
@@ -244,20 +244,22 @@ android-app/app/src/main/java/com/firebolt141/photosync/   (package com.firebolt
 
 ### Building
 
-Open `android-app/` in Android Studio (Ladybug or later), or:
+Needs JDK 17 or newer (21 recommended). Open `android-app/` in a current Android Studio, or use the Gradle wrapper (it downloads the right Gradle version itself):
 
 ```bash
 cd android-app
-./gradlew assembleDebug
+./gradlew assembleDebug          # Windows: gradlew.bat assembleDebug
 ```
 
-Dev builds are published automatically on every push to `main` as a GitHub release tagged `build-N-<sha>`.
+Toolchain: AGP 9.4, Kotlin 2.4, Gradle 9.8, Compose BOM 2026.09; compileSdk 37, targetSdk 36, minSdk 26.
+
+Dev builds are published automatically on every push to `main` as a GitHub release tagged `build-N-<sha>`. CI also runs the unit tests and Android lint.
 
 ### Running unit tests
 
 ```bash
 cd android-app
-./gradlew test
+./gradlew testDebugUnitTest lintDebug
 ```
 
 The tests cover `PhotoLogic`: Takeout sidecar matching (including truncated and `(1)` names), JSON parsing, dates from file names, EXIF date parsing, folder naming and parsing, legacy folder renames and unique names.

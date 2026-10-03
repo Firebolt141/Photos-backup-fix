@@ -1,20 +1,19 @@
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.ksp)
     alias(libs.plugins.compose.compiler)
 }
 
 android {
     namespace   = "com.firebolt141.ubertrag"
-    compileSdk  = 35
+    compileSdk  = 37
 
     defaultConfig {
         applicationId   = "com.firebolt141.ubertrag"
         minSdk          = 26
-        targetSdk       = 35
-        versionCode     = 2
-        versionName     = "1.1.0"
+        targetSdk       = 36
+        versionCode     = 3
+        versionName     = "1.2.0"
     }
 
     buildTypes {
@@ -33,15 +32,17 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = "11" }
 
     buildFeatures { compose = true }
 
     packaging { resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" } }
 }
+
+// AGP 9 compiles Kotlin itself (no separate kotlin-android plugin).
+kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
 
 dependencies {
     implementation(libs.core.ktx)
@@ -78,6 +79,6 @@ dependencies {
     implementation(libs.coroutines.android)
 
     // Unit tests (PhotoLogic is pure Kotlin; org.json replaces Android's stubbed copy on the JVM)
-    testImplementation("junit:junit:4.13.2")
-    testImplementation("org.json:json:20240303")
+    testImplementation(libs.junit)
+    testImplementation(libs.org.json)
 }

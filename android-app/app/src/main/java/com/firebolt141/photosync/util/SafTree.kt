@@ -8,7 +8,7 @@ import androidx.documentfile.provider.DocumentFile
 /** Result of copying one file into a SAF folder. */
 sealed class CopyOutcome {
     data class Copied(val file: DocumentFile, val name: String, val bytes: Long) : CopyOutcome()
-    /** A file with the same content (same name family and size) is already there. */
+    /** The same file (same size and matching content sample) is already there under this name or an _N variant. */
     data class AlreadyThere(val name: String) : CopyOutcome()
     data class Failed(val message: String) : CopyOutcome()
 }
@@ -88,7 +88,9 @@ class SafTree(private val context: Context) {
                 val cand = if (i == 0) desiredName else "${stem}_$i$ext"
                 val existing = names[cand.lowercase()]
                 if (existing == null) { name = cand; break }
-                if (sourceSize >= 0 && existing.length() == sourceSize) return CopyOutcome.AlreadyThere(cand)
+                if (sourceSize >= 0 && existing.length() == sourceSize && sameSample(source, existing.uri, sourceSize)) {
+                    return CopyOutcome.AlreadyThere(cand)
+                }
                 i++
                 if (i > 99_999) return CopyOutcome.Failed("No free file name for $desiredName")
             }
@@ -134,6 +136,37 @@ class SafTree(private val context: Context) {
         } catch (e: Exception) {
             try { dest.delete() } catch (_: Exception) { }
             CopyOutcome.Failed(friendly(e))
+        }
+    }
+
+    /**
+     * Same size is not proof of the same photo (two cameras can both make
+     * IMG_0001.JPG of identical length), so also compare the first and last
+     * 64 KB. Cheap even for big videos, and only done on a name+size match.
+     */
+    private fun sameSample(a: Uri, b: Uri, size: Long): Boolean = try {
+        val chunk = 64 * 1024
+        val head = minOf(size, chunk.toLong()).toInt()
+        val tailStart = maxOf(head.toLong(), size - chunk)
+        readSample(a, head, tailStart, size).contentEquals(readSample(b, head, tailStart, size))
+    } catch (e: Exception) {
+        Log.w(TAG, "content check failed: ${e.message}")
+        false   // can't tell: keep both (the copy gets an _N name)
+    }
+
+    private fun readSample(uri: Uri, head: Int, tailStart: Long, size: Long): ByteArray {
+        val input = context.contentResolver.openInputStream(uri) ?: throw java.io.IOException("Cannot read")
+        input.use { s ->
+            val out = java.io.ByteArrayOutputStream()
+            val buf = ByteArray(head.coerceAtLeast(1))
+            var got = 0
+            while (got < head) { val r = s.read(buf, got, head - got); if (r < 0) break; got += r }
+            out.write(buf, 0, got)
+            var pos = got.toLong()
+            while (pos < tailStart) { val k = s.skip(tailStart - pos); if (k <= 0) { if (s.read() < 0) break; pos++ } else pos += k }
+            val rest = s.readBytes()
+            out.write(rest, 0, rest.size)
+            return out.toByteArray()
         }
     }
 

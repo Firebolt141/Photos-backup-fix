@@ -3,6 +3,7 @@ package com.firebolt141.ubertrag.util
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.core.net.toUri
 import android.provider.DocumentsContract
 import android.util.Log
 import androidx.documentfile.provider.DocumentFile
@@ -25,7 +26,7 @@ object StorageHelper {
     fun isDriveMounted(context: Context, treeUriString: String?): Boolean {
         if (treeUriString.isNullOrBlank()) return false
         return try {
-            val root = DocumentFile.fromTreeUri(context, Uri.parse(treeUriString)) ?: return false
+            val root = DocumentFile.fromTreeUri(context, treeUriString.toUri()) ?: return false
             root.exists() && root.canWrite()
         } catch (_: Exception) { false }
     }
@@ -46,7 +47,7 @@ object StorageHelper {
     fun folderLabel(uriString: String?): String {
         if (uriString.isNullOrBlank()) return ""
         return try {
-            val seg = Uri.parse(uriString).lastPathSegment ?: return ""
+            val seg = uriString.toUri().lastPathSegment ?: return ""
             val afterColon = seg.substringAfterLast(':')
             when {
                 afterColon.isBlank() && seg.startsWith("primary") -> "Internal storage"

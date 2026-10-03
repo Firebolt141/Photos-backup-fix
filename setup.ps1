@@ -5,7 +5,7 @@
 
 .DESCRIPTION
     1. Checks for ExifTool; downloads the portable Windows build if missing.
-    2. Checks for Python 3.7+; installs via winget if missing.
+    2. Checks for Python 3.9+; installs via winget if missing.
     3. Installs Flask (pip install flask) if not already present.
     4. Launches web_app.py and opens the browser UI at http://127.0.0.1:5000
 
@@ -139,10 +139,10 @@ if ($exifCmd -eq $ExifExe) {
 }
 
 # ── Step 2: Python ────────────────────────────────────────────────────────────
-Write-Step 2 'Python 3.7+'
+Write-Step 2 'Python 3.9+'
 
 $python    = $null
-$minPyVer  = [Version]'3.7.0'
+$minPyVer  = [Version]'3.9.0'
 
 foreach ($cmd in @('py', 'python', 'python3')) {
     try {
@@ -153,15 +153,15 @@ foreach ($cmd in @('py', 'python', 'python3')) {
                 Write-OK "Python $($Matches[1])  ($cmd)"
                 break
             }
-            Write-Warn "Python $($Matches[1]) is too old (need 3.7+)"
+            Write-Warn "Python $($Matches[1]) is too old (need 3.9+)"
         }
     } catch { }
 }
 
 if (-not $python) {
-    Write-Warn 'Python 3.7+ not found — trying winget install...'
+    Write-Warn 'Python 3.9+ not found — trying winget install...'
     try {
-        winget install --id Python.Python.3.13 -e --silent `
+        winget install --id Python.Python.3.14 -e --silent `
             --accept-package-agreements --accept-source-agreements 2>&1 | Out-Null
 
         # Reload PATH from registry so the new Python is visible
@@ -186,7 +186,7 @@ if (-not $python) {
 }
 
 if (-not $python) {
-    Write-Fail 'Python 3.7+ could not be found or installed automatically.'
+    Write-Fail 'Python 3.9+ could not be found or installed automatically.'
     Write-Host ''
     Write-Host '  Please install Python manually:' -ForegroundColor Yellow
     Write-Host '    https://python.org/downloads' -ForegroundColor Yellow
@@ -204,21 +204,25 @@ Write-Step 3 'Flask (web UI)'
 $flaskOk = $false
 try {
     $flaskCheck = & $python -c "import importlib.metadata; print(importlib.metadata.version('flask'))" 2>&1
-    if ($LASTEXITCODE -eq 0 -and $flaskCheck -match '[\d.]+') {
-        Write-OK "Flask $flaskCheck already installed"
-        $flaskOk = $true
+    if ($LASTEXITCODE -eq 0 -and $flaskCheck -match '^(\d+)\.') {
+        if ([int]$Matches[1] -ge 3) {
+            Write-OK "Flask $flaskCheck already installed"
+            $flaskOk = $true
+        } else {
+            Write-Warn "Flask $flaskCheck is too old (3.0 or newer needed)"
+        }
     }
 } catch { }
 
 if (-not $flaskOk) {
-    Write-Warn 'Flask not found — installing via pip...'
+    Write-Warn 'Installing Flask via pip...'
     try {
-        & $python -m pip install flask --quiet --disable-pip-version-check 2>&1 | Out-Null
+        & $python -m pip install --upgrade -r "$PSScriptRoot\requirements.txt" --quiet --disable-pip-version-check 2>&1 | Out-Null
         $flaskVer = & $python -c "import importlib.metadata; print(importlib.metadata.version('flask'))" 2>&1
         Write-OK "Flask $flaskVer installed"
     } catch {
         Write-Fail "pip install flask failed: $_"
-        Write-Host '  Try running:  python -m pip install flask' -ForegroundColor Yellow
+        Write-Host '  Try running:  python -m pip install -r requirements.txt' -ForegroundColor Yellow
         Read-Host 'Press Enter to exit'
         exit 1
     }

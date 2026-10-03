@@ -3,6 +3,7 @@ package com.firebolt141.ubertrag.repository
 import android.content.ContentUris
 import android.content.Context
 import android.net.Uri
+import androidx.core.net.toUri
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import android.util.Log
@@ -163,7 +164,7 @@ class SyncRepository(private val context: Context) {
             ?: return@withContext CopySummary(problem = "No drive selected")
         if (!StorageHelper.isDriveMounted(context, driveUriStr))
             return@withContext CopySummary(problem = "The drive isn't connected (or can't be written to)")
-        val root = DocumentFile.fromTreeUri(context, Uri.parse(driveUriStr))
+        val root = DocumentFile.fromTreeUri(context, driveUriStr.toUri())
             ?: return@withContext CopySummary(problem = "Cannot open the drive folder — select it again")
         if (!prefs.wallDatesMigrated.first()) scanMedia()
 
@@ -262,7 +263,7 @@ class SyncRepository(private val context: Context) {
     private suspend fun driveRoot(): DocumentFile? {
         val driveUriStr = prefs.driveUri.first() ?: return null
         if (!StorageHelper.isDriveMounted(context, driveUriStr)) return null
-        return DocumentFile.fromTreeUri(context, Uri.parse(driveUriStr))
+        return DocumentFile.fromTreeUri(context, driveUriStr.toUri())
     }
 
     suspend fun renameLegacyFolders(dryRun: Boolean, onProgress: (String) -> Unit): RenameResult? =
@@ -315,6 +316,6 @@ class SyncRepository(private val context: Context) {
     }
 
     private fun treeOrNull(uri: String): DocumentFile? = try {
-        DocumentFile.fromTreeUri(context, Uri.parse(uri))?.takeIf { it.exists() }
+        DocumentFile.fromTreeUri(context, uri.toUri())?.takeIf { it.exists() }
     } catch (_: Exception) { null }
 }

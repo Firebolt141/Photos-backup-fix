@@ -116,4 +116,10 @@ class KeepAliveService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    /** Android 15+ time limit for data-sync services: drop the protection, the job itself keeps going. */
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        Log.w("KeepAlive", "foreground time limit reached")
+        stopSelf()
+    }
 }

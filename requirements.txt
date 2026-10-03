@@ -1,0 +1,2 @@
+# Windows tool (web_app.py). core.py and cli.py need only the standard library.
+flask>=3.0,<4
