@@ -2724,14 +2724,17 @@ def _recommend(i: dict) -> Tuple[str, List[dict]]:
     media = i['media']
     root = i['root']
 
-    def add(tool, title, why, primary=False, **prefill):
-        recs.append({'tool': tool, 'title': title, 'why': why, 'primary': primary, 'prefill': prefill})
+    def add(tool, title, why, primary=False, rid='', rvars=None, **prefill):
+        # 'id' + 'vars' let the web UI word it in the user's language;
+        # 'title' / 'why' stay as the English text (CLI, older clients).
+        recs.append({'tool': tool, 'title': title, 'why': why, 'primary': primary, 'prefill': prefill,
+                     'id': rid, 'vars': rvars or {}})
 
     if i['archives'] and (media < 50 or i['archive_size'] > i['size']):
         n = len(i['archives'])
         add('unpack', f'Unpack {n} Takeout archive{"s" if n != 1 else ""} first',
             'Google Takeout downloads come as zip files. Unpack them into one folder, then process that folder.',
-            primary=True, src=root)
+            primary=True, rid='rec.unpack', rvars={'n': n}, src=root)
         return 'archives', recs
     if media == 0:
         return 'empty', recs
@@ -2741,18 +2744,19 @@ def _recommend(i: dict) -> Tuple[str, List[dict]]:
     if takeoutish:
         add('takeout', 'Process this Google Takeout export',
             f'Found {i["sidecars"]:,} Google JSON files with the real dates and locations of your photos.',
-            primary=True, src=root)
+            primary=True, rid='rec.takeout', rvars={'n': i['sidecars']}, src=root)
         kind = 'takeout'
     elif dated_share >= 0.5:
         kind = 'drive'
         if i['legacy_media']:
             add('rename', 'Rename the old-style folders',
                 'Some folders use the old 2024/01/15 layout. Renaming first gives one consistent layout.',
-                primary=True, root=root)
+                primary=True, rid='rec.rename', root=root)
         add('fixdrive', 'Fix missing dates on this drive',
             f'{i["dated_media"]:,} of {media:,} files are already in year/month/day folders; '
             'files with no date inside get their folder\'s date.',
-            primary=not i['legacy_media'], root=root)
+            primary=not i['legacy_media'], rid='rec.fixdrive',
+            rvars={'dated': i['dated_media'], 'total': media}, root=root)
     else:
         kind = 'unorganized'
         share = (i['sample_dated'] / i['sample_checked']) if i['sample_checked'] else None
@@ -2760,10 +2764,13 @@ def _recommend(i: dict) -> Tuple[str, List[dict]]:
         if share is not None:
             why += f', and about {round(share * 100)}% of the others have a date stored inside'
         why += '. Each file is copied into a year/month/day folder; anything without a date goes to no-date.'
-        add('filename', 'Organize these photos into dated folders', why, primary=True, src=root)
+        add('filename', 'Organize these photos into dated folders', why, primary=True, rid='rec.filename',
+            rvars={'named': i['name_dated'], 'total': media,
+                   'pct': round(share * 100) if share is not None else None}, src=root)
     if i['possible_dupes'] >= 5:
         add('dupes', 'Check for duplicates',
-            f'About {i["possible_dupes"]:,} files have the same name and size as another file.', a=root)
+            f'About {i["possible_dupes"]:,} files have the same name and size as another file.',
+            rid='rec.dupes', rvars={'n': i['possible_dupes']}, a=root)
     return kind, recs
 
 __all__ = [

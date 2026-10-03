@@ -159,3 +159,44 @@ def test_preflight_reports_archives_and_other_files(client, tmp_path):
     assert d['count'] == 1 and d['archives'] == 1 and d['other'] == 1
     d = client.post('/api/preflight', json={'src': str(tmp_path / 'nope')}, headers=H).json
     assert d.get('missing')
+
+
+# ── Japanese UI ──────────────────────────────────────────────────────────────
+
+def _ja_source():
+    return (Path(web_app.__file__).parent / 'templates' / 'i18n_ja.js').read_text(encoding='utf-8')
+
+
+def test_index_includes_language_switch_and_japanese(client):
+    html = client.get('/').get_data(as_text=True)
+    assert 'data-lang-set="ja"' in html and 'data-lang-set="en"' in html
+    assert 'const JA = {' in html and 'const JA_MSG = [' in html   # i18n_ja.js was included
+    assert '{%' not in html and '{#' not in html                      # no Jinja left over
+
+
+def test_every_markup_sentence_has_japanese():
+    import re
+    page = (Path(web_app.__file__).parent / 'templates' / 'index.html').read_text(encoding='utf-8')
+    keys = set(re.findall(r'data-i18n-html="([^"]+)"', page))
+    ja = _ja_source()
+    block = ja[ja.index('const JA_HTML'):ja.index('const JA_MSG')]
+    have = set(re.findall(r"^\s+'([^']+)':", block, re.M))
+    assert keys and keys <= have, sorted(keys - have)
+
+
+def test_japanese_file_is_safe_for_jinja():
+    src = _ja_source()
+    for bad in ('{{', '{%', '{#'):
+        assert bad not in src, bad
+
+
+def test_recommendations_carry_ids_for_translation(tmp_path):
+    import core
+    from test_core import jpeg as mk
+    for i in range(6):
+        mk(tmp_path / f'IMG_2021010{i}_120000.jpg')
+    recs = core.analyze_folder(tmp_path)['recommendations']
+    assert recs and all(r['id'].startswith('rec.') and isinstance(r['vars'], dict) for r in recs)
+    page = (Path(web_app.__file__).parent / 'templates' / 'index.html').read_text(encoding='utf-8')
+    for r in recs:
+        assert f"'{r['id']}.title'" in page and f"'{r['id']}.title'" in _ja_source()
